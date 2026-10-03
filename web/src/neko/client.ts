@@ -21,6 +21,8 @@ export interface NekoEvents {
   host: (hostId: string | undefined) => void
   screen: (size: ScreenSize) => void
   canHost: (canHost: boolean) => void
+  // The desktop's clipboard changed; neko only tells the host.
+  clipboard: (text: string) => void
 }
 
 // Binary input opcodes (neko server/internal/webrtc/payload).
@@ -197,6 +199,9 @@ export class NekoClient extends Emitter<NekoEvents> {
         break
       case 'session/profile':
         if (payload.id === this.sessionId) this.updateProfile(payload)
+        break
+      case 'clipboard/updated':
+        if (typeof payload?.text === 'string') this.emit('clipboard', payload.text)
         break
     }
   }

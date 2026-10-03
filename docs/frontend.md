@@ -98,3 +98,8 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
 - Bans and kicks arrive as a `kicked` message with a reason; show the reason.
 - Uploading files into the desktop is a separate permission (`rights.upload`);
   chat images need `rights.image`.
+- Clipboard, for whoever holds the remote: Ctrl/Cmd+V pastes the local
+  clipboard into the desktop (`control/paste`), and anything copied on the
+  desktop is written to the local clipboard (`clipboard/updated`). Copying
+  out needs a focused tab and HTTPS or localhost; browsers refuse it
+  otherwise and it silently does nothing.

@@ -166,6 +166,19 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
     }
   }, [neko, mobile, pointer])
 
+  // Copy out: whatever the host copies on the desktop lands on the local
+  // clipboard. Browsers only allow this in a focused tab (Firefox also wants
+  // a recent key press or click, which the copy itself usually is) and over
+  // HTTPS or localhost; otherwise it silently does nothing.
+  useEffect(
+    () =>
+      neko.on('clipboard', (text) => {
+        if (!hostRef.current || !text || !document.hasFocus()) return
+        void navigator.clipboard?.writeText(text).catch(() => {})
+      }),
+    [neko],
+  )
+
   useTouchTrackpad(overlay, pointer, mobile)
 
   return (

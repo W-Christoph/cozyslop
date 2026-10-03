@@ -274,7 +274,8 @@ export class RoomStore {
         this.chat.value = this.chat.value.map((m) => (m.id === msg.id ? { ...m, body: msg.body, edited: true } : m))
         break
       case 'chat_deleted':
-        this.chat.value = this.chat.value.filter((m) => m.id !== msg.id)
+        // Keep a "deleted" placeholder until the next welcome, as in CozyCast.
+        this.chat.value = this.chat.value.map((m) => (m.id === msg.id ? { ...m, body: '', mediaUrl: undefined, deleted: true } : m))
         break
       case 'typing':
         this.setUserTyping(msg.key, msg.typing)

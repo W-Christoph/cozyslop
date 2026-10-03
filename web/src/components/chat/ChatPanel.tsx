@@ -24,7 +24,7 @@ export function ChatPanel({ active = true }: { active?: boolean }) {
     return () => document.removeEventListener('fullscreenchange', change)
   }, [])
   useEffect(() => {
-    if (editing !== null && !chat.some((m) => m.id === editing)) setEditing(null)
+    if (editing !== null && !chat.some((m) => m.id === editing && !m.deleted)) setEditing(null)
   }, [chat, editing])
   useEffect(() => {
     if (!active) { store.setTyping(false); setEditing(null); setMedia(null) }

@@ -13,6 +13,7 @@
 .username:hover .realUsername { opacity: 1; }
 .timestamp { font-weight: 300; font-size: 0.8em; color: var(--color-text-misc); margin-right: 0.5em; float: right; }
 .whisper { text-align: center; font-style: italic; color: var(--color-text-muted); white-space: pre-wrap; }
+.deleted { text-align: center; font-style: italic; color: var(--color-text-muted); }
 .edited { font-size: 0.6em; color: var(--color-text-muted); }
 .hoverTime { position: absolute; right: 0.5em; top: -2em; background: var(--color-accent); white-space: nowrap; padding: 0.15em 0.3em; border-radius: 0.2em; visibility: hidden; opacity: 0; z-index: 3; transition: opacity 0.15s ease; pointer-events: none; font-size: 0.6em; user-select: none; }
 .subMessage:hover .hoverTime { visibility: visible; opacity: 1; }

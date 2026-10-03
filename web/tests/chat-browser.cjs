@@ -95,6 +95,7 @@ const checks = [], errors = []
     await input.press('ArrowUp'); await p.getByLabel('Edit message').press('Escape'); await expect(input).toBeFocused()
     await p.locator('[data-chat-bubble]').first().hover(); await p.getByRole('button', { name: 'Delete message', exact: true }).first().click()
     await expect(p.getByText('@Alice history', { exact: true })).toHaveCount(0)
+    await expect(p.locator('[data-chat-bubble]').first().getByText('deleted', { exact: true })).toBeVisible()
     checks.push('send/Shift+Enter, typing stop, ArrowUp edit, Enter save, Escape focus, admin delete')
 
     h.send({ type: 'typing', key: bob.key, typing: true }); await expect(p.getByRole('status').filter({ hasText: 'Bob is typing' })).toBeVisible()

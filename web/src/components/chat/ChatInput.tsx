@@ -51,7 +51,7 @@ export function ChatInput({ inputRef, onEdit }: { inputRef: RefObject<HTMLTextAr
             if (e.isComposing) return
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
             else if (e.key === 'ArrowUp' && !text) {
-              const last = [...store.chat.value].reverse().find((m) => m.author === store.selfKey.value && m.type === 'text' && m.id > 0)
+              const last = [...store.chat.value].reverse().find((m) => m.author === store.selfKey.value && m.type === 'text' && m.id > 0 && !m.deleted)
               if (last) { e.preventDefault(); onEdit(last.id) }
             }
           }}

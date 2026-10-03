@@ -34,7 +34,12 @@ export function MessageGroup({ messages, editing, onEdit, onEndEdit, onMedia, on
       {username && <div class={styles.realUsername}>{username}</div>}
       <span class={styles.timestamp}>{messageTime(first.time)}</span>
     </div>
-    {messages.map((message, index) => editing === message.id
+    {messages.map((message, index) => message.deleted
+      ? <div class={styles.subMessage} key={message.id}>
+        {index > 0 && <div class={styles.hoverTime}>{messageTime(message.time)}</div>}
+        <div class={styles.deleted}>deleted</div>
+      </div>
+      : editing === message.id
       ? <MessageEditor key={message.id} message={message} onClose={onEndEdit} />
       : <div class={styles.subMessage} key={message.id} tabIndex={message.id > 0 && (own || store.rights.value.admin) ? 0 : undefined}>
         {message.id > 0 && (own || store.rights.value.admin) && <button type="button" class={styles.deleteButton} aria-label="Delete message" onClick={() => store.deleteChat(message.id)}>X</button>}

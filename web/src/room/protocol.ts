@@ -48,6 +48,7 @@ export interface ChatMessage {
   body: string
   mediaUrl?: string
   edited: boolean
+  deleted?: boolean // set locally on chat_deleted; history never contains deleted messages
   time: number // unix ms
 }
 

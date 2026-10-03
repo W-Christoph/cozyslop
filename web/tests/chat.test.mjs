@@ -92,6 +92,7 @@ test('only new live messages from others notify, including whispers', () => {
 test('editing, deleting and updating self never replay message sounds', () => {
   const before = snapshot({ chat: [message(1)] })
   assert.deepEqual(chatChanges(before, { ...before, chat: [{ ...before.chat[0], body: '@Alice', edited: true }] }).messages, [])
+  assert.deepEqual(chatChanges(before, { ...before, chat: [{ ...before.chat[0], body: '', deleted: true }] }).messages, [])
   assert.deepEqual(chatChanges(before, { ...before, chat: [] }).messages, [])
   const updated = chatChanges(before, { ...before, self: { ...self, nickname: 'Alicia' } })
   assert.equal(updated.welcome, false)

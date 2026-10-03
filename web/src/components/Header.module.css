@@ -1,0 +1,97 @@
+.header {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 56px;
+  padding: 0;
+  background: var(--color-button);
+  box-shadow: 0 0 5px var(--color-shadow);
+  z-index: 50;
+}
+.header h1 {
+  float: left;
+  margin: 0;
+  padding: 0 15px;
+  font-size: 24px;
+  line-height: 56px;
+  font-weight: 400;
+  color: var(--color-text);
+}
+.header nav {
+  float: right;
+  font-size: 100%;
+}
+.header nav a,
+.header nav button {
+  display: inline-block;
+  height: 56px;
+  line-height: 56px;
+  padding: 0 15px;
+  min-width: 50px;
+  text-align: center;
+  background: transparent;
+  border-radius: 0;
+  text-decoration: none;
+  color: var(--color-text);
+}
+.header nav a:hover,
+.header nav button:hover:not(:disabled),
+.header .active {
+  background: var(--color-button-accent);
+}
+.avatar {
+  float: right;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.avatar img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+.avatar:hover {
+  background: var(--color-button-accent);
+}
+.error {
+  clear: both;
+  background: var(--color-menu);
+  padding: var(--space-2);
+}
+@media (max-width: 540px) {
+  .header h1 {
+    padding: 0 var(--space-2);
+    font-size: 20px;
+  }
+  .header nav a,
+  .header nav button {
+    padding: 0 var(--space-2);
+    min-width: auto;
+    font-size: 0.85em;
+  }
+  .avatar {
+    width: 44px;
+  }
+}
+
+@media (max-width: 360px) {
+  .header h1 {
+    padding: 0 var(--space-1);
+    font-size: 18px;
+  }
+  .header nav a,
+  .header nav button {
+    padding: 0 var(--space-1);
+    font-size: 0.7em;
+  }
+  .avatar {
+    width: 40px;
+  }
+  .avatar img {
+    width: 36px;
+    height: 36px;
+  }
+}

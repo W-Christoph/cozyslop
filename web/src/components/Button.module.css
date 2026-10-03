@@ -1,0 +1,14 @@
+.button {
+  padding: 0.45em 0.9em;
+  min-width: 3.5em;
+  border-radius: 0.2em;
+  line-height: 1rem;
+  transition: background-color 0.2s;
+  user-select: none;
+}
+.accent {
+  background: var(--color-orange);
+}
+.accent:hover:not(:disabled) {
+  background: var(--color-orange-hover);
+}

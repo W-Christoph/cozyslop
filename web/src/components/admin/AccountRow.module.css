@@ -1,0 +1,26 @@
+.avatarCell {
+  width: 64px;
+}
+.avatar {
+  vertical-align: middle;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+.username,
+.text {
+  font-size: 0.9rem;
+}
+.username {
+  font-weight: bold;
+}
+.swatch {
+  width: 10px;
+  height: 10px;
+  display: inline-block;
+  margin-right: 5px;
+  border-radius: 2px;
+}
+.center {
+  text-align: center;
+}

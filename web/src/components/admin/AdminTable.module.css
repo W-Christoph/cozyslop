@@ -1,0 +1,45 @@
+.background {
+  background: var(--color-menu) var(--noise);
+  padding: 1rem;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--color-text);
+  box-shadow: 0 0 9px var(--color-backdrop);
+}
+.table input,
+.table select {
+  background: var(--color-accent) var(--noise);
+  color: var(--color-text);
+  border: none;
+  height: 2em;
+  vertical-align: middle;
+}
+.table input[type='checkbox'] {
+  width: 1.4em;
+}
+.table th {
+  text-align: left;
+  padding: 15px 20px 15px 10px;
+  background: var(--color-button);
+  color: var(--color-text);
+  font-weight: bold;
+  border: 1px solid var(--color-button);
+}
+.table td {
+  padding: 10px;
+  border-left: 1px solid var(--color-button);
+  border-right: 1px solid var(--color-button);
+}
+.table tr:last-child {
+  border-bottom: 1px solid var(--color-button);
+}
+.table tbody tr:nth-child(even) {
+  background: var(--color-message-bg);
+}
+.table tbody tr:hover {
+  background: var(--color-message-hover);
+}

@@ -1,16 +1,36 @@
 .screen {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  height: 100%;
+  min-height: 100%;
+  width: 100%;
+  padding: 76px var(--space-3) var(--space-4);
+  background: var(--color-menu) var(--noise);
+  color: var(--color-text);
 }
-
+.center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  text-align: center;
+}
 .message {
-  font-size: 1.5em;
+  font-size: 3em;
+  font-weight: bold;
+  margin-bottom: 0.25em;
 }
-
 .submessage {
-  color: var(--color-text-muted);
+  font-size: 1em;
+  margin-bottom: 1em;
+  white-space: pre-wrap;
+}
+.actions {
+  display: flex;
+  gap: 2.5em;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.actions a {
+  color: var(--color-text);
 }

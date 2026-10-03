@@ -1,0 +1,55 @@
+.background {
+  background: var(--color-menu) var(--noise);
+  color: var(--color-text);
+  min-height: 100%;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 76px var(--space-3) var(--space-4);
+}
+.panel {
+  border: 1px solid var(--color-border);
+  border-radius: 1em;
+  background: var(--color-menu) var(--noise);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+}
+.content {
+  max-width: 100%;
+}
+.title {
+  font-size: 2em;
+}
+.panel form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+.panel form > label {
+  width: 100%;
+}
+.panel input:not([type='checkbox']),
+.panel textarea {
+  display: block;
+  border-radius: 5px;
+  background: var(--color-accent) var(--noise);
+  color: var(--color-text);
+  border: none;
+  padding: 0.6em;
+  font-size: 1.1em;
+  width: 100%;
+  margin-bottom: 1em;
+}
+.panel p {
+  white-space: pre-wrap;
+}
+
+.content a,
+.panel a {
+  color: var(--color-text);
+}

@@ -6,6 +6,13 @@ const server = process.env.COZYCAST_SERVER ?? 'http://localhost:8080'
 
 export default defineConfig({
   plugins: [preact()],
+  resolve: {
+    alias: {
+      'react-dom': 'preact/compat',
+      'react/jsx-runtime': 'preact/jsx-runtime',
+      react: 'preact/compat',
+    },
+  },
   build: {
     outDir: '../server/webui/dist',
     emptyOutDir: true,

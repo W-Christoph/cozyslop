@@ -9,8 +9,10 @@
   },
   "dependencies": {
     "@preact/signals": "^2.11.3",
+    "cropperjs": "^1.6.3",
     "preact": "^11.0.0",
-    "preact-iso": "^2.12.2"
+    "preact-iso": "^2.12.2",
+    "react-colorful": "^5.8.1"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.6",

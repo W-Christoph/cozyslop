@@ -1,0 +1,111 @@
+.background {
+  background: var(--color-menu) var(--noise);
+  color: var(--color-text);
+  min-height: 100%;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 56px;
+}
+.list {
+  border: 1px solid var(--color-border);
+  border-radius: 1em;
+  background: var(--color-menu) var(--noise);
+  width: max(80%, 25em);
+  max-width: 95%;
+  padding: 10px;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  margin-bottom: 4em;
+  margin-top: 4em;
+}
+.message {
+  position: absolute;
+  max-width: 80%;
+  bottom: calc(100% + 2em);
+  white-space: pre-wrap;
+}
+.title {
+  font-size: 2em;
+}
+.table {
+  width: 90%;
+  border-spacing: 0 0.55em;
+  border-collapse: separate;
+}
+.inviteColumn {
+  width: 10%;
+}
+.nameColumn {
+  width: 60%;
+}
+.countColumn,
+.joinColumn {
+  width: 20%;
+}
+.adminTable .nameColumn {
+  width: 55%;
+}
+.adminTable .countColumn {
+  width: 15%;
+}
+.joinCell {
+  text-align: center;
+}
+.name {
+  color: var(--color-text);
+  margin-left: 0.2em;
+  margin-right: 0.5em;
+  font-weight: bold;
+}
+.badge {
+  background: var(--color-orange);
+  color: var(--color-on-orange);
+  border-radius: 0.3em;
+  padding: 0 0.3em;
+  font-size: 0.8em;
+  margin-right: 0.3em;
+  white-space: nowrap;
+}
+.join,
+.closed {
+  display: inline-block;
+  width: 70%;
+  padding: 0.45em 0.9em;
+  min-width: 5em;
+  border-radius: 0.2em;
+  line-height: 1rem;
+}
+.join {
+  text-decoration: none;
+  color: var(--color-text);
+  background: var(--color-orange);
+}
+.join:hover {
+  background: var(--color-orange-hover);
+}
+.closed:disabled {
+  background: var(--color-disabled);
+  opacity: 1;
+}
+@media (max-width: 600px) {
+  .list {
+    overflow-x: auto;
+    align-items: stretch;
+  }
+  .title {
+    text-align: center;
+  }
+  .table {
+    width: 100%;
+  }
+  .message {
+    position: static;
+    margin: 0 auto 2em;
+  }
+}

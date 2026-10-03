@@ -12,16 +12,21 @@ import { ProfilePage } from '../pages/ProfilePage'
 import { RegisterPage } from '../pages/RegisterPage'
 import { RoomRoute } from '../pages/RoomPage'
 import { SettingsPage } from '../pages/SettingsPage'
-import { meLoaded, refreshMe, refreshServerSettings } from './state'
+import { meLoaded, pageTitle, refreshMe, refreshServerSettings } from './state'
 
 export function App() {
   useEffect(() => {
-    void refreshMe()
+    void refreshMe().catch(() => {})
     void refreshServerSettings().catch(() => {})
   }, [])
 
   if (!meLoaded.value) {
-    return <InfoScreen message="Connecting to CozyCast..." submessage="If this takes too long please refresh" />
+    return (
+      <InfoScreen
+        message="Connecting to CozyCast..."
+        submessage="If this takes too long please refresh"
+      />
+    )
   }
 
   return (
@@ -34,6 +39,9 @@ export function App() {
 function Shell() {
   const { path } = useLocation()
   const inRoom = path.startsWith('/room/')
+  useEffect(() => {
+    if (!inRoom) pageTitle.value = null
+  }, [inRoom])
   return (
     <>
       {!inRoom && <Header />}

@@ -1,4 +1,14 @@
-// Placeholder; ported from the old CozyCast frontend next.
+import { useLocation } from 'preact-iso'
+import { InfoScreen } from '../components/InfoScreen'
+import { Button } from '../components/Button'
+
 export function NotFoundPage() {
-  return <h1>Page not found</h1>
+  const { route } = useLocation()
+  return (
+    <InfoScreen message="Page not found">
+      <Button accent onClick={() => route('/')}>
+        Home
+      </Button>
+    </InfoScreen>
+  )
 }

@@ -1,0 +1,134 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--color-menu) var(--noise);
+  padding: 2em;
+  border-radius: 1em;
+  max-width: 100%;
+}
+.title {
+  width: 3em;
+  font-size: 3em;
+  margin-bottom: 1em;
+  font-weight: bold;
+}
+.dataEdit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.upperData {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+.dataContainer {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  margin-bottom: 3em;
+}
+.textInfoContainer {
+  display: flex;
+  width: 50%;
+  flex-direction: column;
+  justify-content: center;
+}
+.textContainer:not(:last-child) {
+  margin-bottom: 1.5em;
+}
+.textInfo {
+  font-size: 0.8em;
+}
+.textData {
+  font-size: 1.5em;
+}
+.avatarContainer {
+  width: 40%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+.nickname {
+  width: 95%;
+}
+.nickname input {
+  border-radius: 5px;
+  background: var(--color-accent) var(--noise);
+  margin-bottom: 1em;
+  color: var(--color-text);
+  border: none;
+  padding: 0.6em;
+  font-size: 1.1em;
+  width: 100%;
+}
+.colorData {
+  display: flex;
+}
+.picker {
+  margin: 0.5em 1.5em 1.5em 0.5em;
+}
+.preview {
+  padding: 0.5em;
+  border-radius: 0.3em;
+  margin: 0.5em;
+  border: 1px solid var(--color-accent);
+  background: var(--color-menu);
+  color: var(--color-text);
+  width: calc(15em + 1em);
+}
+.message {
+  background: var(--color-message-bg);
+  margin-top: 10px;
+  padding-top: 0.5em;
+  border-radius: 0.2em;
+  box-shadow: var(--shadow-message);
+}
+.username {
+  font-weight: 600;
+  padding-left: 0.5em;
+  position: relative;
+  word-break: normal;
+  overflow: hidden;
+}
+.timestamp {
+  font-weight: 300;
+  font-size: 0.8em;
+  color: var(--color-text-misc);
+  margin-right: 0.5em;
+  float: right;
+}
+.chatText {
+  position: relative;
+  padding: 0.15em 1em 0.5em;
+  font-size: 0.9em;
+}
+@media (max-width: 780px) {
+  .previews {
+    display: none;
+  }
+  .editor {
+    padding: var(--space-3);
+  }
+}
+@media (max-width: 780px) and (orientation: portrait) {
+  .picker :global(.react-colorful) {
+    width: 260px;
+  }
+}
+@media (max-width: 780px) and (orientation: landscape) {
+  .dataEdit {
+    flex-direction: row;
+  }
+  .title {
+    display: none;
+  }
+  .picker {
+    margin: 0 0 0 0.5rem;
+  }
+}

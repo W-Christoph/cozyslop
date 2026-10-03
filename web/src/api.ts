@@ -9,13 +9,18 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<T> {
   const init: RequestInit = { method, headers: {} }
   if (body instanceof FormData) {
     init.body = body
   } else if (body !== undefined) {
     init.body = JSON.stringify(body)
-    ;(init.headers as Record<string, string>)['Content-Type'] = 'application/json'
+    ;(init.headers as Record<string, string>)['Content-Type'] =
+      'application/json'
   }
 
   let res: Response
@@ -28,7 +33,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
   const data = await res.json().catch(() => null)
   if (!res.ok) {
-    throw new ApiError(res.status, data?.error ?? `Request failed (${res.status}).`)
+    throw new ApiError(
+      res.status,
+      data?.error ?? `Request failed (${res.status}).`,
+    )
   }
   return data as T
 }
@@ -62,4 +70,38 @@ export interface RoomInfo {
   access: 'public' | 'account' | 'verified' | 'invite'
   userCount: number
   open: boolean
+}
+
+export interface AdminUser extends Me {
+  disabled: boolean
+  createdAt: number
+}
+
+export interface Permission {
+  room: string
+  username: string
+  remote: boolean
+  image: boolean
+  upload: boolean
+  trusted: boolean
+  invited: boolean
+  banned: boolean
+  inviteName: string
+  bannedUntil: number | null
+}
+
+export interface InviteView {
+  code: string
+  room: string
+  temporary: boolean
+  name: string
+  remote: boolean
+  image: boolean
+  upload: boolean
+  uses: number
+  maxUses: number | null
+  expiresAt: number | null
+  createdAt: number
+  valid: boolean
+  path: string
 }

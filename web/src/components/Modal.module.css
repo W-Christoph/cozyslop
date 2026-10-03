@@ -1,0 +1,73 @@
+.backdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  background: var(--color-backdrop);
+  display: flex;
+  padding: var(--space-4);
+  overflow: auto;
+}
+.modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--color-menu) var(--noise);
+  margin: auto;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 1em;
+  box-shadow: 0 0 1em var(--color-border);
+  color: var(--color-text);
+  min-width: min(600px, 95vw);
+  max-width: 95vw;
+}
+.title {
+  display: flex;
+  align-self: stretch;
+  position: relative;
+  font-size: 2em;
+  padding: 0 1.5em;
+  margin-bottom: var(--space-2);
+}
+.title > div {
+  text-align: center;
+  flex-grow: 1;
+}
+.close {
+  width: 1.5em;
+  height: 1.5em;
+  padding: 0;
+  font-weight: bold;
+  background: var(--color-message-bg);
+  border-radius: 50%;
+  box-shadow: var(--shadow-message);
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+.modal form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 100%;
+}
+.modal input:not([type='checkbox']),
+.modal select {
+  background: var(--color-accent) var(--noise);
+  color: var(--color-text);
+  border: none;
+  border-radius: 5px;
+  padding: 5px;
+  max-width: 100%;
+}
+.modal p {
+  white-space: pre-wrap;
+}
+
+.compact {
+  min-width: 0;
+  width: min(440px, 95vw);
+}
+.compact .title {
+  font-size: 1.7em;
+}

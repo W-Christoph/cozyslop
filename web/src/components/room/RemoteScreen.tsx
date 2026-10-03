@@ -2,37 +2,59 @@
 // forwards mouse and keyboard input to neko.
 
 import { useEffect, useRef } from 'preact/hooks'
-import type { NekoClient } from '../neko/client'
-import GuacamoleKeyboard from '../neko/guacamole-keyboard.js'
+import type { RefObject } from 'preact'
+import { preferences } from '../../app/state'
+import { useRoomStore } from './RoomContext'
+import GuacamoleKeyboard from '../../neko/guacamole-keyboard.js'
 import styles from './RemoteScreen.module.css'
+import { useTouchTrackpad } from './useTouchTrackpad'
 
 interface Props {
-  neko: NekoClient
-  stream: MediaStream | null
-  isHost: boolean
-  muted: boolean
+  mobile: boolean
+  pointer: RefObject<{ x: number; y: number }>
+  video: RefObject<HTMLVideoElement | null>
+  onPlaybackBlocked: (blocked: boolean) => void
 }
 
 const MOUSE_MOVE_THROTTLE_MS = 10
 // Browsers report wheel deltas in pixels; one X11 scroll step is roughly this.
 const WHEEL_STEP_PX = 53
 
-export function RemoteScreen({ neko, stream, isHost, muted }: Props) {
-  const video = useRef<HTMLVideoElement>(null)
+export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Props) {
+  const store = useRoomStore()
+  const { neko } = store
+  const stream = store.video.value === 'connected' ? store.stream.value : null
+  const isHost = store.isHost.value
+  const paused = store.paused.value
+  const { muted, volume } = preferences.value
   const overlay = useRef<HTMLDivElement>(null)
   const hostRef = useRef(isHost)
   hostRef.current = isHost
 
   useEffect(() => {
-    const el = video.current
-    if (!el) return
-    el.srcObject = stream
-    if (stream) el.play().catch(() => {}) // autoplay may need a user gesture
-  }, [stream])
+    if (!video.current) return
+    video.current.muted = muted
+    video.current.volume = Math.max(0, Math.min(100, volume)) / 100
+  }, [muted, volume])
 
   useEffect(() => {
-    if (video.current) video.current.muted = muted
-  }, [muted])
+    const el = video.current
+    if (!el) return
+    let cancelled = false
+    el.srcObject = stream
+    onPlaybackBlocked(false)
+    if (paused) el.pause()
+    else if (stream) {
+      void el.play().catch(() => {
+        if (!cancelled) onPlaybackBlocked(true)
+      })
+    }
+    return () => { cancelled = true }
+  }, [stream, paused, video, onPlaybackBlocked])
+
+  useEffect(() => {
+    pointer.current = { x: neko.screen.width / 2, y: neko.screen.height / 2 }
+  }, [stream, neko, pointer])
 
   // Keyboard: Guacamole turns browser key events into X11 keysyms. Its
   // listeners live as long as the overlay element.
@@ -51,13 +73,18 @@ export function RemoteScreen({ neko, stream, isHost, muted }: Props) {
     keyboard.listenTo(el)
     const reset = () => keyboard.reset()
     el.addEventListener('blur', reset)
-    return () => el.removeEventListener('blur', reset)
+    return () => {
+      keyboard.reset()
+      keyboard.onkeydown = null
+      keyboard.onkeyup = null
+      el.removeEventListener('blur', reset)
+    }
   }, [neko])
 
   // Mouse.
   useEffect(() => {
     const el = overlay.current
-    if (!el) return
+    if (!el || mobile) return
 
     const toScreen = (e: MouseEvent) => {
       // The video is letterboxed inside the element (object-fit: contain).
@@ -67,10 +94,11 @@ export function RemoteScreen({ neko, stream, isHost, muted }: Props) {
       const offsetX = (rect.width - width * scale) / 2
       const offsetY = (rect.height - height * scale) / 2
       const clamp = (v: number, max: number) => Math.max(0, Math.min(max - 1, Math.round(v)))
-      return {
+      pointer.current = {
         x: clamp((e.clientX - rect.left - offsetX) / scale, width),
         y: clamp((e.clientY - rect.top - offsetY) / scale, height),
       }
+      return pointer.current
     }
 
     let lastMove = 0
@@ -128,12 +156,19 @@ export function RemoteScreen({ neko, stream, isHost, muted }: Props) {
       el.removeEventListener('wheel', onWheel)
       el.removeEventListener('contextmenu', onContextMenu)
     }
-  }, [neko])
+  }, [neko, mobile, pointer])
+
+  useTouchTrackpad(overlay, pointer, mobile)
 
   return (
     <div class={styles.screen}>
       <video ref={video} class={styles.video} autoplay playsInline />
-      <div ref={overlay} class={styles.overlay} data-host={isHost} tabIndex={0} />
+      <div ref={overlay} class={styles.overlay} data-host={isHost} tabIndex={0} aria-label="Remote desktop"
+        onPaste={(e) => {
+          if (!store.isHost.value) return
+          e.preventDefault()
+          store.neko.paste(e.clipboardData?.getData('text/plain') ?? '')
+        }} />
     </div>
   )
 }

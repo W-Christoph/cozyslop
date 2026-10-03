@@ -20,6 +20,8 @@ export interface RoomSettings {
   defaultRemote: boolean
   defaultImage: boolean
   defaultUpload: boolean
+  screen: string // "1280x720@30"; "" = the room container's default
+  quality: 'high' | 'medium' | 'low' // capture pipeline viewers watch
 }
 
 export interface User {

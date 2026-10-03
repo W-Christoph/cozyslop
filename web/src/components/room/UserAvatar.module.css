@@ -1,0 +1,20 @@
+.container { position: relative; width: 60px; height: 60px; border-radius: 50%; flex-shrink: 0; }
+.avatar { width: 100%; height: 100%; background: var(--color-menu); border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 0; }
+.picture { width: 100%; height: 100%; object-fit: cover; }
+.placeholder { width: 65%; height: 65%; filter: var(--icon-invert); }
+.away { opacity: 0.6; }
+.ring { position: absolute; inset: 0; border: var(--color-orange) 2px solid; border-radius: 50%; pointer-events: none; }
+.muted, .remote { position: absolute; bottom: 0; height: 20px; width: 20px; border-radius: 50%; display: flex; pointer-events: none; }
+.muted { left: 0; background: var(--color-button); }
+.remote { right: 0; background: var(--color-orange); }
+.muted img, .remote img { width: 100%; height: 100%; filter: var(--icon-invert); }
+.presence { position: absolute; right: 0; top: 0; height: 17px; width: 17px; border-radius: 50%; border: var(--color-menu) 3px solid; }
+.online { background: var(--color-online); }
+.inactive { background: var(--color-away); }
+.small { width: 30px; height: 30px; }
+.small .muted, .small .remote { width: 12px; height: 12px; }
+@media (max-width: 780px) {
+  .container { width: 30px; height: 30px; }
+  .muted, .remote { width: 12px; height: 12px; }
+  .presence { width: 12px; height: 12px; border-width: 2px; }
+}

@@ -58,8 +58,9 @@ export class NekoClient extends Emitter<NekoEvents> {
   }
 
   // path is the room's neko prefix on our server, e.g. /neko/default.
-  // With audioOnly, neko sends no video track.
-  connect(path: string, token: string, { audioOnly = false } = {}) {
+  // video picks a capture pipeline (quality preset); with audioOnly, neko
+  // sends no video track.
+  connect(path: string, token: string, { audioOnly = false, video = '' } = {}) {
     this.teardown()
     this.setStatus('connecting')
 
@@ -72,7 +73,8 @@ export class NekoClient extends Emitter<NekoEvents> {
       this.staleTimer = window.setInterval(() => {
         if (Date.now() - this.lastMessage > STALE_TIMEOUT_MS) this.fail('connection timed out')
       }, 5_000)
-      this.send('signal/request', { video: { disabled: audioOnly }, audio: {} })
+      const selector = video ? { type: 'exact', id: video } : undefined
+      this.send('signal/request', { video: { disabled: audioOnly, selector }, audio: {} })
     }
     ws.onmessage = (e) => {
       this.lastMessage = Date.now()
@@ -127,6 +129,11 @@ export class NekoClient extends Emitter<NekoEvents> {
 
   keyUp(keysym: number) {
     this.sendInput(OP_KEY_UP, 4, (v) => v.setUint32(3, keysym))
+  }
+
+  // Switch the running stream to another capture pipeline.
+  setVideo(id: string) {
+    this.send('signal/video', { selector: { type: 'exact', id } })
   }
 
   paste(text: string) {

@@ -1,0 +1,14 @@
+.settings { width: 100%; display: flex; flex-direction: column; gap: var(--space-2); }
+.settings details { width: 95%; margin: 0 auto; }
+.settings summary { list-style: none; background: var(--color-button); padding: 0.4em 0.5em; font-size: 1.2em; border-radius: 0.3em; cursor: pointer; color: var(--color-text); }
+.settings details[open] > summary { background: var(--color-orange); color: var(--color-on-orange); }
+.fields { width: 80%; margin: var(--space-2) auto; display: flex; flex-direction: column; gap: var(--space-2); }
+.fields label { display: flex; align-items: center; gap: var(--space-2); }
+.fields input { accent-color: var(--color-orange); }
+.fields select { color: var(--color-text); background: var(--color-menu); padding: var(--space-1); }
+.profile { margin: var(--space-3) 0; }
+.profile a { color: var(--color-orange); }
+.actions { display: flex; justify-content: center; gap: var(--space-2); margin-top: var(--space-4); }
+.message { min-height: 1em; text-align: center; margin-top: var(--space-2); color: var(--color-text-muted); }
+
+.settings summary::-webkit-details-marker { display: none; }

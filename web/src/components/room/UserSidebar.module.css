@@ -1,0 +1,5 @@
+.users { overflow: auto; display: flex; flex-direction: column; margin: 1em; gap: 15px; }
+.user { display: grid; grid-template-columns: 4em minmax(0, 1fr); }
+.name { display: flex; margin-left: 0.5em; flex-direction: column; justify-content: center; min-width: 0; overflow-wrap: anywhere; }
+.identity, .lastSeen { font-weight: 300; font-size: 0.7em; color: var(--color-text-misc); }
+@media (max-width: 780px) { .user { grid-template-columns: 30px minmax(0, 1fr); } }

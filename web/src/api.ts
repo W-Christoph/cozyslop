@@ -63,6 +63,7 @@ export interface Me {
 export interface ServerSettings {
   message: string
   registration: 'open' | 'invite'
+  sourceUrl: string // where to get this server's source code (AGPL)
 }
 
 export interface RoomInfo {

@@ -1,0 +1,25 @@
+.strip { display: flex; gap: 5px; overflow: auto; background: var(--color-menu) var(--noise); scrollbar-width: thin; flex-shrink: 0; }
+.user { display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 0 5px; flex-shrink: 0; }
+.avatar { border-radius: 50%; }
+.name { white-space: nowrap; max-width: 8em; overflow: hidden; text-overflow: ellipsis; }
+.away { opacity: 0.6; }
+.bottom { height: 4.5em; min-width: 0; }
+.bottom.names { height: 5.5em; }
+.bottom .user:first-child { margin-left: auto; padding-left: 5px; }
+.bottom .user:last-child { margin-right: auto; padding-right: 5px; }
+.left { flex-direction: column; width: 5em; height: 100%; }
+.left .user:first-child { margin-top: auto; padding-top: 5px; }
+.left .user:last-child { margin-bottom: auto; padding-bottom: 5px; }
+.left .name { margin-top: 0.4em; font-size: 0.75em; max-width: 98%; }
+.left.small { width: 2.6em; }
+.bottom.small { height: 2.6em; }
+.bottom.small.names { height: 3.3em; }
+.bottom.small .user { font-size: 0.65em; }
+.fullscreen { position: absolute; top: 0; left: 0; height: calc(100% - 3em); z-index: 3; background: transparent; opacity: 0.5; }
+.fullscreen:hover, .fullscreen:focus-within { opacity: 1; }
+.host { visibility: hidden; }
+@media (max-width: 780px) {
+  .bottom, .bottom.names, .bottom.small, .bottom.small.names { height: 2.8em; }
+  .user { font-size: 0.75em; }
+  .left { display: none; }
+}

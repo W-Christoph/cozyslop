@@ -53,7 +53,11 @@ function loadPreferences(): Preferences {
 export const me = signal<Me | null>(null)
 export const meLoaded = signal(false)
 export const loggedIn = computed(() => me.value !== null)
-export const serverSettings = signal<ServerSettings>({ message: '', registration: 'invite' })
+export const serverSettings = signal<ServerSettings>({
+  message: '',
+  registration: 'invite',
+  sourceUrl: 'https://github.com/W-Christoph/cozyslop',
+})
 export const preferences = signal<Preferences>(loadPreferences())
 
 // The room's window title part of the browser tab title, set by the room page.

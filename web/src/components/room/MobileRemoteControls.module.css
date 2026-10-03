@@ -1,0 +1,21 @@
+.controls {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: var(--color-menu);
+  padding: var(--space-4) var(--space-2);
+  gap: 10px;
+  width: 5em;
+  overflow: auto;
+  flex-shrink: 0;
+}
+.controls button { padding: var(--space-1); flex: 1; min-height: 3em; touch-action: none; user-select: none; }
+.controls img { height: 2.5em; max-width: 100%; pointer-events: none; filter: var(--icon-invert); }
+.keyboard { position: relative; display: flex; }
+.keyboard button { width: 100%; }
+.input { font-size: 16px; position: absolute; opacity: 0; width: 1px; height: 1px; padding: 0; bottom: 0; left: 0; pointer-events: none; }
+.controls .scroll { flex: 0.5; }
+@media (max-width: 780px) and (orientation: portrait) {
+  .controls { flex-direction: row; width: 100%; height: 6em; }
+  .keyboard { flex: 1; }
+}

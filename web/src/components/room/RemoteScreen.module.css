@@ -2,23 +2,21 @@
   position: relative;
   width: 100%;
   height: 100%;
-  background: #000;
+  background: var(--color-border);
   overflow: hidden;
 }
-
 .video {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
 }
-
 .overlay {
   position: absolute;
   inset: 0;
-  outline: none;
+  outline-offset: -2px;
 }
-
 .overlay[data-host='true'] {
   cursor: crosshair;
+  touch-action: none;
 }

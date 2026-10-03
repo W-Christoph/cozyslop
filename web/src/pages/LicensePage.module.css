@@ -1,0 +1,11 @@
+.notice {
+  max-width: 50em;
+  margin: 0 auto;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.notice a {
+  color: var(--color-orange);
+  overflow-wrap: anywhere;
+}

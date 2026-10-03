@@ -7,6 +7,7 @@ import { AdminPage } from '../pages/admin/AdminPage'
 import { HomePage } from '../pages/HomePage'
 import { InvitePage } from '../pages/InvitePage'
 import { LoginPage } from '../pages/LoginPage'
+import { LicensePage } from '../pages/LicensePage'
 import { NotFoundPage } from '../pages/NotFoundPage'
 import { ProfilePage } from '../pages/ProfilePage'
 import { RegisterPage } from '../pages/RegisterPage'
@@ -51,6 +52,7 @@ function Shell() {
         <Route path="/invite/:code" component={InvitePage} />
         <Route path="/access/:code" component={AccessPage} />
         <Route path="/login" component={LoginPage} />
+        <Route path="/license" component={LicensePage} />
         <Route path="/register" component={RegisterPage} />
         <Route path="/profile" component={ProfilePage} />
         <Route path="/settings" component={SettingsPage} />

@@ -1,50 +1,64 @@
-// Prototype room page: stream plus remote control. Chat, user list and the
-// rest of the CozyCast UI get ported on top of this.
-
-import { useState } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import { useRoute } from 'preact-iso'
-import { RemoteScreen } from '../components/RemoteScreen'
+import { preferences } from '../app/state'
+import { Controls } from '../components/room/Controls'
+import { KickedScreen } from '../components/room/KickedScreen'
+import { PersonalSettings } from '../components/room/PersonalSettings'
+import { RoomContext, useRoomStore } from '../components/room/RoomContext'
+import { Sidebar, type SidebarTab } from '../components/room/Sidebar'
+import { UserHoverName, type HoverName } from '../components/room/UserHoverName'
+import { UserStrip } from '../components/room/UserStrip'
+import { VideoArea } from '../components/room/VideoArea'
+import { useRoomFullscreen } from '../components/room/useRoomFullscreen'
+import { useRoomPresence } from '../components/room/useRoomPresence'
 import { useRoom } from '../room/useRoom'
 import styles from './RoomPage.module.css'
 
-// RoomRoute reads the room and access code from the URL: /room/<name>?access=<code>
+// RoomRoute owns the joined room for /room/<name>?access=<code>.
 export function RoomRoute() {
   const { params, query } = useRoute()
-  return <RoomPage room={params.room} access={query.access} />
+  const store = useRoom(params.room, query.access)
+  return <RoomContext.Provider value={store}><RoomPage key={`${params.room}:${query.access ?? ''}`} /></RoomContext.Provider>
 }
 
-export function RoomPage({ room, access }: { room: string; access?: string }) {
-  const r = useRoom(room, access)
-  const [muted, setMuted] = useState(true)
-
-  const status = r.kicked.value
-    ? `You can't be in this room (${r.kicked.value.reason}).`
-    : r.server.value !== 'connected'
-      ? 'Connecting to server…'
-      : r.error.value ?? (r.video.value === 'connected' ? 'Live' : 'Connecting to desktop…')
-
+export function RoomPage() {
+  const store = useRoomStore()
+  const page = useRef<HTMLDivElement>(null)
+  const { fullscreen, idle, wake, toggle, error } = useRoomFullscreen(page)
+  const [sidebar, setSidebar] = useState<SidebarTab>('CHAT')
+  const [userlistHidden, setUserlistHidden] = useState(false)
+  const [personalSettings, setPersonalSettings] = useState(false)
+  const [hover, setHover] = useState<HoverName | null>(null)
+  const wasConnected = useRef(false)
+  const connected = store.server.value === 'connected'
+  if (connected) wasConnected.current = true
+  const left = fullscreen || preferences.value.userlistOnLeft
+  const admin = store.rights.value.admin
+  useRoomPresence()
+  useEffect(() => {
+    if (!admin && sidebar === 'SETTINGS') setSidebar('NOTHING')
+  }, [admin, sidebar])
+  useEffect(() => { setHover(null) }, [fullscreen, left, userlistHidden, idle])
+  if (store.kicked.value) return <KickedScreen />
   return (
-    <div class={styles.page}>
-      <header class={styles.toolbar}>
-        <strong>{room}</strong>
-        <span class={styles.status}>{status}</span>
-        <span class={styles.spacer} />
-        <button onClick={() => setMuted(!muted)}>{muted ? 'Unmute' : 'Mute'}</button>
-        {r.isHost.value ? (
-          <button onClick={() => r.dropRemote()}>Drop remote</button>
-        ) : (
-          <button
-            disabled={!r.rights.value.remote || r.video.value !== 'connected'}
-            onClick={() => r.takeRemote()}
-            title={r.rights.value.remote ? undefined : 'You are not allowed to use the remote'}
-          >
-            {r.remoteHolder.value ? 'Take remote' : 'Remote'}
-          </button>
-        )}
-      </header>
-      <main class={styles.screen}>
-        <RemoteScreen neko={r.neko} stream={r.stream.value} isHost={r.isHost.value} muted={muted} />
-      </main>
+    <div ref={page} class={`${styles.page} ${fullscreen ? styles.fullscreen : ''} ${fullscreen && idle && !personalSettings ? styles.idle : ''}`}
+      onMouseMove={wake} onTouchStart={wake} onKeyDown={wake}>
+      {!userlistHidden && left && <UserStrip left fullscreen={fullscreen} onHover={setHover} />}
+      <div class={styles.videoWrapper}>
+        <VideoArea />
+        <div class={styles.toolbar}>
+          <Controls fullscreen={fullscreen} userlistHidden={userlistHidden} sidebar={sidebar}
+            onToggleUsers={() => setUserlistHidden((value) => !value)} onPersonalSettings={() => setPersonalSettings(true)}
+            onSidebar={setSidebar} onFullscreen={() => { void toggle() }} />
+          {!userlistHidden && !left && <UserStrip left={false} fullscreen={false} onHover={setHover} />}
+        </div>
+        {error && <div role="alert" class={styles.error}>{error}</div>}
+      </div>
+      <Sidebar tab={sidebar} fullscreen={fullscreen} idle={idle && !personalSettings} />
+      {personalSettings && <PersonalSettings onClose={() => { setPersonalSettings(false); wake() }} />}
+      {!connected && wasConnected.current && <div class={styles.disconnected} role="status">DISCONNECTED{store.error.value && <span>{store.error.value}</span>}</div>}
+      <UserHoverName hover={hover} />
+      {!userlistHidden && !fullscreen && <a class={`${styles.copyright} ${left ? styles.leftCopyright : ''}`} href="/license" target="_blank" rel="noopener">Copyright (C) 2024 Vorlent</a>}
     </div>
   )
 }

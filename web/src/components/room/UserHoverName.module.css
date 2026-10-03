@@ -1,0 +1,10 @@
+.tooltip { position: fixed; background: var(--color-accent); color: var(--color-text); white-space: nowrap; padding: 0.15em 0.3em; border-radius: 0.2em; z-index: 5; pointer-events: none; font-size: 1.1em; display: flex; flex-direction: column; max-width: calc(100vw - 1em); }
+.tooltip span { font-size: 0.7em; color: var(--color-text-muted); }
+.tooltip::before { content: ''; position: absolute; border: 0.3em solid; }
+.tooltip::after { content: ''; position: absolute; right: -0.15em; height: 100%; width: 0.3em; top: 0; border-radius: 0 0.2em 0.2em 0; }
+.online::after { background: var(--color-online); }
+.away::after { background: var(--color-away); }
+.top { transform: translate(-50%, -100%); }
+.right { transform: translateY(-50%); }
+.top::before { left: 50%; top: 100%; transform: translateX(-50%); border-color: var(--color-accent) transparent transparent; }
+.right::before { right: 100%; top: 50%; transform: translateY(-50%); border-color: transparent var(--color-accent) transparent transparent; }

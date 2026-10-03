@@ -23,6 +23,8 @@
   --color-disabled: gray;
   --color-on-orange: black;
   --color-orange-hover: #b60;
+  --color-online: #199239;
+  --color-away: #e6c714;
   --color-orange: #f90;
   --color-orange-ping: #df9e3e;
 }

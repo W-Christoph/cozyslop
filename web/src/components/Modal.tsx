@@ -1,6 +1,6 @@
 import { createPortal } from 'preact/compat'
 import type { ComponentChildren } from 'preact'
-import { useEffect, useId, useRef } from 'preact/hooks'
+import { useLayoutEffect, useId, useRef } from 'preact/hooks'
 import styles from './Modal.module.css'
 
 const openModals: string[] = []
@@ -20,7 +20,7 @@ export function Modal({
   const dialog = useRef<HTMLDivElement>(null)
   const close = useRef(onClose)
   close.current = onClose
-  useEffect(() => {
+  useLayoutEffect(() => {
     openModals.push(id)
     const previous =
       document.activeElement instanceof HTMLElement
@@ -97,6 +97,7 @@ export function Modal({
         {children}
       </div>
     </div>,
-    document.body,
+    // Fullscreen hides DOM outside its element, including body-level portals.
+    document.fullscreenElement ?? document.body,
   )
 }

@@ -4,9 +4,34 @@ Watch things together in a shared remote browser. A from-scratch rewrite of
 [CozyCast](https://github.com/Vorlent/cozycast) that keeps its UX and throws
 away its backend, built to run cheaply on servers without a GPU.
 
-**Status: prototype.** The stream, remote control and per-user permissions
-work end to end. Accounts, chat and the rest of the CozyCast UI are not
-ported yet (see [Roadmap](#roadmap)). The app still calls itself CozyCast.
+**Status: feature complete, not yet run in production.** Everything below
+works end to end in tests; real-world numbers on cheap hosting are still to
+come. The app still calls itself CozyCast.
+
+## Features
+
+- **Shared remote desktop**: one XFCE desktop with Firefox (uBlock Origin)
+  and VLC per room, streamed to every viewer. Whoever holds the remote
+  controls mouse and keyboard; copy and paste work both ways between the
+  room and your own clipboard.
+- **Accounts and chat**: registration (open or invite only), profiles with
+  avatars and name colours, chat with images, videos and edits. Chat clears
+  itself after an hour, at most 1,000 messages are kept.
+- **Room permissions**: public, account, verified or invite-only rooms;
+  per-user remote, chat image and desktop upload rights; invites with use
+  limits; kicks and bans (anonymous viewers by cookie and IP).
+- **Uploads into the room**: drag files onto the stream or use the upload
+  button; they land in the desktop's Downloads folder (needs the upload
+  right).
+- **Stream settings per room**: resolution, frame rate, bitrate, stream size
+  and encoder speed, changed live from the room settings (see
+  [Stream settings](#stream-settings)).
+- **A room desktop that stays**: files, folders and the Firefox profile
+  (open tabs, logins, extensions) live in a Docker volume and survive
+  restarts and image updates.
+- **Automatic HTTPS** with Let's Encrypt when a domain is set.
+- **Migration** of accounts, avatars, permissions, invites and the room
+  desktop from an existing CozyCast instance ([guide](docs/migration.md)).
 
 ## Why a rewrite
 
@@ -17,8 +42,8 @@ one desktop, send it to a few dozen browsers":
 |---|---|---|
 | GStreamer → Rust `whipclientsink` → LiveKit Ingress → Redis → LiveKit Server | Five hops for one already-encoded stream. Transcoding was off, so LiveKit only forwarded packets. The Rust plugin made worker builds long and fragile. A 10,000-port UDP range to open. | [neko](https://github.com/m1k1o/neko) captures, encodes once and sends WebRTC to every viewer itself. One UDP+TCP port per room. |
 | Lua worker with vendored FFI, luarocks, xdotool | Hand-rolled capture supervision and input mapping. | neko does input (keysyms, keyboard layouts, clipboard, uploads). |
-| Micronaut + Groovy + GORM on the JVM, Postgres, Liquibase | Heavy for a small app, slow to build, outdated dependencies. | One Go binary with the UI embedded; SQLite planned. |
-| nginx, certbot, keystore scripts | Complicated SSL setup. | Automatic HTTPS in the server (planned). |
+| Micronaut + Groovy + GORM on the JVM, Postgres, Liquibase | Heavy for a small app, slow to build, outdated dependencies. | One Go binary with the UI embedded, and SQLite. |
+| nginx, certbot, keystore scripts | Complicated SSL setup. | Automatic HTTPS (Let's Encrypt) in the server. |
 | One 2,763-line `styles.css` | Hard to change anything safely. | Design tokens plus one CSS module per component. |
 
 Why neko and not our own worker: it is exactly the worker we would have
@@ -57,12 +82,14 @@ Moving from an existing CozyCast instance? See [Migration](docs/migration.md).
 Needs Docker with Compose.
 
 ```bash
-cp .env.example .env    # set PUBLIC_IP and NEKO_API_TOKEN
+cp .env.example .env    # set PUBLIC_IP, NEKO_API_TOKEN and ADMIN_PASSWORD
 docker compose up -d --build
 ```
 
-Open `http://<server>/room/default`. Open ports `80/tcp` (web) and
-`52000/udp` + `52000/tcp` (media; one port per room).
+Open `http://<server>/room/default` and log in as `admin`. Open ports
+`80/tcp` (web), `443/tcp` (with `DOMAIN` set, for HTTPS) and `52000/udp` +
+`52000/tcp` (media; one port per room). Copying out of the room into your
+clipboard needs HTTPS: browsers only allow it on secure pages.
 
 Second room: uncomment `room-second` in `compose.yaml` and add it to
 `COZYCAST_ROOMS`.
@@ -82,12 +109,40 @@ disk, or use `npm run dev` (Vite proxies `/api` and `/neko` to
 |---|---|---|
 | `COZYCAST_NEKO_API_TOKEN` | required | must match the rooms' `NEKO_SESSION_API_TOKEN` |
 | `COZYCAST_ROOMS` | `default=http://room-default:8080` | `name=url,name2=url2` |
-| `COZYCAST_LISTEN` | `:8080` | |
-| `COZYCAST_DEFAULT_REMOTE` | `true` | remote permission for new connections |
-| `COZYCAST_DEFAULT_UPLOAD` | `false` | upload permission for new connections |
+| `COZYCAST_DATA_DIR` | `data` | database and uploaded chat media |
+| `COZYCAST_INIT_ADMIN_PASSWORD` | | creates the `admin` account on first start |
+| `COZYCAST_LISTEN` | `:8080` | HTTP; with a domain set it only redirects and answers Let's Encrypt |
+| `COZYCAST_TLS_LISTEN` | `:8443` | HTTPS, used when a domain is set |
+| `COZYCAST_DOMAIN` | | host names for automatic HTTPS, comma separated |
+| `COZYCAST_ACME_EMAIL` | | optional contact address for Let's Encrypt |
+| `COZYCAST_TRUST_PROXY` | `false` | take client IP and scheme from `X-Forwarded-*` (behind a reverse proxy) |
+| `COZYCAST_IMPORT` | | old CozyCast export archive, imported into an empty database |
+| `COZYCAST_MAX_UPLOAD_MB` | `10` | maximum chat image/video size |
+| `COZYCAST_DOCKER` | `false` | opt in to room restarts from the UI |
+| `COZYCAST_DOCKER_SOCKET` | `/var/run/docker.sock` | |
+| `COZYCAST_DOCKER_PROJECT` | | compose project name, if it cannot be detected |
+| `COZYCAST_SOURCE_URL` | this repository | source code link shown to users (AGPL) |
 | `COZYCAST_WEB_DIR` | | serve the UI from this directory instead of the embedded build |
 
 Room restarts from the UI are an [opt-in Docker control feature](docs/architecture.md#room-websocket); enable the commented socket, environment and group settings in `compose.yaml`.
+
+## Stream settings
+
+Admins change these in the room settings; viewers switch over within
+seconds without reconnecting:
+
+| Setting | Effect |
+|---|---|
+| Resolution, frame rate | Size of the room's desktop. |
+| Bitrate | Picture quality and bandwidth per viewer. |
+| Stream size | Encode at 75/67/50% of the desktop size: less CPU and bandwidth, softer picture. |
+| Encoder | x264 speed preset. Faster presets save CPU but look blockier at the same bitrate. |
+
+Everyone in a room watches the same stream, so a room is encoded once no
+matter how many people watch. The choices offered come from the room
+container's environment (`STREAM_BITRATES`, `STREAM_SCALES`, `X264_PRESETS`
+in `.env`); changing those lists needs `docker compose up -d` to recreate the
+room, but no rebuild. The room desktop's files survive that.
 
 ## Measurements
 
@@ -98,9 +153,11 @@ compose stack (AMD Ryzen 7 5800X, no GPU):
 - YouTube (Big Buck Bunny) playing in the room's Firefox, normal player size:
   **~70% of one core for the whole room**, roughly 40% Firefox decoding and
   30% neko encoding (x264 `veryfast`, 2.5 Mbit/s).
+- Encoder presets, same video at 2.5 Mbit/s, neko's share of one core:
+  ultrafast ~21%, superfast ~25%, veryfast ~30%.
 - First picture ~1 s after connecting.
 - Server image 16.5 MB (builds in ~16 s); worker image builds in ~50 s with
-  no compiling; web bundle 40 KB JS (15 KB gzipped).
+  no compiling. The web bundle is now 212 KB JS (75 KB gzipped).
 
 Still to measure on real hosting: fullscreen playback, several viewers over
 the internet, and the old stack on the same machine for comparison.

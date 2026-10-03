@@ -59,6 +59,7 @@ services:
       COZYCAST_NEKO_API_TOKEN: ${NEKO_API_TOKEN}
       COZYCAST_ROOMS: default=http://room-default:8080
       COZYCAST_DATA_DIR: /data
+      COZYCAST_IMPORT: /import/cozycast-export.tar.gz
       # Set DOMAIN for automatic HTTPS (Let's Encrypt); ports 80 and 443
       # must then be reachable from the internet.
       COZYCAST_DOMAIN: ${DOMAIN:-}
@@ -67,6 +68,7 @@ services:
       COZYCAST_INIT_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     volumes:
       - server-data:/data
+      - ./import:/import:ro
     depends_on:
       - room-default
 

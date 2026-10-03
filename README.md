@@ -52,6 +52,8 @@ browser ──HTTP/WebSocket──▶ server (Go) ──REST API──▶ room-d
 
 ## Run it
 
+Moving from an existing CozyCast instance? See [Migration](docs/migration.md).
+
 Needs Docker with Compose.
 
 ```bash

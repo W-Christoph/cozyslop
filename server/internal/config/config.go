@@ -20,6 +20,7 @@ type Config struct {
 	Domains       []string // enables automatic HTTPS for these host names
 	ACMEEmail     string   // optional contact for Let's Encrypt
 	DataDir       string   // database and uploaded files
+	ImportPath    string   // optional legacy export archive; imported into an empty database
 	TrustProxy    bool     // take client IP/scheme from X-Forwarded-* headers
 	InitAdminPass string   // creates the "admin" account if it does not exist
 	NekoAPIToken  string
@@ -34,6 +35,7 @@ func FromEnv() (Config, error) {
 		Domains:       splitList(os.Getenv("COZYCAST_DOMAIN")),
 		ACMEEmail:     os.Getenv("COZYCAST_ACME_EMAIL"),
 		DataDir:       env("COZYCAST_DATA_DIR", "data"),
+		ImportPath:    os.Getenv("COZYCAST_IMPORT"),
 		TrustProxy:    envBool("COZYCAST_TRUST_PROXY", false),
 		InitAdminPass: os.Getenv("COZYCAST_INIT_ADMIN_PASSWORD"),
 		NekoAPIToken:  os.Getenv("COZYCAST_NEKO_API_TOKEN"),

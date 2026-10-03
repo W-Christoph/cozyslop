@@ -16,6 +16,7 @@ import (
 	"cozycast/internal/config"
 	"cozycast/internal/httpapi"
 	"cozycast/internal/hub"
+	"cozycast/internal/legacy"
 	"cozycast/internal/neko"
 	"cozycast/internal/store"
 	"cozycast/webui"
@@ -47,17 +48,33 @@ func run() error {
 		return err
 	}
 	defer db.Close()
-	if err := ensureAdmin(ctx, db, cfg.InitAdminPass); err != nil {
-		return err
-	}
-	go sweepSessions(ctx, db)
-
 	mediaDir := filepath.Join(cfg.DataDir, "media")
 	for _, dir := range []string{"chat", "avatars"} {
 		if err := os.MkdirAll(filepath.Join(mediaDir, dir), 0o750); err != nil {
 			return err
 		}
 	}
+	if cfg.ImportPath != "" {
+		if _, err := os.Stat(cfg.ImportPath); err == nil {
+			summary, err := legacy.Import(ctx, db, cfg.ImportPath, filepath.Join(mediaDir, "avatars"))
+			switch {
+			case errors.Is(err, legacy.ErrNotEmpty):
+				slog.Info("legacy import skipped because the database is not empty")
+			case err != nil:
+				return err
+			default:
+				slog.Info("legacy import complete", "users", summary.Users, "rooms", summary.Rooms,
+					"permissions", summary.Permissions, "invites", summary.Invites,
+					"avatars", summary.Avatars, "skipped", summary.Skipped)
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	if err := ensureAdmin(ctx, db, cfg.InitAdminPass); err != nil {
+		return err
+	}
+	go sweepSessions(ctx, db)
 
 	rooms := make([]hub.RoomConfig, 0, len(cfg.Rooms))
 	for _, rc := range cfg.Rooms {

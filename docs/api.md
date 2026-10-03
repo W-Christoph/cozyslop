@@ -1,0 +1,157 @@
+# HTTP API
+
+JSON request and response field names are case-sensitive. JSON bodies accept
+only the documented fields and are limited to 64 KiB. Invalid JSON or unknown
+fields return 400; oversized bodies return 413. Errors use
+`{"error":"<message shown to the user>"}`. Internal failures return 500
+`"Something went wrong."`. JSON responses set `Cache-Control: no-store`.
+A 204 response has no body.
+
+Authentication uses the HttpOnly `cozy_session` cookie (SameSite=Lax, Secure on
+HTTPS). Sessions expire after 30 days without use. Anonymous identity uses the
+HttpOnly `cozy_anon` cookie. State-changing requests with an `Origin` whose host
+(including port) differs from the request host return 403
+`"cross-origin request rejected"`. WebSocket upgrades also enforce same origin.
+
+“Account” below means a logged-in, enabled account; missing or invalid sessions
+return 401 `"Please log in."` on account-only endpoints. Every admin endpoint
+requires an account with global admin rights: 401 for anonymous callers, 403
+`"Admins only."` for other accounts.
+
+Unix timestamps are integer seconds unless explicitly marked as milliseconds.
+Request fields omitted from full replacements take their JSON zero values;
+PATCH admin flags preserve omitted or null fields.
+
+## Response objects
+
+| Object | Fields |
+|---|---|
+| Own account | `username`, `nickname`, `nameColor`, `avatarUrl`, `admin`, `verified` |
+| Admin account | Own account fields plus `disabled`, `createdAt`; excludes database ID and password hash |
+| Global settings | `message`, `registration` (`open` or `invite`) |
+| Room settings | `name`, `access` (`public`, `account`, `verified`, `invite`), `hidden`, `remoteOwnership`, `centerRemote`, `defaultRemote`, `defaultImage`, `defaultUpload` |
+| Permission | `room`, `username`, `remote`, `image`, `upload`, `trusted`, `invited`, `inviteName`, `banned`, `bannedUntil` (seconds or null; null with `banned: true` means forever) |
+| Anonymous ban | `id`, `room`, `ip`, `bannedUntil` (seconds or null for forever); excludes anonymous cookie ID |
+| Invite view | `code`, `room`, `temporary`, `name`, `remote`, `image`, `upload`, `uses`, `maxUses` (integer or null for unlimited), `expiresAt` (seconds or null for never), `createdAt`, `valid`, `path` |
+
+Invite `valid` means neither expired nor exhausted. `path` is `/invite/<code>`
+for account invites and `/access/<code>` for temporary room-access invites.
+
+## Accounts and public settings
+
+| Method and path | Caller | Request body | Response | Notable errors |
+|---|---|---|---|---|
+| `GET /api/settings` | Anyone | None | 200 global settings | 500 on storage failure |
+| `POST /api/auth/login` | Anyone | `{"username":"alice","password":"…"}` | 200 `{"user":<own account>}`; starts a session | 401 `"Wrong username or password."` (also for disabled accounts); 429 login rate limit |
+| `POST /api/auth/logout` | Anyone | None | 204; deletes the current session and clears its cookie | 500 on storage failure |
+| `POST /api/auth/register` | Anyone | `{"username":"alice","password":"…","inviteCode":"…"}`; code optional in open mode | 201 `{"user":<own account>}`; creates account and starts a session; an account invite also grants its room permission atomically | 400 username/password validation or `"That invite is invalid or has expired."`; 403 `"Registration requires an invite."` when invite-only and no code; 409 `"That username is taken."`; 429 registration rate limit |
+| `GET /api/me` | Anyone | None | 200 `{"user":<own account>}` or `{"user":null}` | Invalid sessions become anonymous |
+| `PATCH /api/me` | Account | `{"nickname":"Alice","nameColor":"#f90"}`; both required | 200 `{"user":<own account>}` | 400 invalid nickname/colour; 409 `"That nickname is another account's username."` |
+| `POST /api/me/password` | Account | `{"current":"…","new":"…"}` | 204; keeps the current session and ends every other session | 403 `"Your current password is wrong."`; 400 invalid new password; 429 attempt rate limit |
+
+Usernames are 2–12 ASCII letters/digits, optionally separated by single `-`,
+`_` or `.`; stored lowercase and looked up case-insensitively. Passwords are
+8–100 characters (`"Passwords are 8-100 characters."` on validation failure).
+Nicknames are 1–12 printable characters from the account validation's ASCII /
+Latin-1 ranges, without leading, trailing or double spaces. A nickname may
+match the caller's own username, but may not match another account's username
+(case-insensitively). Colours are `#rgb` or `#rrggbb` hex values.
+
+Login permits an initial burst of 10 attempts per IP, replenishing one every
+30 seconds. Registration permits three attempts that reach account creation
+per IP, replenishing one every 10 minutes. Password change shares the login
+attempt limiter. Failed invite redemption during registration counts toward
+its limit; malformed usernames/passwords do not.
+
+## Admin users
+
+All callers: admin.
+
+| Method and path | Request body | Response | Notable errors |
+|---|---|---|---|
+| `GET /api/admin/users` | None | 200 array of admin accounts, ordered by username | Common admin errors |
+| `PATCH /api/admin/users/{username}` | Any subset of `{"admin":true,"verified":true,"disabled":false}` | 200 updated admin account; disabling deletes all sessions; flags reach live room connections | 404 `"Unknown user."`; 403 `"You can't remove your own admin rights or disable yourself."`; 409 `"There must be at least one admin."` |
+| `DELETE /api/admin/users/{username}` | None | 204; deletes account, sessions and permissions; disconnects live room connections | 404 unknown user; 403 `"You can't delete yourself."`; 409 `"Remove admin rights first."` |
+| `POST /api/admin/users/{username}/password` | `{"password":"…"}` | 204; resets password and deletes all of the user's sessions | 404 unknown user; 400 `"Passwords are 8-100 characters."` |
+
+Admins may change their own verification flag, but may not change their own
+admin or disabled flag. At least one enabled admin must remain.
+
+## Admin permissions
+
+All callers: admin.
+
+| Method and path | Request body | Response | Notable errors |
+|---|---|---|---|
+| `GET /api/admin/permissions?room=<optional>` | None | 200 permission array; all rooms if the filter is absent/empty; ordered by room then username | Common admin errors |
+| `PUT /api/admin/permissions/{room}/{username}` | Full replacement: `{"remote":false,"image":false,"upload":false,"trusted":false,"invited":false,"banned":false,"inviteName":"","bannedUntil":null}` | 200 saved permission with username; applies to live room connections | 404 `"Unknown room."` / `"Unknown user."`; 400 invite name over 64 characters |
+| `DELETE /api/admin/permissions/{room}/{username}` | None | 204; removes the override and refreshes live rights | 404 unknown user or `"Unknown permission."` if there is no stored row |
+
+Account bans are permission rows with `banned: true`. Removing a permission
+also removes its ban and grants. A banned account is denied even if it is an
+admin. `trusted` grants room admission and remote/image/upload rights;
+`invited` grants admission. Effective rights also depend on room defaults and
+global admin rights; see [architecture](architecture.md#permissions).
+
+## Admin room settings and moderation
+
+All callers: admin.
+
+| Method and path | Request body | Response | Notable errors |
+|---|---|---|---|
+| `GET /api/admin/rooms/{room}/settings` | None | 200 room settings | 404 `"Unknown room."` |
+| `PUT /api/admin/rooms/{room}/settings` | All room settings except `name`: `{"access":"public","hidden":false,"remoteOwnership":false,"centerRemote":false,"defaultRemote":false,"defaultImage":false,"defaultUpload":false}` | 200 saved settings; reloads room settings and rechecks live admission/rights | 404 unknown room; 400 invalid access; `name` in the body is rejected |
+| `POST /api/admin/rooms/{room}/bans` | `{"key":"u:123","minutes":null}`; key is an account `u:<id>` or anonymous `a:<anon id>` identity from the room protocol; minutes is an integer or null | 204; null/omitted means permanent ban, 0 means kick, positive means ban for that many minutes; disconnects all tabs | 404 unknown room or `"That user is not in the room."`; 400 negative/out-of-range minutes |
+| `GET /api/admin/bans?room=<optional>` | None | 200 active anonymous bans; all rooms if the filter is absent/empty; ordered by room then ID | Account bans are listed under permissions |
+| `DELETE /api/admin/bans/{id}` | None | 204; removes an anonymous ban | 400 invalid integer ID; 404 `"Unknown ban."` |
+
+Anonymous bans match the browser's anonymous ID **or** IP. Kicks do not create
+a ban and allow the person to rejoin immediately.
+
+## Admin global settings
+
+| Method and path | Caller | Request body | Response | Notable errors |
+|---|---|---|---|---|
+| `PUT /api/admin/settings` | Admin | `{"message":"…","registration":"open"}`; full replacement | 200 saved global settings | 400 message over 4096 characters or registration other than `open` / `invite` |
+
+## Invites
+
+| Method and path | Caller | Request body | Response | Notable errors |
+|---|---|---|---|---|
+| `POST /api/admin/invites` | Admin | `{"room":"default","temporary":false,"name":"friends","remote":true,"image":false,"upload":false,"maxUses":null,"expiresInMinutes":null}` | 201 invite view; expiry is current time plus minutes × 60 | 404 `"Unknown room."`; 400 name over 64 characters, maximum uses below 1, expiry minutes below 1 or out of range |
+| `GET /api/admin/invites?room=<optional>` | Admin | None | 200 invite view array, including expired/exhausted invites; newest first, then code; all rooms if filter absent/empty | Common admin errors |
+| `DELETE /api/admin/invites/{code}` | Admin | None | 204 | 404 `"This invite is invalid or has expired."` when missing |
+| `GET /api/invites/{code}` | Anyone | None | 200 `{"room":"default","temporary":false}`; does not consume a use | 404 `"This invite is invalid or has expired."` when missing, expired or exhausted |
+| `POST /api/invites/{code}/redeem` | Account | None | 204; grants account invite rights and refreshes live permissions | 404 `"This invite is invalid or has expired."` for missing, temporary, expired or exhausted invites |
+
+Redeeming an account invite sets `invited`, adds its remote/image/upload
+grants, and preserves existing trust and bans. A non-empty invite name replaces
+the permission's invite name. Each account consumes at most one use per code;
+repeating redemption succeeds even after that account exhausted the invite,
+but still fails after expiry. Temporary invites are consumed only after a
+successful room join, using the WebSocket `access` query parameter.
+
+## Rooms, WebSocket and neko
+
+| Method and path | Caller | Request | Response | Notable errors |
+|---|---|---|---|---|
+| `GET /api/rooms` | Anyone | No body | 200 array of `{"name":"default","access":"public","userCount":0,"open":true}` ordered by name; `open` means caller may join; hidden rooms appear only if caller may join | 500 on storage failure |
+| `GET /api/rooms/{room}/ws?access=<optional temporary invite>` | Anyone admitted by room access rules and bans | WebSocket upgrade with account/anonymous cookies; optional room-bound temporary invite | 101; JSON room protocol, starting with `welcome`; admission denial sends `kicked` and closes with code 4000 | 404 unknown room (plain HTTP response); cross-origin upgrade rejected; banned/account/verified/invite admission denial |
+| `/neko/{room}/api/ws` | Holder of the per-tab neko token issued by the room WebSocket | Proxied neko WebSocket handshake, including token query | Upstream WebSocket response | 404 unknown room or disallowed path; upstream auth errors; 502 if upstream unavailable |
+| `/neko/{room}/api/filetransfer` and subpaths | Holder of a per-tab neko token with upload rights | Methods, query and body follow neko's file-transfer plugin | Upstream response | Upstream auth/permission errors; 404 unknown room or disallowed path; 502 if upstream unavailable |
+
+The proxy accepts these paths and their subpaths, preserves query strings, and
+removes `Origin` before forwarding. Other neko APIs are inaccessible. No
+separate CozyCast JSON schema applies to proxied requests or responses.
+
+The room WebSocket carries presence, chat, typing, activity, mute status,
+rights, room settings, remote ownership, moderation and per-tab neko tokens.
+See [the protocol definitions](../server/internal/hub/protocol.go) for message
+fields and types. Admission and effective rights are described in
+[architecture](architecture.md#permissions).
+
+## Web UI
+
+| Method and path | Caller | Request | Response | Notable errors |
+|---|---|---|---|---|
+| `GET /{path...}` / `HEAD /{path...}` | Anyone | No body | Embedded static file; missing paths fall back to `index.html` for client-side routing | Static file server errors; not a JSON API |

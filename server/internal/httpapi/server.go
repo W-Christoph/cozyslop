@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"cozycast/internal/auth"
@@ -31,6 +32,8 @@ type Server struct {
 	hub   *hub.Hub
 	web   fs.FS
 	log   *slog.Logger
+
+	adminMu sync.Mutex // enabled-admin count checks and updates
 
 	loginLimit    *ratelimit.Limiter // per IP: login attempts
 	registerLimit *ratelimit.Limiter // per IP: account creations
@@ -57,6 +60,31 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/me", s.getMe)
 	mux.HandleFunc("PATCH /api/me", s.updateMe)
 	mux.HandleFunc("POST /api/me/password", s.changePassword)
+
+	mux.HandleFunc("GET /api/admin/users", s.adminListUsers)
+	mux.HandleFunc("PATCH /api/admin/users/{username}", s.adminUpdateUser)
+	mux.HandleFunc("DELETE /api/admin/users/{username}", s.adminDeleteUser)
+	mux.HandleFunc("POST /api/admin/users/{username}/password", s.adminSetPassword)
+
+	mux.HandleFunc("GET /api/admin/permissions", s.adminListPermissions)
+	mux.HandleFunc("PUT /api/admin/permissions/{room}/{username}", s.adminSavePermission)
+	mux.HandleFunc("DELETE /api/admin/permissions/{room}/{username}", s.adminDeletePermission)
+
+	mux.HandleFunc("GET /api/admin/rooms/{room}/settings", s.adminGetRoomSettings)
+	mux.HandleFunc("PUT /api/admin/rooms/{room}/settings", s.adminSaveRoomSettings)
+
+	mux.HandleFunc("POST /api/admin/rooms/{room}/bans", s.adminBan)
+	mux.HandleFunc("GET /api/admin/bans", s.adminListBans)
+	mux.HandleFunc("DELETE /api/admin/bans/{id}", s.adminDeleteBan)
+
+	mux.HandleFunc("PUT /api/admin/settings", s.adminSaveSettings)
+
+	mux.HandleFunc("POST /api/admin/invites", s.adminCreateInvite)
+	mux.HandleFunc("GET /api/admin/invites", s.adminListInvites)
+	mux.HandleFunc("DELETE /api/admin/invites/{code}", s.adminDeleteInvite)
+	mux.HandleFunc("GET /api/invites/{code}", s.checkInvite)
+	mux.HandleFunc("POST /api/invites/{code}/redeem", s.redeemInvite)
+
 	mux.HandleFunc("GET /api/rooms", s.listRooms)
 	mux.HandleFunc("GET /api/rooms/{room}/ws", s.roomSocket)
 	mux.HandleFunc("/neko/{room}/{path...}", s.nekoProxy)

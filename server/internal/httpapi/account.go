@@ -137,12 +137,6 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
-	// Invite handling (checking and redeeming req.InviteCode) is added with
-	// the invites API; until then invite-only registration is closed.
-	if set.Registration != "open" {
-		writeError(w, http.StatusForbidden, "Registration requires an invite.")
-		return
-	}
 	if !s.registerLimit.Allow(s.auth.ClientIP(r)) {
 		writeError(w, http.StatusTooManyRequests, "Too many new accounts from your address. Try again later.")
 		return
@@ -154,7 +148,15 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := &store.User{Username: req.Username, PasswordHash: hash, Nickname: req.Username}
-	err = s.store.CreateUser(r.Context(), u)
+	_, err = s.store.RegisterUser(r.Context(), u, req.InviteCode, set.Registration != "open")
+	if errors.Is(err, store.ErrInvalidInvite) {
+		if req.InviteCode == "" {
+			writeError(w, http.StatusForbidden, "Registration requires an invite.")
+		} else {
+			writeError(w, http.StatusBadRequest, "That invite is invalid or has expired.")
+		}
+		return
+	}
 	if errors.Is(err, store.ErrUsernameTaken) {
 		writeError(w, http.StatusConflict, "That username is taken.")
 		return

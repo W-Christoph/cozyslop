@@ -1,0 +1,4 @@
+.text { white-space: pre-wrap; }
+.link, .link:hover { color: inherit; }
+.ping { background: var(--color-orange); padding: 0 0.2em 0 0.1em; border-radius: 0.2em; color: var(--color-on-orange); text-shadow: none; }
+.otherPing { color: var(--color-ping-other); }

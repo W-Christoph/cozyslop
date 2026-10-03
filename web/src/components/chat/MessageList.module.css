@@ -1,0 +1,10 @@
+.list { flex: 1; min-height: 0; padding: 0 10px; overflow-y: auto; overflow-x: hidden; word-break: break-word; position: relative; }
+.temporary { position: relative; background: var(--color-message-bg); margin-top: 10px; padding: 0.2em; border-radius: 0.2em; box-shadow: var(--shadow-message); font-size: 0.75em; font-style: italic; text-align: center; }
+.temporary:hover { background: var(--color-message-hover); }
+.hoverTime { position: absolute; left: 0.5em; top: 0; background: var(--color-accent); white-space: nowrap; padding: 0.15em 0.3em; border-radius: 0.2em; visibility: hidden; font-size: 0.8em; font-style: normal; }
+.temporary:hover .hoverTime { visibility: visible; }
+.badge { background: var(--color-orange); bottom: 0.5em; position: sticky; z-index: 3; width: 75%; margin-left: 12.5%; text-align: center; border-radius: 5px; border: solid transparent 0.3em; color: var(--color-on-orange); padding: 0; font-weight: bold; font-size: 0.7em; text-shadow: none; }
+.badge:hover { background: var(--color-orange); filter: brightness(70%); }
+.resume { display: none; }
+.badge:hover .badgeLabel { display: none; }
+.badge:hover .resume { display: inline; }

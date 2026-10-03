@@ -1,0 +1,6 @@
+.controls { height: 38px; position: absolute; top: 0; right: 8px; display: flex; justify-content: center; align-items: center; }
+.controls[hidden], .file { display: none; }
+.controls button { width: 38px; height: 32px; padding: 0; background: transparent; }
+.controls img { filter: var(--icon-filter); width: 38px; height: 32px; }
+.controls button:hover { background: var(--color-border); border-radius: 5px; }
+.error { font-size: 0.8em; margin-top: var(--space-2); color: var(--color-orange); }

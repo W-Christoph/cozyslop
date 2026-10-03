@@ -8,10 +8,12 @@ import styles from './Sidebar.module.css'
 export type SidebarTab = 'CHAT' | 'USERS' | 'SETTINGS' | 'NOTHING'
 export function Sidebar({ tab, fullscreen, idle }: { tab: SidebarTab; fullscreen: boolean; idle: boolean }) {
   const store = useRoomStore()
-  if (tab === 'NOTHING' || (tab === 'SETTINGS' && !store.rights.value.admin)) return null
+  const hidden = tab === 'NOTHING' || (tab === 'SETTINGS' && !store.rights.value.admin)
   const transparent = fullscreen && preferences.value.transparentChat
-  return <aside aria-label={`${tab.toLowerCase()} sidebar`}
+  return <aside hidden={hidden} aria-label={`${tab.toLowerCase()} sidebar`}
     class={`${styles.sidebar} ${transparent ? styles.transparent : ''} ${fullscreen && idle && tab === 'CHAT' ? styles.hidden : ''} ${transparent && store.isHost.value ? styles.host : ''}`}>
-    {tab === 'CHAT' ? <ChatPanel /> : tab === 'USERS' ? <UserSidebar /> : <RoomAdminPanel />}
+    <ChatPanel active={tab === 'CHAT'} />
+    {tab === 'USERS' && <UserSidebar />}
+    {tab === 'SETTINGS' && !hidden && <RoomAdminPanel />}
   </aside>
 }

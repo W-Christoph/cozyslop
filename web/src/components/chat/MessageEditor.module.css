@@ -1,0 +1,5 @@
+.editor { padding: 0.15em 1em 0.5em; font-size: 0.9em; }
+.wrapper { background: var(--color-accent) var(--noise); border-radius: 3px; padding: 10px; }
+.wrapper textarea { display: block; border: 0; padding: 0; line-height: 18px; width: 100%; color: var(--color-text); background: transparent; resize: none; font: 15px/18px var(--font-sans); }
+.hint { font-size: 0.7em; margin: 0.5em 0 0.6em 0.5em; }
+.hint button, .hint button:hover { color: var(--color-orange); padding: 0; background: transparent; }

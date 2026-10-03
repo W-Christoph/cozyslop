@@ -1,0 +1,244 @@
+// Optional browser smoke test. Use an existing Playwright installation via
+// PLAYWRIGHT_MODULE and a running Vite server via CHAT_TEST_URL.
+const { chromium, expect } = require(process.env.PLAYWRIGHT_MODULE || 'playwright/test')
+const assert = require('node:assert/strict')
+const base = process.env.CHAT_TEST_URL || 'http://127.0.0.1:5174'
+const self = { key: 'u:1', username: 'alice', nickname: 'A lice', nameColor: '#f90', avatarUrl: '', anonymous: false, admin: true, active: true, muted: false, joinedAt: 1, lastSeen: 1000 }
+const bob = { ...self, key: 'u:2', username: 'bob', nickname: 'Bob', nameColor: '#4aa', admin: false }
+const anon = { ...bob, key: 'a:abcd1234', username: '', nickname: 'Guest', anonymous: true }
+const settings = { name: 'Chat test', access: 'public', hidden: false, remoteOwnership: false, centerRemote: false, defaultRemote: true, defaultImage: true, defaultUpload: false, screen: '', quality: 'medium' }
+const msg = (id, author = bob, body = `message ${id}`, type = 'text') => ({ id, author: author.key, nickname: author.nickname, nameColor: author.nameColor, anonymous: author.anonymous, type, body, edited: false, time: Date.now() })
+const checks = [], errors = []
+
+;(async () => {
+  const browser = await chromium.launch({ headless: true })
+  try {
+    async function setup(user = self) {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+      const page = await context.newPage()
+      let room, requests = [], uploads = [], failUpload = false
+      page.on('pageerror', e => errors.push(e.message))
+      page.on('dialog', d => { errors.push(`Native ${d.type()} dialog`); d.dismiss() })
+      await page.addInitScript(() => {
+        localStorage.setItem('preferences', JSON.stringify({ muteChatNotification: true, manualLoadMedia: true, showLeaveJoinMsg: true }))
+        window.__sounds = []
+        window.Audio = class { constructor(url) { this.url = url } play() { window.__sounds.push(this.url); return Promise.resolve() } }
+        window.__createdUrls = []; window.__revokedUrls = []
+        const create = URL.createObjectURL, revoke = URL.revokeObjectURL
+        URL.createObjectURL = function (blob) { const url = create.call(this, blob); window.__createdUrls.push(url); return url }
+        URL.revokeObjectURL = function (url) { window.__revokedUrls.push(url); revoke.call(this, url) }
+        window.RTCPeerConnection = class {
+          connectionState = 'new'
+          async setRemoteDescription() {}
+          async createAnswer() { return { type: 'answer', sdp: 'test' } }
+          async addIceCandidate() {}
+          async setLocalDescription() {
+            this.connectionState = 'connected'; this.onconnectionstatechange?.()
+            this.ondatachannel?.({ channel: { readyState: 'open', send() {} } })
+            const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 360
+            const draw = () => { const ctx = canvas.getContext('2d'); ctx.fillStyle = '#235'; ctx.fillRect(0, 0, 640, 360); ctx.fillStyle = 'white'; ctx.font = '32px Arial'; ctx.fillText('Chat screenshot', 180, 180) }
+            draw(); const stream = canvas.captureStream(5); this.ontrack?.({ streams: [stream] }); this.timer = setInterval(draw, 200)
+          }
+          close() { clearInterval(this.timer) }
+        }
+      })
+      await page.route('**/api/**', async route => {
+        const path = new URL(route.request().url()).pathname
+        if (path.endsWith('/media')) {
+          uploads.push({ body: route.request().postDataBuffer(), headers: route.request().headers() })
+          return route.fulfill(failUpload ? { status: 413, contentType: 'application/json', body: JSON.stringify({ error: 'File is too large.' }) } : { status: 204 })
+        }
+        const data = path === '/api/me' ? { user: user.anonymous ? null : { ...user, verified: true } } : path === '/api/settings' ? { message: '', registration: 'open' } : {}
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) })
+      })
+      const welcome = (history = []) => room.send(JSON.stringify({ type: 'welcome', clientId: 'tab', self: user, rights: { admin: user.admin, remote: true, image: true, upload: false, trusted: false }, settings, users: [user, bob, ...(user.anonymous ? [] : [anon])], history, remote: null }))
+      await page.routeWebSocket('**/api/rooms/**', ws => {
+        room = ws
+        setTimeout(() => { welcome([msg(1, bob, '@Alice history'), msg(2, bob, 'Second history'), msg(3, user, 'My last text')]); ws.send(JSON.stringify({ type: 'neko', token: 'test', path: '/neko/default' })) }, 20)
+        ws.onMessage(data => {
+          const item = JSON.parse(data); requests.push(item)
+          if (item.type === 'chat_edit') ws.send(JSON.stringify({ type: 'chat_edited', id: item.id, body: item.body }))
+          if (item.type === 'chat_delete') ws.send(JSON.stringify({ type: 'chat_deleted', id: item.id }))
+        })
+      })
+      await page.routeWebSocket('**/neko/**', ws => ws.onMessage(data => {
+        if (JSON.parse(data).event !== 'signal/request') return
+        ws.send(JSON.stringify({ event: 'system/init', payload: { session_id: 'tab', sessions: { tab: { profile: { can_host: true } } }, screen_size: { width: 640, height: 360, rate: 30 }, control_host: { has_host: false } } }))
+        ws.send(JSON.stringify({ event: 'signal/provide', payload: { sdp: 'test' } }))
+      }))
+      await page.goto(`${base}/room/default`)
+      await expect(page.getByText('Live', { exact: true })).toBeVisible()
+      await expect(page.getByLabel('Chat message', { exact: true })).toBeVisible()
+      return { page, context, requests, uploads, send: data => room.send(JSON.stringify(data)), welcome, fail: value => { failUpload = value } }
+    }
+    const h = await setup(), p = h.page, input = p.getByLabel('Chat message', { exact: true })
+    assert.equal(await p.evaluate(() => window.__sounds.length), 0)
+    await expect(p.locator('[data-chat-bubble]')).toHaveCount(2)
+    await p.locator('[data-chat-bubble]').first().locator('[title="bob"]').hover()
+    await expect(p.locator('[data-chat-bubble]').first()).toContainText('bob')
+    h.send({ type: 'chat', message: { ...msg(4, bob, 'Renamed bubble'), nickname: 'Robert', nameColor: '#fff' } })
+    h.send({ type: 'chat', message: { ...msg(5, bob, 'Same author'), nickname: 'New Bob', nameColor: '#fff' } })
+    await expect(p.locator('[data-chat-bubble]')).toHaveCount(3)
+    await expect(p.locator('[data-chat-bubble]').last()).toContainText('Robert')
+    checks.push('history silent, grouping and first nickname snapshot, account hover')
+
+    await input.fill('First\nSecond'); await input.press('Shift+Enter'); await input.type('Third'); await input.press('Enter')
+    await expect.poll(() => h.requests.filter(x => x.type === 'chat_send').at(-1)?.body).toBe('First\nSecond\nThird')
+    await expect(input).toHaveValue('')
+    assert(h.requests.some(x => x.type === 'typing' && x.typing))
+    assert.equal(h.requests.filter(x => x.type === 'typing').at(-1).typing, false)
+    await input.press('ArrowUp')
+    await expect(p.getByLabel('Edit message')).toHaveValue('My last text')
+    await p.getByLabel('Edit message').fill('Edited\ntext'); await p.getByLabel('Edit message').press('Enter')
+    await expect(p.getByText('Edited', { exact: true })).toBeVisible()
+    await expect(p.getByText('(edited)', { exact: true })).toBeVisible()
+    await input.press('ArrowUp'); await p.getByLabel('Edit message').press('Escape'); await expect(input).toBeFocused()
+    await p.locator('[data-chat-bubble]').first().hover(); await p.getByRole('button', { name: 'Delete message', exact: true }).first().click()
+    await expect(p.getByText('@Alice history', { exact: true })).toHaveCount(0)
+    checks.push('send/Shift+Enter, typing stop, ArrowUp edit, Enter save, Escape focus, admin delete')
+
+    h.send({ type: 'typing', key: bob.key, typing: true }); await expect(p.getByRole('status').filter({ hasText: 'Bob is typing' })).toBeVisible()
+    h.send({ type: 'typing', key: anon.key, typing: true }); await expect(p.getByRole('status').filter({ hasText: 'Bob and Guest are typing' })).toBeVisible()
+    const third = { ...bob, key: 'u:3', nickname: 'Charlie', username: 'charlie' }
+    h.send({ type: 'user_joined', user: third }); h.send({ type: 'typing', key: third.key, typing: true })
+    await expect(p.getByRole('status').filter({ hasText: 'Several people are typing' })).toBeVisible()
+    await expect(p.getByText('Charlie joined', { exact: true })).toBeVisible()
+    h.send({ type: 'user_left', key: third.key }); await expect(p.getByText('Charlie left', { exact: true })).toBeVisible()
+    h.send({ type: 'user_left', key: anon.key }); await expect(p.getByText('Guest left', { exact: true })).toHaveCount(0)
+    checks.push('one/two/several typing names; account-only join/leave')
+
+    h.send({ type: 'chat', message: msg(6, bob, '@Alice @ALICE https://example.org/@Alice\nNext line') })
+    await expect.poll(() => p.evaluate(() => window.__sounds.length)).toBe(2)
+    const link = p.getByRole('link', { name: 'https://example.org/@Alice', exact: true })
+    await expect(link).toHaveAttribute('rel', 'noopener noreferrer'); await expect(link).toHaveAttribute('target', '_blank')
+    h.send({ type: 'chat_edited', id: 6, body: '@Alice @Alice @Alice' })
+    await p.waitForTimeout(150); assert.equal(await p.evaluate(() => window.__sounds.length), 2)
+    h.send({ type: 'chat', message: msg(7, self, '@Alice') }); await p.waitForTimeout(100); assert.equal(await p.evaluate(() => window.__sounds.length), 2)
+    await p.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, value: true }))
+    h.send({ type: 'chat', message: msg(8, bob) }); await p.waitForTimeout(100); assert.equal(await p.evaluate(() => window.__sounds.length), 2)
+    await p.evaluate(async () => { const state = await import('/src/app/state.ts'); state.updatePreferences({ muteChatNotification: false }) })
+    h.send({ type: 'chat', message: msg(9, bob) }); await expect.poll(() => p.evaluate(() => window.__sounds.length)).toBe(3)
+    await p.getByRole('button', { name: 'Users sidebar', exact: true }).click()
+    h.send({ type: 'chat', message: msg(10, bob, '@Alice') }); await expect.poll(() => p.evaluate(() => window.__sounds.length)).toBe(4)
+    await p.getByRole('button', { name: 'Chat sidebar', exact: true }).click()
+    h.welcome([msg(1), msg(50, bob, '@Alice history reconnect')]); await p.waitForTimeout(150); assert.equal(await p.evaluate(() => window.__sounds.length), 4)
+    await expect(p.getByText('Charlie joined', { exact: true })).toHaveCount(0)
+    await p.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, value: false }))
+    checks.push('ping sounds once per occurrence independent of mute, no edits/own/history sounds, hidden notification, sidebar persistence')
+
+    for (let id = 51; id < 100; id++) h.send({ type: 'chat', message: msg(id, bob, `Long chat line ${id}\nAnother line`) })
+    const list = p.getByRole('region', { name: 'Chat messages' })
+    await expect.poll(() => list.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThan(2)
+    await list.hover(); await p.mouse.wheel(0, -500)
+    await expect(p.getByRole('button', { name: 'Jump to bottom', exact: true })).toBeVisible()
+    const position = await list.evaluate(el => el.scrollTop)
+    h.send({ type: 'chat', message: msg(100) })
+    await expect(p.getByRole('button', { name: '1 new messages. Jump to bottom' })).toBeVisible()
+    assert(Math.abs(await list.evaluate(el => el.scrollTop) - position) < 5)
+    await p.getByRole('button', { name: '1 new messages. Jump to bottom' }).click()
+    await expect.poll(() => list.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThan(2)
+    checks.push('autoscroll, >30px history, unread badge and jump')
+
+    const png = await p.evaluate(() => { const canvas = document.createElement('canvas'); canvas.width = 16; canvas.height = 16; return canvas.toDataURL().split(',')[1] })
+    await p.route('**/chat-test.png', route => route.fulfill({ contentType: 'image/png', body: Buffer.from(png, 'base64') }))
+    h.send({ type: 'chat', message: { ...msg(101, bob, '', 'image'), mediaUrl: '/chat-test.png' } })
+    await p.getByRole('button', { name: 'Click to load image', exact: true }).click()
+    await p.getByRole('button', { name: 'Open image', exact: true }).click()
+    await expect(p.getByRole('dialog')).toBeVisible(); await expect(p.getByRole('link', { name: 'Open in new tab' })).toHaveAttribute('rel', 'noopener noreferrer')
+    await p.keyboard.press('Escape'); await expect(p.getByRole('dialog')).toHaveCount(0)
+    await p.getByLabel('Choose chat media').setInputFiles({ name: 'test.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })
+    await expect(p.getByRole('dialog')).toContainText('Upload this file?')
+    await p.getByRole('button', { name: 'Upload', exact: true }).click(); await expect(p.getByRole('dialog')).toHaveCount(0)
+    assert.equal(h.uploads.length, 1); assert(h.uploads[0].body.toString().includes('name="file"; filename="test.png"'))
+    h.fail(true)
+    await p.getByLabel('Choose chat media').setInputFiles({ name: 'test.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })
+    await p.getByRole('button', { name: 'Upload', exact: true }).click(); await expect(p.getByRole('dialog')).toContainText('File is too large.')
+    await p.getByRole('button', { name: 'Cancel', exact: true }).click(); h.fail(false)
+    await expect(p.getByText('File is too large.', { exact: true })).toBeVisible()
+    await p.getByRole('button', { name: 'Screenshot video', exact: true }).click(); await expect(p.getByRole('dialog')).toContainText('Crop screenshot')
+    await expect.poll(() => p.getByRole('dialog').locator('img').first().evaluate(el => el.naturalWidth)).toBe(640)
+    await p.getByRole('button', { name: 'Crop', exact: true }).click(); await expect(p.getByRole('dialog').last()).toContainText('Upload this file?')
+    await p.getByRole('dialog').last().locator('..').click({ position: { x: 5, y: 5 } })
+    await expect(p.getByRole('dialog')).toContainText('Crop screenshot')
+    await p.getByRole('button', { name: 'Crop', exact: true }).click()
+    await p.getByRole('dialog').last().getByRole('button', { name: 'Upload', exact: true }).click()
+    await expect(p.getByRole('dialog')).toHaveCount(0)
+    assert(h.uploads.at(-1).body.toString().includes('filename="screenshot.png"'))
+    assert(h.uploads.at(-1).body.toString().includes('Content-Type: image/png'))
+    await expect.poll(() => p.evaluate(() => window.__createdUrls.every(url => window.__revokedUrls.includes(url)))).toBe(true)
+    checks.push('manual media load/view/Escape, multipart file upload/204, JSON error, screenshot crop/confirm/backdrop, URL revocation')
+
+    await input.fill('caption')
+    await expect(p.getByRole('button', { name: 'Upload image or video', exact: true })).toBeHidden()
+    await input.evaluate((el, data) => {
+      const transfer = new DataTransfer()
+      transfer.items.add(new File([Uint8Array.from(atob(data), c => c.charCodeAt(0))], 'clipboard.png', { type: 'image/png' }))
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }))
+    }, png)
+    await expect(p.getByRole('dialog')).toContainText('Upload this file?')
+    await p.keyboard.press('Escape'); await expect(p.getByRole('dialog')).toHaveCount(0)
+    await expect(input).toHaveValue('caption'); await input.fill('')
+    const webm = await p.evaluate(() => new Promise(resolve => {
+      const canvas = document.createElement('canvas'); canvas.width = 32; canvas.height = 32
+      const stream = canvas.captureStream(5), chunks = [], recorder = new MediaRecorder(stream, { mimeType: 'video/webm' })
+      recorder.ondataavailable = e => chunks.push(e.data)
+      recorder.onstop = async () => { const bytes = await new Blob(chunks).arrayBuffer(); stream.getTracks().forEach(t => t.stop()); resolve(Array.from(new Uint8Array(bytes))) }
+      recorder.start(); canvas.getContext('2d').fillRect(0, 0, 32, 32); setTimeout(() => recorder.stop(), 300)
+    }))
+    await p.route('**/chat-test.webm', route => route.fulfill({ contentType: 'video/webm', body: Buffer.from(webm) }))
+    h.send({ type: 'chat', message: { ...msg(102, bob, '', 'video'), mediaUrl: '/chat-test.webm' } })
+    await p.getByRole('button', { name: 'Click to load video', exact: true }).click()
+    const preview = p.getByRole('button', { name: 'Open video', exact: true }).locator('video')
+    assert.deepEqual(await preview.evaluate(el => [el.autoplay, el.loop, el.muted, el.controls]), [true, true, true, false])
+    await p.getByRole('button', { name: 'Open video', exact: true }).click()
+    assert.deepEqual(await p.getByRole('dialog').locator('video').evaluate(el => [el.controls, el.muted]), [true, false])
+    await p.keyboard.press('Escape')
+    h.send({ type: 'chat', message: msg(-1, bob, 'Private whisper', 'whisper') })
+    await expect(p.getByText('Private whisper', { exact: true })).toBeVisible()
+    await expect(p.getByText('Private whisper', { exact: true }).locator('..').getByRole('button')).toHaveCount(0)
+    h.send({ type: 'chat', message: msg(103, anon, 'Anonymous message') })
+    assert.equal(await p.getByText('Anonymous message', { exact: true }).locator('xpath=ancestor::*[@data-chat-bubble]').locator('[title]').getAttribute('title'), 'Anon(abcd)')
+    checks.push('clipboard image confirmation preserves draft, empty-only controls, inline muted looping autoplay, modal controls/sound, whisper and anon hover')
+
+    for (const theme of ['default', 'legacy', 'light']) {
+      await p.evaluate(async theme => { const state = await import('/src/app/state.ts'); state.updatePreferences({ theme }) }, theme)
+      await expect(p.locator('html')).toHaveAttribute('data-theme', theme)
+    }
+    await p.evaluate(async () => { const state = await import('/src/app/state.ts'); state.updatePreferences({ theme: 'default' }) })
+    if (process.env.CHAT_TEST_SCREENSHOT) await p.screenshot({ path: process.env.CHAT_TEST_SCREENSHOT })
+    await p.getByRole('button', { name: 'Fullscreen', exact: true }).click()
+    await expect.poll(() => p.evaluate(() => !!document.fullscreenElement)).toBe(true)
+    await expect.poll(() => p.locator('[data-chat-bubble]').last().evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0.45)')
+    await p.getByRole('button', { name: 'Open image', exact: true }).click()
+    assert(await p.getByRole('dialog').evaluate(el => document.fullscreenElement.contains(el)))
+    await p.keyboard.press('Escape')
+    if (await p.evaluate(() => !!document.fullscreenElement)) await p.getByRole('button', { name: 'Exit fullscreen', exact: true }).click()
+    await p.setViewportSize({ width: 390, height: 844 })
+    await expect(input).toBeVisible(); assert(await input.evaluate(el => el.getBoundingClientRect().width) > 200)
+    await p.setViewportSize({ width: 1280, height: 800 })
+    checks.push('all themes, fullscreen transparent bubble and contained modal, mobile input layout')
+
+    await input.fill('six\nlines\nare\nnot\nallowed\nto grow')
+    assert(await input.evaluate(el => el.clientHeight) <= 90)
+    await input.fill('')
+    h.send({ type: 'error', message: 'You are sending messages too fast.' }); await expect(p.getByText('You are sending messages too fast.', { exact: true })).toBeVisible()
+    await expect(p.getByText('You are sending messages too fast.', { exact: true })).toHaveCount(0, { timeout: 7000 })
+    h.send({ type: 'rights', rights: { admin: false, remote: false, image: false, upload: false, trusted: false } })
+    await expect(p.getByRole('button', { name: 'Upload image or video', exact: true })).toHaveCount(0)
+    await expect(p.getByRole('button', { name: 'Delete message', exact: true })).toHaveCount(0)
+    h.send({ type: 'chat', message: msg(104, self, 'Own deletable text') })
+    await p.getByText('Own deletable text', { exact: true }).hover()
+    await expect(p.getByRole('button', { name: 'Delete message', exact: true })).toHaveCount(1)
+    await expect(p.getByRole('button', { name: 'Edit message', exact: true })).toHaveCount(1)
+    checks.push('input five-row cap, short-lived server error, image/admin rights update')
+
+    const a = await setup(anon)
+    assert.equal(await a.page.getByLabel('Chat message', { exact: true }).getAttribute('maxlength'), '250')
+    await a.page.getByLabel('Chat message', { exact: true }).fill('x'.repeat(300))
+    assert.equal((await a.page.getByLabel('Chat message', { exact: true }).inputValue()).length, 250)
+    checks.push('anonymous textarea enforced 250-char limit')
+    assert.deepEqual(errors, [])
+    console.log(JSON.stringify({ checks, pageErrors: errors }, null, 2))
+    await h.context.close(); await a.context.close()
+  } finally { await browser.close() }
+})().catch(e => { console.error(e); process.exitCode = 1 })

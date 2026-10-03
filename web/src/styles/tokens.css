@@ -27,6 +27,9 @@
   --color-away: #e6c714;
   --color-orange: #f90;
   --color-orange-ping: #df9e3e;
+  --color-ping-other: rgb(74, 149, 173);
+  --color-chat-overlay-bg: rgba(0, 0, 0, 0.45);
+  --color-chat-overlay-border: rgba(255, 255, 255, 0.45);
 }
 
 :root,

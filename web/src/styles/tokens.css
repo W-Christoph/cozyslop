@@ -1,0 +1,41 @@
+/* Design tokens. Components use only these variables, never raw colours.
+   Values carried over from the old styles.css themes. */
+
+:root,
+[data-theme='default'] {
+  --color-bg: #181828;
+  --color-menu: #123;
+  --color-accent: #235;
+  --color-button: #17c;
+  --color-button-accent: #048;
+  --color-scrollbar: #346;
+  --color-scroll-thumb: #235;
+  --color-high-contrast: #5566aa;
+  --color-select: #337ab7;
+  --color-orange: #f90;
+
+  --color-text: #fff;
+  --color-text-muted: rgba(255, 255, 255, 0.7);
+  --color-text-misc: lightgray;
+}
+
+[data-theme='legacy'] {
+  --color-bg: #000;
+  --color-menu: #171b22;
+  --color-accent: #22242f;
+  --color-button: #252733;
+  --color-button-accent: #0e0f14;
+  --color-scrollbar: #353e4f;
+  --color-scroll-thumb: #1f2530;
+  --color-high-contrast: #a6afbf;
+  --color-select: #686d78;
+}
+
+:root {
+  --font-sans: Arial, sans-serif;
+  --radius: 4px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+}

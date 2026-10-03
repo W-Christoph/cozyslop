@@ -1,0 +1,26 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-menu);
+}
+
+.status {
+  color: var(--color-text-muted);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.screen {
+  flex: 1;
+  min-height: 0;
+}

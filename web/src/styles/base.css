@@ -1,0 +1,38 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text);
+  scrollbar-color: var(--color-scrollbar) var(--color-scroll-thumb);
+}
+
+button {
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-button);
+  border: none;
+  border-radius: var(--radius);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--color-button-accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/coder/websocket"
@@ -64,15 +63,7 @@ func (c *Client) watchHostOnce(ctx context.Context, onConnect func(Init), onHost
 		return err
 	}
 
-	u := *c.base
-	u.Scheme = map[string]string{"https": "wss"}[u.Scheme]
-	if u.Scheme == "" {
-		u.Scheme = "ws"
-	}
-	u.Path = u.JoinPath("/api/ws").Path
-	u.RawQuery = url.Values{"token": {token}}.Encode()
-
-	conn, _, err := websocket.Dial(ctx, u.String(), nil)
+	conn, _, err := websocket.Dial(ctx, c.SocketURL(token), nil)
 	if err != nil {
 		return err
 	}

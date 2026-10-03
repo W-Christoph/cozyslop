@@ -147,12 +147,13 @@ successful room join, using the WebSocket `access` query parameter.
 | `GET /api/rooms` | Anyone | No body | 200 array of `{"name":"default","access":"public","userCount":0,"open":true}` ordered by name; `open` means caller may join; hidden rooms appear only if caller may join | 500 on storage failure |
 | `GET /api/rooms/{room}/ws?access=<optional temporary invite>` | Anyone admitted by room access rules and bans | WebSocket upgrade with account/anonymous cookies; optional room-bound temporary invite | 101; JSON room protocol, starting with `welcome`; admission denial sends `kicked` and closes with code 4000 | 404 unknown room (plain HTTP response); cross-origin upgrade rejected; banned/account/verified/invite admission denial |
 | `POST /api/rooms/{room}/media` | Identity currently joined through the room WebSocket with image rights | Multipart form field `file`; PNG, JPEG, GIF, WebP, MP4 or WebM | 204; stores the original file and broadcasts an image/video chat message | 404 `"Unknown room."`; 403 `"Join the room first."` / `"You are not allowed to post images."`; 415 `"Unsupported file type."`; 413 `"File is too large."`; 400 malformed multipart or missing/duplicate field |
-| `/neko/{room}/api/ws` | Holder of the per-tab neko token issued by the room WebSocket | Proxied neko WebSocket handshake, including token query | Upstream WebSocket response | 404 unknown room or disallowed path; upstream auth errors; 502 if upstream unavailable |
-| `POST /neko/{room}/api/filetransfer` | Holder of a per-tab neko token with upload rights | Query and body follow neko's file-transfer plugin (an upload); other methods and subpaths are not proxied, so the desktop's Downloads cannot be fetched | Upstream response | Upstream auth/permission errors; 404 unknown room or disallowed path; 502 if upstream unavailable |
+| `GET /neko/{room}/api/ws?token=<neko token>` | A tab currently in the room, with the neko token the room WebSocket issued to it | WebSocket upgrade; messages follow neko's protocol, except that requests for a capture pipeline (`signal/request`, `signal/video`) always get the room's stream | neko's messages | 404 unknown room or disallowed path; 403 for a token the server did not issue or whose tab has left; 502 if neko is unavailable; closed when the tab leaves or is kicked |
+| `POST /neko/{room}/api/filetransfer` | Holder of a per-tab neko token with upload rights | Query and body follow neko's file-transfer plugin (an upload); other methods and subpaths are not proxied, so the desktop's Downloads cannot be fetched | Upstream response | Upstream auth/permission errors; 404 unknown room or disallowed path; 403 for a token the server did not issue or whose tab has left; 502 if upstream unavailable |
 
-The proxy accepts these paths and their subpaths, preserves query strings, and
-removes `Origin` before forwarding. Other neko APIs are inaccessible. No
-separate CozyCast JSON schema applies to proxied requests or responses.
+The proxy accepts exactly these two requests and removes `Origin` before
+forwarding. Other neko APIs are inaccessible, and so are neko members the
+server did not create: their tokens are refused. No separate CozyCast JSON
+schema applies to proxied requests or responses.
 
 The room WebSocket carries presence, chat, typing, activity, mute status,
 rights, room settings, remote ownership, moderation and per-tab neko tokens.

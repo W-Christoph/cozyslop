@@ -63,7 +63,10 @@ embedded SQL files applied in order at startup (`server/internal/store/migration
   (`worker/entrypoint.sh`, configurable via
   `STREAM_BITRATES`/`STREAM_SCALES`/`X264_PRESETS`); neko only runs those
   being watched, and the server learns the list from neko when it connects.
-  Everyone in a room watches the same pipeline, so a room encodes once. Rooms themselves come from configuration (`COZYCAST_ROOMS`); a row
+  Everyone in a room watches the same pipeline, so a room encodes once.
+  The server enforces this: it carries each tab's neko WebSocket itself,
+  rewrites requests for a pipeline to the room's stream, and moves
+  connected viewers when the setting changes. Rooms themselves come from configuration (`COZYCAST_ROOMS`); a row
   holds their settings.
 - `room_permissions`: (room, user_id) unique; remote, image, upload, trusted,
   invited, invite_name, banned, banned_until.

@@ -41,6 +41,7 @@ type Server struct {
 	members           map[string]member
 	tokens            map[string]string
 	observers         map[*observer]bool
+	received          map[string][]string // by member id: what its sockets sent
 	nextToken         uint64
 	calls             []Call
 	changed           chan struct{}
@@ -48,7 +49,7 @@ type Server struct {
 
 func New(t testing.TB, apiToken string) *Server {
 	t.Helper()
-	s := &Server{apiToken: apiToken, healthy: true, members: make(map[string]member), tokens: make(map[string]string), observers: make(map[*observer]bool), changed: make(chan struct{})}
+	s := &Server{apiToken: apiToken, healthy: true, members: make(map[string]member), tokens: make(map[string]string), observers: make(map[*observer]bool), received: make(map[string][]string), changed: make(chan struct{})}
 	s.http = httptest.NewServer(http.HandlerFunc(s.serveHTTP))
 	t.Cleanup(func() { s.Restart(); s.http.Close() })
 	return s
@@ -112,6 +113,49 @@ func (s *Server) WaitObservers(ctx context.Context, n int) error {
 		}
 	}
 }
+
+// WaitReceived waits until the member's sockets have sent n messages and
+// returns them all.
+func (s *Server) WaitReceived(ctx context.Context, id string, n int) ([]string, error) {
+	for {
+		s.mu.Lock()
+		got, changed := slices.Clone(s.received[id]), s.changed
+		s.mu.Unlock()
+		if len(got) >= n {
+			return got, nil
+		}
+		select {
+		case <-ctx.Done():
+			return got, ctx.Err()
+		case <-changed:
+		}
+	}
+}
+
+// serveMember is a member's socket: it greets with system/init and records
+// what the member sends.
+func (s *Server) serveMember(w http.ResponseWriter, r *http.Request, id string) {
+	conn, err := websocket.Accept(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer conn.CloseNow()
+	init, _ := json.Marshal(map[string]any{"event": "system/init", "payload": map[string]any{"session_id": id}})
+	if conn.Write(r.Context(), websocket.MessageText, init) != nil {
+		return
+	}
+	for {
+		_, data, err := conn.Read(r.Context())
+		if err != nil {
+			return
+		}
+		s.mu.Lock()
+		s.received[id] = append(s.received[id], string(data))
+		s.signalLocked()
+		s.mu.Unlock()
+	}
+}
+
 func hostPayload(id string) any { return map[string]any{"has_host": id != "", "host_id": id} }
 func (s *Server) setHostLocked(id string) {
 	s.host = id
@@ -273,6 +317,11 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	s.calls = append(s.calls, Call{Method: r.Method, Path: r.URL.Path})
 	id, valid := s.tokens[r.URL.Query().Get("token")]
 	m, exists := s.members[id]
+	if valid && exists && id != neko.ObserverID && m.profile.CanConnect {
+		s.mu.Unlock()
+		s.serveMember(w, r, id)
+		return
+	}
 	if !valid || !exists || id != neko.ObserverID || !m.profile.IsAdmin {
 		s.mu.Unlock()
 		http.Error(w, "observer token required", http.StatusUnauthorized)

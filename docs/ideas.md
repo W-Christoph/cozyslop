@@ -10,10 +10,14 @@ CozyCast does not use; none of them needs a patched neko.
   (`NEKO_WEBRTC_ESTIMATOR_ENABLED` and friends; viewers opt in with
   `auto: true` in their `signal/video` request).
   Today the room admin picks one stream for everyone. Viewers on weak
-  connections would get a smaller stream instead of stuttering.
+  connections would get a smaller stream instead of stuttering. Every
+  extra pipeline in use is an extra encoder, and the server's neko proxy
+  pins all viewers to the room's stream (`neko.PinStream`); this would be a
+  room setting that relaxes it.
 - **Personal quality choice.** Let each viewer pick a lower stream than the
-  room default for themselves (`signal/video` per session). Small UI change;
-  the pipelines already exist.
+  room default for themselves (`signal/video` per session). The pipelines
+  already exist, but each one in use is an extra encoder: it needs a room
+  setting that lets the proxy pass the viewer's choice (see above).
 - **JPEG screencast fallback** (`NEKO_CAPTURE_SCREENCAST_*`). A slow image
   feed over HTTP for viewers whose WebRTC fails entirely (strict firewalls),
   or for thumbnails of a room in a room list.

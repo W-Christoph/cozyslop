@@ -51,6 +51,7 @@ type Room struct {
 	settings store.RoomSettings
 	members  map[string]*member // by identity key
 	clients  map[string]*Client // by client id
+	tokens   map[string]*Client // by the neko session token issued to the tab
 	hostID   string             // neko session id (= client id) holding the remote
 
 	lastRestart time.Time // for the trusted-user cooldown
@@ -83,6 +84,9 @@ type Client struct {
 	muted  bool
 	typing time.Time // last typing broadcast, for throttling
 
+	nekoToken string                 // the tab's current neko session token
+	nekoConns map[*NekoConn]struct{} // its proxied connections to neko
+
 	nekoMu       sync.Mutex // serializes neko member creation, updates and deletion
 	nekoPassword string
 	gone         bool // left or kicked: no more neko members for this tab
@@ -102,6 +106,7 @@ func newRoom(h *Hub, name string, nc *neko.Client) *Room {
 		settings: store.RoomSettings{Name: name, Access: "public"},
 		members:  make(map[string]*member),
 		clients:  make(map[string]*Client),
+		tokens:   make(map[string]*Client),
 	}
 }
 
@@ -134,10 +139,12 @@ func (r *Room) run(ctx context.Context) {
 	r.log.Info("neko ready")
 	r.neko.WatchHost(ctx, func(init neko.Init) {
 		r.mu.Lock()
+		stream := r.streamLocked()
 		r.streams = init.Videos
 		// Tabs that joined before neko reported its streams may have been
 		// told about a stream it does not offer.
 		r.broadcastLocked(settingsMsg{Type: "room_settings", Settings: r.publicSettingsLocked()}, nil)
+		r.pinStreamLocked(stream)
 		r.mu.Unlock()
 		r.reapplyNekoSettings(ctx)
 	}, r.setHost)
@@ -320,6 +327,12 @@ func (r *Room) removeClientLocked(c *Client) {
 		return
 	}
 	delete(r.clients, c.ID)
+	delete(r.tokens, c.nekoToken)
+	c.nekoToken = ""
+	for conn := range c.nekoConns {
+		conn.Close()
+	}
+	c.nekoConns = nil
 	m := c.m
 	before := r.userLocked(m)
 	delete(m.clients, c.ID)
@@ -418,8 +431,10 @@ func (r *Room) reloadSettings(ctx context.Context) {
 	r.mu.Lock()
 	ownershipChanged := s.RemoteOwnership != r.settings.RemoteOwnership
 	screenChanged := s.Screen != r.settings.Screen
+	stream := r.streamLocked()
 	r.settings = s
 	r.broadcastLocked(settingsMsg{Type: "room_settings", Settings: r.publicSettingsLocked()}, nil)
+	r.pinStreamLocked(stream)
 	var resync []*Client
 	now := time.Now().Unix()
 	for _, m := range r.members {
@@ -533,7 +548,7 @@ func (r *Room) NekoToken(ctx context.Context, c *Client) (string, error) {
 	if c.nekoPassword != "" {
 		token, err := r.neko.Login(ctx, c.ID, c.nekoPassword)
 		if err == nil {
-			return token, nil
+			return r.issueToken(c, token)
 		}
 		r.log.Info("neko login failed, recreating member", "client", c.ID, "err", err)
 		_ = r.neko.DeleteMember(ctx, c.ID)
@@ -544,7 +559,95 @@ func (r *Room) NekoToken(ctx context.Context, c *Client) (string, error) {
 		return "", fmt.Errorf("create neko member: %w", err)
 	}
 	c.nekoPassword = password
-	return r.neko.Login(ctx, c.ID, password)
+	token, err := r.neko.Login(ctx, c.ID, password)
+	if err != nil {
+		return "", err
+	}
+	return r.issueToken(c, token)
+}
+
+// issueToken makes token the one the tab reaches neko with (see AttachNeko).
+func (r *Room) issueToken(c *Client, token string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, present := r.clients[c.ID]; !present {
+		return "", ErrNotPresent // kicked meanwhile; Leave deletes the member
+	}
+	delete(r.tokens, c.nekoToken)
+	c.nekoToken = token
+	r.tokens[token] = c
+	return token, nil
+}
+
+// NekoConn is one connection of a tab to neko's WebSocket, as the HTTP layer
+// proxies it. Send passes a message on to neko as if the tab had sent it;
+// Close ends the connection. Neither may block.
+type NekoConn struct {
+	Send  func(msg []byte)
+	Close func()
+}
+
+// NekoTokenIssued reports whether the hub issued token to a tab that is
+// still in the room. Only such tokens are let through to neko: neko accepts
+// the token of any of its members, also of members that someone with access
+// to the room's desktop created behind the hub's back.
+func (r *Room) NekoTokenIssued(token string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.tokens[token] != nil
+}
+
+// AttachNeko registers a proxied neko connection opened with token, so the
+// hub can keep it on the room's stream and close it when the tab leaves.
+// ok is false if NekoTokenIssued is.
+func (r *Room) AttachNeko(token string, conn *NekoConn) (detach func(), ok bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c := r.tokens[token]
+	if c == nil {
+		return nil, false
+	}
+	if c.nekoConns == nil {
+		c.nekoConns = make(map[*NekoConn]struct{})
+	}
+	c.nekoConns[conn] = struct{}{}
+	return func() {
+		r.mu.Lock()
+		delete(c.nekoConns, conn)
+		r.mu.Unlock()
+	}, true
+}
+
+// Stream is the capture pipeline everyone in the room watches: the room's
+// setting, or neko's default if neko does not offer that. It is "" for
+// neko's default while neko has not reported its pipelines yet.
+func (r *Room) Stream() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.streamLocked()
+}
+
+func (r *Room) streamLocked() string {
+	if len(r.streams) == 0 || slices.Contains(r.streams, r.settings.Stream) {
+		return r.settings.Stream
+	}
+	return r.streams[0]
+}
+
+// pinStreamLocked moves every connection to the room's stream if that is no
+// longer before. Browsers switch on their own when the setting changes; this
+// is for the ones that do not, which would keep a second encoder running.
+func (r *Room) pinStreamLocked(before string) {
+	stream := r.streamLocked()
+	if stream == before || stream == "" {
+		return
+	}
+	msg := neko.SelectStream(stream)
+	for _, c := range r.clients {
+		for conn := range c.nekoConns {
+			conn.Send(msg)
+		}
+	}
 }
 
 // syncNeko pushes current rights and names to the tabs' neko members.

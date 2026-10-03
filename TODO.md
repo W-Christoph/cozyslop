@@ -21,23 +21,26 @@ read; findings checked against the code). Tick items off as they land.
       per-frame size limit (`server/internal/httpapi/media.go` decodeUpload).
 - [x] **No body-read or idle timeouts** on the HTTP servers
       (`server/main.go` newServer).
-- [ ] **Viewers can start extra encoders.** 72 pipelines are offered and the
-      proxy does not restrict which one a viewer requests
-      (`worker/entrypoint.sh`, `server/internal/httpapi/proxy.go`).
-      Open: enforcing the room's stream means reading neko's signalling
-      messages in the proxy. Cheaper for now: offer fewer pipelines
-      (`STREAM_BITRATES`, `STREAM_SCALES`, `X264_PRESETS`) and cap room CPU.
+- [x] **Viewers can start extra encoders.** 72 pipelines are offered and the
+      proxy did not restrict which one a viewer requests. The server now
+      carries the neko WebSocket itself and pins every viewer to the room's
+      stream (`neko.PinStream`, `httpapi/proxy.go`).
 - [x] **No rate limit on `typing`, `activity`, `muted` and `chat_edit`**
       (`server/internal/hub/messages.go`).
 - [x] **Upload right also allows downloads** from the desktop's Downloads
       folder (`NEKO_FILETRANSFER_USER_DOWNLOAD` in `compose.yaml`; the proxy
       allows every method on `api/filetransfer`).
-- [ ] **neko admin token readable from the room desktop.** Firefox inherits
-      `NEKO_SESSION_API_TOKEN` (`worker/supervisord.conf`); one token is
-      shared by all rooms.
-      Open: neko itself runs as the desktop user, so the token cannot be
-      hidden from someone with the remote. What helps: one token per room,
-      and room containers that cannot reach each other.
+- [ ] **neko admin token readable from the room desktop.** neko runs as the
+      desktop user, so anyone with the remote can read
+      `NEKO_SESSION_API_TOKEN` (terminal, or `file:///proc/<pid>/environ` in
+      Firefox) and use neko's admin API from inside the room. One token is
+      shared by all rooms, and rooms can reach each other.
+  - [x] Members made that way cannot connect from outside: the proxy only
+        accepts neko tokens the server issued.
+  - [ ] One token per room, and room containers that cannot reach each
+        other.
+  - [ ] Delete neko members the server does not know, periodically.
+  - [ ] Decide whether the desktop keeps a terminal and file manager.
 - [x] **Migration scripts.**
   - [x] The export archive is mode 0600 but the server runs as UID 65532:
         the import fails and the server restart-loops (`docs/migration.md`).
@@ -71,7 +74,8 @@ Frontend
 - [ ] The chat draft is cleared before the server accepts the message.
 - [ ] The desktop does not reconnect after a neko outage unless a restart
       was announced.
-- [ ] Resetting the stream to default does not switch current viewers.
+- [x] Resetting the stream to default does not switch current viewers
+      (the server now moves them itself).
 - [ ] A mouse button stays held if released outside the desktop.
 - [ ] Remote control traps keyboard focus (no way to Tab out).
 - [ ] Mobile keyboard: single capital letters arrive lowercase.

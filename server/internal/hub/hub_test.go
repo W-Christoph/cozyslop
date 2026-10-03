@@ -156,6 +156,17 @@ func newFixtureWithRestart(t *testing.T, set store.RoomSettings, restart func(co
 	for _, fake := range fakes {
 		requireOK(t, fake.WaitObservers(waitCtx, 1))
 	}
+	// The observer's first report broadcasts room_settings; let it pass so
+	// tests only see the broadcasts they cause.
+	for _, r := range h.Rooms() {
+		for r.Streams() == nil {
+			select {
+			case <-waitCtx.Done():
+				t.Fatal("no streams reported", r.Name)
+			case <-time.After(time.Millisecond):
+			}
+		}
+	}
 	return &fixture{t, ctx, s, h, h.Room(set.Name), fakes[0]}
 }
 func anon(id string) auth.Identity {

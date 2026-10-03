@@ -104,12 +104,13 @@ services:
     <<: *room
     environment:
       <<: *room-env
-      # Each room needs its own media port, open for UDP and TCP.
-      NEKO_WEBRTC_UDPMUX: 52000
-      NEKO_WEBRTC_TCPMUX: 52000
+      # Each room needs its own media port, open for UDP and TCP. Browsers
+      # connect to exactly this port, so host and container port must match.
+      NEKO_WEBRTC_UDPMUX: ${MEDIA_PORT:-52000}
+      NEKO_WEBRTC_TCPMUX: ${MEDIA_PORT:-52000}
     ports:
-      - "52000:52000/udp"
-      - "52000:52000/tcp"
+      - "${MEDIA_PORT:-52000}:${MEDIA_PORT:-52000}/udp"
+      - "${MEDIA_PORT:-52000}:${MEDIA_PORT:-52000}/tcp"
     volumes:
       # Named volumes take their ownership from the image, so the desktop's
       # non-root user can write to them (bind-mounted host folders would be

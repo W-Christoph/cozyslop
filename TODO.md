@@ -1,57 +1,31 @@
-# TODO: before deploying
+# TODO
 
 From the full-codebase review on 2026-10-03 (three Codex runs, every file
-read; findings checked against the code). Tick items off as they land.
+read; findings checked against the code). State as of the end of that day.
 
-## 1. Fix before deploying
+## 1. Open: when deploying
 
-- [x] **Anonymous impersonation.** The public key `a:<id>` is the `cozy_anon`
-      cookie value and is broadcast in the user list and chat
-      (`server/internal/auth/auth.go`). Publish an id derived from the cookie
-      instead.
-- [x] **Kicked users keep their rights while the socket drains.** `kill` only
-      stops writing once the queue is empty; incoming messages are still
-      handled (`server/internal/httpapi/socket.go`, `hub/room.go` kickLocked).
-- [x] **Slow clients are disconnected for good.** Queue overflow closes with
-      the "kicked" code 4000, so the browser never reconnects.
-- [x] **Rooms are public until their settings load.** Rooms start as
-      `Access: "public"` and load settings in the background; a failed load
-      stays public (`server/internal/hub/room.go` newRoom/run).
-- [x] **GIF memory exhaustion.** Chat uploads decode every frame with only a
-      per-frame size limit (`server/internal/httpapi/media.go` decodeUpload).
-- [x] **No body-read or idle timeouts** on the HTTP servers
-      (`server/main.go` newServer).
-- [x] **Viewers can start extra encoders.** 72 pipelines are offered and the
-      proxy did not restrict which one a viewer requests. The server now
-      carries the neko WebSocket itself and pins every viewer to the room's
-      stream (`neko.PinStream`, `httpapi/proxy.go`).
-- [x] **No rate limit on `typing`, `activity`, `muted` and `chat_edit`**
-      (`server/internal/hub/messages.go`).
-- [x] **Upload right also allows downloads** from the desktop's Downloads
-      folder (`NEKO_FILETRANSFER_USER_DOWNLOAD` in `compose.yaml`; the proxy
-      allows every method on `api/filetransfer`).
-- [x] **neko admin token readable from the room desktop.** neko runs as the
-      desktop user, so anyone with the remote can read
-      `NEKO_SESSION_API_TOKEN` and use neko's admin API from inside the
-      room. That stays (the desktop keeps its terminal and file manager, by
-      decision); it is contained, see "The neko admin token" in
-      `docs/architecture.md`:
-  - [x] Members made that way cannot connect from outside: the proxy only
-        accepts neko tokens the server issued.
-  - [x] One token per room, and room containers that cannot reach each
-        other.
-  - [x] neko members the server does not know are deleted, and changed
-        profiles reset, every 30 seconds.
-- [x] **Migration scripts.**
-  - [x] The export archive is mode 0600 but the server runs as UID 65532:
-        the import fails and the server restart-loops (`docs/migration.md`).
-  - [x] `worker/import-home.sh` can replace the Firefox profile with a
-        partial copy and still write the "imported" marker.
-  - [x] `migrate/export-cozycast.sh` reports success when file copies fail.
-- [ ] **Plain HTTP by default.** With `DOMAIN` unset, logins go over HTTP.
-      Deployment setting, not code: set `DOMAIN` (or put TLS in front).
+Nothing in the code blocks a deployment any more. These are steps and
+checks on the real server.
 
-## 2. Worth fixing, not blocking
+- [ ] Push `main` (the review fixes are local commits).
+- [ ] Set `DOMAIN` in `.env` (or put TLS in front). Without it, logins go
+      over plain HTTP.
+- [ ] Rebuild both images: `docker compose up -d --build`. The room image
+      changed (`entrypoint.sh` derives the room's neko token,
+      `import-home.sh`), and the room now needs `COZYCAST_ROOM` and its own
+      network, as in `compose.yaml`.
+- [ ] Migration: `sudo chown 65532:65532 import/cozycast-export.tar.gz`
+      before the first start (`docs/migration.md`).
+- [ ] Watch a room in a real browser: video and sound play, and the
+      picture follows a stream change in the room settings. The server now
+      carries neko's WebSocket itself; signalling was tested against neko
+      3.1.6 and in headless Chromium, playback was not.
+- [ ] Check what neko's `filetransfer/update` message contains for a viewer
+      without the upload right. It is sent to every viewer on connect; if
+      it lists the desktop's Downloads, filter it in the proxy.
+
+## 2. Open: worth fixing, not blocking
 
 Sessions
 - [ ] Logout / password reset does not close room sockets already connected.
@@ -62,22 +36,19 @@ Sessions
 Moderation and rights
 - [ ] An IP ban only kicks the one identity, not other anonymous tabs from
       that IP.
-- [x] A failed neko profile update or member delete is logged, never retried
-      (the 30-second member check now repeats it).
-- [x] A tab leaving while its neko member is being created left the member
-      behind.
 - [ ] Join and permission-refresh races can admit a user, or restore a right,
       just after it was revoked.
 - [ ] Image right is checked, then the media is posted under a second lock.
 - [ ] A failed join can still consume a limited invite use.
 - [ ] Remote ownership is unenforced for a moment after a room restart.
+- [ ] A personal stream choice ("unless that feature is enabled"): a room
+      setting that lets the proxy pass a viewer's own pipeline choice. Today
+      every viewer is pinned to the room's stream (`docs/ideas.md`).
 
 Frontend
 - [ ] The chat draft is cleared before the server accepts the message.
 - [ ] The desktop does not reconnect after a neko outage unless a restart
       was announced.
-- [x] Resetting the stream to default does not switch current viewers
-      (the server now moves them itself).
 - [ ] A mouse button stays held if released outside the desktop.
 - [ ] Remote control traps keyboard focus (no way to Tab out).
 - [ ] Mobile keyboard: single capital letters arrive lowercase.
@@ -102,9 +73,43 @@ Housekeeping
 - [ ] Media rate limit runs after the upload was decoded, and returns 500.
 - [ ] Shutdown does not close room sockets before the database.
 - [ ] Clearing the screen setting does not restore the container default.
-- [ ] neko observer / proxy calls have no handshake or header timeout.
+- [ ] The neko observer's WebSocket has no handshake timeout or liveness
+      check.
 - [ ] `X-Forwarded-For` is trusted as-is with `COZYCAST_TRUST_PROXY`
       (off by default).
 - [ ] Account ids can be reused after deleting the newest account.
 - [ ] `docs/architecture.md` says a restart loses open tabs; Firefox
       restores them.
+
+## 3. Done on 2026-10-03
+
+- [x] Anonymous impersonation: the public `a:<id>` was the `cozy_anon`
+      cookie; it is now a hash of it.
+- [x] Kicked, banned or disabled users are out of the room at once; a
+      closing socket gets one write timeout.
+- [x] A browser that fell behind reconnects instead of being closed with
+      the "kicked" code.
+- [x] Rooms load their settings before the server listens; a failed load
+      stops startup.
+- [x] Chat GIFs: 100 million pixels over all frames, two decodes at a time.
+- [x] Request bodies have a deadline per route; connections an idle timeout.
+- [x] Every room message counts against a per-person rate limit.
+- [x] One encoder per room: the server carries neko's WebSocket, pins every
+      viewer to the room's stream (`neko.PinStream`) and moves viewers when
+      the stream changes, including a reset to the default.
+- [x] The upload right no longer allows downloads (only `POST` reaches
+      neko's file transfer).
+- [x] neko admin token, readable by whoever holds the remote (the desktop
+      keeps its terminal and file manager, by decision), is contained; see
+      "The neko admin token" in `docs/architecture.md`:
+  - [x] the proxy only accepts neko tokens the server issued;
+  - [x] one token per room, one Docker network per room;
+  - [x] every 30 seconds, neko members the server does not know are deleted
+        and changed profiles reset. This also repeats neko updates and
+        deletions that failed.
+- [x] A tab leaving while its neko member was being created left the member
+      behind.
+- [x] Migration: `import-home.sh` no longer imports half an archive,
+      `export-cozycast.sh` fails when a copy fails, and the guide says to
+      hand the archive to the server's user.
+- [x] A deleted chat message shows "deleted" instead of vanishing.

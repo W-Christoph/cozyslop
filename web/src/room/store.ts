@@ -215,7 +215,9 @@ export class RoomStore {
         break
       case 'neko':
         window.clearTimeout(this.nekoRetry)
-        if (this.nekoFailures < NEKO_FAILURES_BEFORE_NOTICE) this.error.value = null
+        // The desktop answered; only the "can't connect" notice waits until
+        // the stream actually connects.
+        if (this.error.value !== NEKO_FAILURE_NOTICE) this.error.value = null
         if (!this.paused.value) {
           this.neko.connect(msg.path, msg.token, {
             audioOnly: this.audioOnly.value,

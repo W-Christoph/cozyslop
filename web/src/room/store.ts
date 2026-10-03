@@ -39,6 +39,10 @@ export class RoomStore {
   // remote, as neko sees this tab
   readonly isHost = signal(false)
 
+  // local playback: paused = no stream at all; audioOnly = sound without video
+  readonly paused = signal(false)
+  readonly audioOnly = signal(false)
+
   readonly selfKey = computed(() => this.self.value?.key ?? null)
   readonly hasRemote = computed(() => this.isHost.value)
 
@@ -50,7 +54,9 @@ export class RoomStore {
   constructor(
     readonly room: string,
     access?: string, // temporary access invite code
+    { audioOnly = false } = {},
   ) {
+    this.audioOnly.value = audioOnly
     this.socket = new RoomSocket(room, access)
     const neko = this.neko
     this.offs.push(
@@ -69,6 +75,7 @@ export class RoomStore {
       neko.on('stream', (s) => (this.stream.value = s)),
       neko.on('host', () => (this.isHost.value = neko.isHost)),
       neko.on('closed', () => {
+        if (this.paused.value) return
         // The token may be stale (neko restarted, session removed): ask for
         // a new one rather than retrying the old one.
         window.clearTimeout(this.nekoRetry)
@@ -119,8 +126,37 @@ export class RoomStore {
     this.neko.requestControl()
   }
 
-  dropRemote() {
+  // Release the remote. With center (or the room's "always center" setting)
+  // the pointer is moved to the middle of the screen first.
+  dropRemote(center = false) {
+    if (center || this.settings.value?.centerRemote) {
+      const { width, height } = this.neko.screen
+      this.neko.move(Math.round(width / 2), Math.round(height / 2))
+    }
     this.neko.releaseControl()
+  }
+
+  // Stop receiving the stream entirely (the room stays joined).
+  pause() {
+    this.paused.value = true
+    window.clearTimeout(this.nekoRetry)
+    this.neko.disconnect()
+  }
+
+  resume() {
+    if (!this.paused.value) return
+    this.paused.value = false
+    this.socket.send({ type: 'neko_token' })
+  }
+
+  // Switch between sound only and full video; reconnects the stream.
+  setAudioOnly(audioOnly: boolean) {
+    if (audioOnly === this.audioOnly.value) return
+    this.audioOnly.value = audioOnly
+    if (!this.paused.value) {
+      this.neko.disconnect()
+      this.socket.send({ type: 'neko_token' })
+    }
   }
 
   // Admins: take the remote away from whoever holds it.
@@ -145,7 +181,7 @@ export class RoomStore {
         break
       case 'neko':
         this.error.value = null
-        this.neko.connect(msg.path, msg.token)
+        if (!this.paused.value) this.neko.connect(msg.path, msg.token, { audioOnly: this.audioOnly.value })
         break
       case 'user_joined':
       case 'user_updated':

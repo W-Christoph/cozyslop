@@ -46,13 +46,13 @@ export function Controls({ fullscreen, userlistHidden, sidebar, onToggleUsers, o
         <IconButton icon={store.paused.value ? 'play_button' : 'pause_button'} label={store.paused.value ? 'Play' : 'Pause'}
           active={store.paused.value} onClick={() => store.paused.value ? store.resume() : store.pause()} />
         <IconButton icon="fullscreen_button" label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} active={fullscreen} onClick={onFullscreen} />
-        <DesktopUploadButton />
         <IconButton icon={muted || volume === 0 ? 'sound-mute' : 'sound-max'} label={muted ? 'Unmute' : 'Mute'} active={muted}
           onClick={() => updatePreferences({ muted: !muted })} />
         <input aria-label="Volume" class={styles.volume} type="range" min="0" max="100" value={volume}
           onInput={(e) => updatePreferences({ volume: Number(e.currentTarget.value) })} />
       </div>
       {!(fullscreen && host) && <div class={styles.group}>
+        <DesktopUploadButton />
         {store.rights.value.admin && <IconButton icon="settings" label="Room settings" active={sidebar === 'SETTINGS'}
           aria-pressed={sidebar === 'SETTINGS'} onClick={() => toggleSidebar('SETTINGS')} />}
         <IconButton icon="users" label="Users sidebar" active={sidebar === 'USERS'} aria-pressed={sidebar === 'USERS'} onClick={() => toggleSidebar('USERS')} />

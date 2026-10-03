@@ -16,6 +16,8 @@ interface Props {
   onPlaybackBlocked: (blocked: boolean) => void
 }
 
+const KEYSYM_V = 0x76
+const KEYSYM_SHIFT_V = 0x56
 const MOUSE_MOVE_THROTTLE_MS = 10
 // Browsers report wheel deltas in pixels; one X11 scroll step is roughly this.
 const WHEEL_STEP_PX = 53
@@ -64,6 +66,12 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
     const keyboard = new GuacamoleKeyboard()
     keyboard.onkeydown = (keysym: number) => {
       if (!hostRef.current) return true // let the browser handle it
+      // Ctrl/Cmd+V: let the browser paste, so the overlay's paste handler
+      // can send the *local* clipboard. Sending the keystroke would paste the
+      // desktop's own clipboard instead.
+      if ((keysym === KEYSYM_V || keysym === KEYSYM_SHIFT_V) && (keyboard.modifiers.ctrl || keyboard.modifiers.meta)) {
+        return true
+      }
       neko.keyDown(keysym)
       return false
     }
@@ -165,9 +173,11 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
       <video ref={video} class={styles.video} autoplay playsInline />
       <div ref={overlay} class={styles.overlay} data-host={isHost} tabIndex={0} aria-label="Remote desktop"
         onPaste={(e) => {
-          if (!store.isHost.value) return
+          // neko puts the text on the desktop clipboard and presses Ctrl+V there.
+          const text = e.clipboardData?.getData('text/plain')
+          if (!store.isHost.value || !text) return
           e.preventDefault()
-          store.neko.paste(e.clipboardData?.getData('text/plain') ?? '')
+          store.neko.paste(text)
         }} />
     </div>
   )

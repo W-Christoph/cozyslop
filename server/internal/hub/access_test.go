@@ -432,3 +432,42 @@ func TestStartLoadsSettingsBeforeAdmission(t *testing.T) {
 		t.Fatal("Start succeeded without settings")
 	}
 }
+
+func TestCheckMembers(t *testing.T) {
+	f := newFixture(t, store.RoomSettings{})
+	id := f.user("alice")
+	c, rec := f.join(id)
+	f.r.SendNekoToken(f.ctx, c)
+	rec.wait(t, "neko")
+	_, idle := f.join(anon("no neko member yet"))
+	idle.wait(t, "welcome")
+
+	// Nothing to do: neko is left alone.
+	before := len(f.fake.Calls())
+	f.r.checkMembers(f.ctx)
+	if calls := f.fake.Calls()[before:]; len(calls) != 1 || calls[0].Method != "GET" {
+		t.Fatalf("calls for a room in order: %+v", calls)
+	}
+
+	// Someone with neko's admin token adds an admin and gives a tab the remote.
+	requireOK(t, f.r.neko.CreateMember(f.ctx, "rogue", "pw", neko.Profile{Name: "rogue", IsAdmin: true, CanLogin: true, CanConnect: true, CanHost: true}))
+	raised := f.r.nekoProfile(c)
+	raised.CanHost, raised.IsAdmin = true, true
+	raised.Plugins["filetransfer.enabled"] = true
+	requireOK(t, f.r.neko.UpdateProfile(f.ctx, c.ID, raised))
+	f.r.checkMembers(f.ctx)
+	if _, ok := f.fake.Member("rogue"); ok {
+		t.Fatal("unknown neko member survived")
+	}
+	assertProfile(t, f.fake, c, id.User.Nickname, rights.Rights{})
+	if p, ok := f.fake.Member(neko.ObserverID); !ok || !p.IsAdmin {
+		t.Fatal("observer was touched")
+	}
+
+	// A kicked tab's member goes even before its socket has closed.
+	requireOK(t, f.r.Kick(id.Key()))
+	f.r.checkMembers(f.ctx)
+	if _, ok := f.fake.Member(c.ID); ok {
+		t.Fatal("kicked tab kept its neko member")
+	}
+}

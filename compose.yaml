@@ -9,8 +9,10 @@ x-room: &room
   environment: &room-env
     NEKO_DESKTOP_SCREEN: ${SCREEN:-1280x720@30}
     # CozyCast's server is the only neko admin; browsers get per-user tokens.
+    # Each room's admin token is derived from this secret and the room's
+    # name (COZYCAST_ROOM), so one room's token does not open another.
     NEKO_MEMBER_PROVIDER: object
-    NEKO_SESSION_API_TOKEN: ${NEKO_API_TOKEN:?set NEKO_API_TOKEN in .env}
+    COZYCAST_NEKO_SECRET: ${NEKO_API_TOKEN:?set NEKO_API_TOKEN in .env}
     NEKO_SESSION_COOKIE_ENABLED: "false"
     NEKO_SESSION_IMPLICIT_HOSTING: "true"
     NEKO_SESSION_INACTIVE_CURSORS: "false"
@@ -47,7 +49,7 @@ services:
       - "${HTTP_PORT:-80}:8080"
       - "${HTTPS_PORT:-443}:8443"
     environment:
-      COZYCAST_NEKO_API_TOKEN: ${NEKO_API_TOKEN}
+      COZYCAST_NEKO_SECRET: ${NEKO_API_TOKEN}
       COZYCAST_ROOMS: default=http://room-default:8080
       COZYCAST_DATA_DIR: /data
       COZYCAST_IMPORT: /import/cozycast-export.tar.gz
@@ -70,14 +72,22 @@ services:
     # group_add: ["${DOCKER_GID}"]
     depends_on:
       - room-default
+    # The server is on every room's network; the rooms are not on each
+    # other's.
+    networks:
+      - room-default
 
   room-default:
     <<: *room
     ports:
       - "${MEDIA_PORT:-52000}:${MEDIA_PORT:-52000}/udp"
       - "${MEDIA_PORT:-52000}:${MEDIA_PORT:-52000}/tcp"
+    networks:
+      - room-default
     environment:
       <<: *room-env
+      # The room's name in COZYCAST_ROOMS.
+      COZYCAST_ROOM: default
       # Each room needs its own media port, open for UDP and TCP. Browsers
       # connect to exactly this port, so host and container port must match.
       NEKO_WEBRTC_UDPMUX: ${MEDIA_PORT:-52000}
@@ -94,11 +104,15 @@ services:
       - ./import:/import:ro
 
   # A second room: uncomment, then add "second=http://room-second:8080" to
-  # COZYCAST_ROOMS above (comma separated).
+  # COZYCAST_ROOMS above (comma separated) and "room-second" to the server's
+  # networks.
   # room-second:
   #   <<: *room
+  #   networks:
+  #     - room-second
   #   environment:
   #     <<: *room-env
+  #     COZYCAST_ROOM: second
   #     NEKO_WEBRTC_UDPMUX: 52001
   #     NEKO_WEBRTC_TCPMUX: 52001
   #   ports:
@@ -106,10 +120,16 @@ services:
   #     - "52001:52001/tcp"
   #   volumes:
   #     - room-second-home:/home/neko
-  # (and add room-second-home under volumes: at the bottom)
+  # (and add room-second-home under volumes: and room-second under networks:
+  # at the bottom)
 
 volumes:
   # Accounts, chat, uploads and certificates.
   server-data:
   # Each room desktop's home folder (files, Firefox profile).
   room-default-home:
+
+networks:
+  # One per room, shared with the server only: what runs on one room's
+  # desktop cannot reach another room's neko.
+  room-default:

@@ -11,7 +11,12 @@
 #    the desktop size), COZYCAST_X264_PRESETS (fastest first) and
 #    COZYCAST_X264_PRESET (the default), or set NEKO_CAPTURE_VIDEO_PIPELINES
 #    yourself to skip this.
-# 2. A one-time import of the old CozyCast room desktop (import-home.sh).
+# 2. The room's neko admin token: derived from COZYCAST_NEKO_SECRET and the
+#    room's name (COZYCAST_ROOM), the same way the server does it
+#    (config.NekoToken). neko runs as the desktop's user, so whoever holds
+#    the remote can read neko's token; this way it is the token of this
+#    room only, and the secret itself never reaches the desktop.
+# 3. A one-time import of the old CozyCast room desktop (import-home.sh).
 set -eu
 
 stream_pipelines() {
@@ -59,6 +64,15 @@ stream_pipelines() {
 
 if [ -z "${NEKO_CAPTURE_VIDEO_PIPELINES:-}" ]; then
     stream_pipelines
+fi
+
+if [ -n "${COZYCAST_NEKO_SECRET:-}" ]; then
+    : "${COZYCAST_ROOM:?set COZYCAST_ROOM to the room's name in COZYCAST_ROOMS}"
+    sum=$(printf 'cozycast-neko-token:%s:%s' "$COZYCAST_ROOM" "$COZYCAST_NEKO_SECRET" | sha256sum)
+    NEKO_SESSION_API_TOKEN=${sum%% *}
+    export NEKO_SESSION_API_TOKEN
+    # Everything started from here on inherits the environment.
+    unset COZYCAST_NEKO_SECRET sum
 fi
 
 /usr/local/bin/cozycast-import-home

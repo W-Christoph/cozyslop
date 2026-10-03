@@ -30,17 +30,18 @@ read; findings checked against the code). Tick items off as they land.
 - [x] **Upload right also allows downloads** from the desktop's Downloads
       folder (`NEKO_FILETRANSFER_USER_DOWNLOAD` in `compose.yaml`; the proxy
       allows every method on `api/filetransfer`).
-- [ ] **neko admin token readable from the room desktop.** neko runs as the
+- [x] **neko admin token readable from the room desktop.** neko runs as the
       desktop user, so anyone with the remote can read
-      `NEKO_SESSION_API_TOKEN` (terminal, or `file:///proc/<pid>/environ` in
-      Firefox) and use neko's admin API from inside the room. One token is
-      shared by all rooms, and rooms can reach each other.
+      `NEKO_SESSION_API_TOKEN` and use neko's admin API from inside the
+      room. That stays (the desktop keeps its terminal and file manager, by
+      decision); it is contained, see "The neko admin token" in
+      `docs/architecture.md`:
   - [x] Members made that way cannot connect from outside: the proxy only
         accepts neko tokens the server issued.
-  - [ ] One token per room, and room containers that cannot reach each
+  - [x] One token per room, and room containers that cannot reach each
         other.
-  - [ ] Delete neko members the server does not know, periodically.
-  - [ ] Decide whether the desktop keeps a terminal and file manager.
+  - [x] neko members the server does not know are deleted, and changed
+        profiles reset, every 30 seconds.
 - [x] **Migration scripts.**
   - [x] The export archive is mode 0600 but the server runs as UID 65532:
         the import fails and the server restart-loops (`docs/migration.md`).
@@ -61,7 +62,8 @@ Sessions
 Moderation and rights
 - [ ] An IP ban only kicks the one identity, not other anonymous tabs from
       that IP.
-- [ ] A failed neko profile update or member delete is logged, never retried.
+- [x] A failed neko profile update or member delete is logged, never retried
+      (the 30-second member check now repeats it).
 - [x] A tab leaving while its neko member is being created left the member
       behind.
 - [ ] Join and permission-refresh races can admit a user, or restore a right,

@@ -32,3 +32,28 @@ func TestDockerConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestNekoToken(t *testing.T) {
+	t.Setenv("COZYCAST_NEKO_API_TOKEN", "")
+	t.Setenv("COZYCAST_NEKO_SECRET", "")
+	if _, err := FromEnv(); err == nil {
+		t.Fatal("no neko secret or token accepted")
+	}
+	t.Setenv("COZYCAST_NEKO_SECRET", "secret")
+	cfg, err := FromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// worker/entrypoint.sh: printf 'cozycast-neko-token:%s:%s' default secret | sha256sum
+	if got := cfg.NekoToken("default"); got != "b6647a3bddfd3258ed8d4fa8a9f3e4bbb5d8f0c99383b7a847419a9f7d2bc18e" {
+		t.Fatal("derived token:", got)
+	}
+	if cfg.NekoToken("second") == cfg.NekoToken("default") {
+		t.Fatal("two rooms share a token")
+	}
+	t.Setenv("COZYCAST_NEKO_SECRET", "")
+	t.Setenv("COZYCAST_NEKO_API_TOKEN", "plain")
+	if cfg, err = FromEnv(); err != nil || cfg.NekoToken("default") != "plain" || cfg.NekoToken("second") != "plain" {
+		t.Fatal("plain token:", cfg.NekoToken("default"), err)
+	}
+}

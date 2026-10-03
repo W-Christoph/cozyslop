@@ -2,6 +2,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -26,7 +28,8 @@ type Config struct {
 	DockerSocket  string   // Docker Engine Unix socket
 	DockerProject string   // fallback when the server's compose project cannot be detected
 	InitAdminPass string   // creates the "admin" account if it does not exist
-	NekoAPIToken  string
+	NekoSecret    string   // each room's neko admin token is derived from it (see NekoToken)
+	NekoAPIToken  string   // instead of NekoSecret: one token for every neko, as given
 	Rooms         []Room
 	WebDir        string // serve the UI from disk instead of the embedded build (dev)
 	SourceURL     string // where users can get this server's source code (AGPL)
@@ -46,12 +49,13 @@ func FromEnv() (Config, error) {
 		DockerSocket:  env("COZYCAST_DOCKER_SOCKET", "/var/run/docker.sock"),
 		DockerProject: os.Getenv("COZYCAST_DOCKER_PROJECT"),
 		InitAdminPass: os.Getenv("COZYCAST_INIT_ADMIN_PASSWORD"),
+		NekoSecret:    os.Getenv("COZYCAST_NEKO_SECRET"),
 		NekoAPIToken:  os.Getenv("COZYCAST_NEKO_API_TOKEN"),
 		WebDir:        os.Getenv("COZYCAST_WEB_DIR"),
 		SourceURL:     env("COZYCAST_SOURCE_URL", "https://github.com/W-Christoph/cozyslop"),
 	}
-	if c.NekoAPIToken == "" {
-		return c, errors.New("COZYCAST_NEKO_API_TOKEN is required")
+	if c.NekoSecret == "" && c.NekoAPIToken == "" {
+		return c, errors.New("COZYCAST_NEKO_SECRET is required")
 	}
 	maxUploadMB, err := strconv.ParseInt(env("COZYCAST_MAX_UPLOAD_MB", "10"), 10, 64)
 	if err != nil || maxUploadMB <= 0 || maxUploadMB > ((1<<63-1)-(64<<10))/(1<<20) {
@@ -65,6 +69,18 @@ func FromEnv() (Config, error) {
 	}
 	c.Rooms = rooms
 	return c, nil
+}
+
+// NekoToken is the admin token of the named room's neko. With a secret,
+// every room has its own: the room's desktop user can read their neko's
+// token, and it must not open the other rooms. worker/entrypoint.sh derives
+// the same value.
+func (c Config) NekoToken(room string) string {
+	if c.NekoSecret == "" {
+		return c.NekoAPIToken
+	}
+	sum := sha256.Sum256([]byte("cozycast-neko-token:" + room + ":" + c.NekoSecret))
+	return hex.EncodeToString(sum[:])
 }
 
 // parseRooms reads "name=url,name2=url2".

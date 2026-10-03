@@ -96,7 +96,7 @@ func run() error {
 
 	rooms := make([]hub.RoomConfig, 0, len(cfg.Rooms))
 	for _, rc := range cfg.Rooms {
-		nc, err := neko.NewClient(rc.NekoURL, cfg.NekoAPIToken)
+		nc, err := neko.NewClient(rc.NekoURL, cfg.NekoToken(rc.Name))
 		if err != nil {
 			return err
 		}

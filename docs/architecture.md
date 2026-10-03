@@ -7,7 +7,7 @@ it are deliberate and listed under [Changes from CozyCast](#changes-from-cozycas
 ## Processes
 
 - **server** (Go, `server/`): accounts, sessions, rooms, chat, permissions,
-  uploads, the web UI, and the only admin of every neko instance.
+  uploads, the web UI, and the admin of every neko instance.
 - **room-<name>** (neko, `worker/`): one per room. Desktop, capture, encoding,
   WebRTC, input. Configured by environment; never patched.
 
@@ -29,6 +29,22 @@ to the anon id **and** the IP address.
 
 Each browser tab is additionally a **client** with its own id, which is also
 its neko member id.
+
+## The neko admin token
+
+neko runs as the desktop's user, so whoever holds the remote can read the
+admin token of their room's neko (the desktop has a terminal) and use neko's
+admin API from inside the room. That cannot be prevented, so it is contained:
+
+- Every room has its own token, derived from one secret and the room's name
+  (`config.NekoToken`, `worker/entrypoint.sh`). The secret never reaches the
+  desktop's processes.
+- Every room is on its own Docker network, shared with the server only.
+- The proxy only lets through neko tokens the server issued to a tab still
+  in the room, so a member created with the admin token is no use from
+  outside.
+- Every 30 seconds the server deletes neko members that belong to no tab and
+  resets profiles that differ from the tab's rights (`Room.checkMembers`).
 
 ## Auth
 

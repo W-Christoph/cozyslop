@@ -9,6 +9,7 @@ import (
 	"hash/fnv"
 	"log/slog"
 	"math"
+	"reflect"
 	"slices"
 	"strconv"
 	"sync"
@@ -137,6 +138,7 @@ func (r *Room) run(ctx context.Context) {
 	}
 	close(r.ready)
 	r.log.Info("neko ready")
+	go r.watchMembers(ctx)
 	r.neko.WatchHost(ctx, func(init neko.Init) {
 		r.mu.Lock()
 		stream := r.streamLocked()
@@ -148,6 +150,70 @@ func (r *Room) run(ctx context.Context) {
 		r.mu.Unlock()
 		r.reapplyNekoSettings(ctx)
 	}, r.setHost)
+}
+
+// memberCheckInterval is how often neko's members are compared with the
+// tabs in the room.
+const memberCheckInterval = 30 * time.Second
+
+func (r *Room) watchMembers(ctx context.Context) {
+	t := time.NewTicker(memberCheckInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			r.checkMembers(ctx)
+		}
+	}
+}
+
+// checkMembers makes neko's members match the tabs in the room: members
+// that belong to no tab are deleted, and profiles that differ from the
+// tab's rights are set again. Both happen when a call to neko failed
+// earlier, and when someone used neko's admin token (which the room's
+// desktop user can read) to add a member or raise their own rights.
+func (r *Room) checkMembers(ctx context.Context) {
+	members, err := r.neko.ListMembers(ctx)
+	if err != nil {
+		return // neko is down or restarting; run notices and logs that
+	}
+	for _, m := range members {
+		if m.ID == neko.ObserverID {
+			continue
+		}
+		r.mu.Lock()
+		c := r.clients[m.ID]
+		r.mu.Unlock()
+		if c == nil {
+			r.log.Warn("deleting a neko member that belongs to no tab", "member", m.ID, "name", m.Profile.Name)
+			if err := r.neko.DeleteMember(ctx, m.ID); err != nil && !errors.Is(err, neko.ErrNotFound) {
+				r.log.Warn("delete neko member", "member", m.ID, "err", err)
+			}
+			continue
+		}
+		c.nekoMu.Lock()
+		if want := r.nekoProfile(c); !c.gone && !sameProfile(m.Profile, want) {
+			r.log.Warn("resetting a neko member's profile", "client", c.ID)
+			if err := r.neko.UpdateProfile(ctx, c.ID, want); err != nil && !errors.Is(err, neko.ErrNotFound) {
+				r.log.Warn("update neko member", "client", c.ID, "err", err)
+			}
+		}
+		c.nekoMu.Unlock()
+	}
+}
+
+// sameProfile reports whether neko's profile got grants what want does.
+// neko may list plugin settings we never set; those are ignored.
+func sameProfile(got, want neko.Profile) bool {
+	for k, v := range want.Plugins {
+		if got.Plugins[k] != v {
+			return false
+		}
+	}
+	got.Plugins, want.Plugins = nil, nil
+	return reflect.DeepEqual(got, want)
 }
 
 // prepareNeko removes neko members left from a previous run (CozyCast owns

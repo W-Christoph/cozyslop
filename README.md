@@ -92,7 +92,7 @@ Open `http://<server>/room/default` and log in as `admin`. Open ports
 clipboard needs HTTPS: browsers only allow it on secure pages.
 
 Second room: uncomment `room-second` in `compose.yaml` and add it to
-`COZYCAST_ROOMS`.
+`COZYCAST_ROOMS`, the server's `networks` and the `networks` at the bottom.
 
 ## Develop
 
@@ -107,7 +107,8 @@ disk, or use `npm run dev` (Vite proxies `/api` and `/neko` to
 
 | Server variable | Default | |
 |---|---|---|
-| `COZYCAST_NEKO_API_TOKEN` | required | must match the rooms' `NEKO_SESSION_API_TOKEN` |
+| `COZYCAST_NEKO_SECRET` | required | each room's neko admin token is derived from it and the room's name; the room containers get the same secret and do the same (`COZYCAST_ROOM`) |
+| `COZYCAST_NEKO_API_TOKEN` | | instead of the secret: one token used as-is for every room, for a neko you run yourself with `NEKO_SESSION_API_TOKEN` |
 | `COZYCAST_ROOMS` | `default=http://room-default:8080` | `name=url,name2=url2` |
 | `COZYCAST_DATA_DIR` | `data` | database and uploaded chat media |
 | `COZYCAST_INIT_ADMIN_PASSWORD` | | creates the `admin` account on first start |

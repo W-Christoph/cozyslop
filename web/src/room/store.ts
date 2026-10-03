@@ -7,7 +7,12 @@ import { NekoClient, type NekoStatus } from '../neko/client'
 import type { ChatMessage, KickReason, Rights, RoomSettings, ServerMessage, User } from './protocol'
 import { RoomSocket } from './socket'
 
+// Reconnecting the stream backs off from 1.5 s to 30 s; after a few failed
+// attempts in a row the user is told instead of seeing endless "connecting".
 const NEKO_RETRY_MS = 1_500
+const NEKO_RETRY_MAX_MS = 30_000
+const NEKO_FAILURES_BEFORE_NOTICE = 3
+const NEKO_FAILURE_NOTICE = "Can't connect to the room's video. Your network may be blocking it; still trying."
 const TYPING_TIMEOUT_MS = 3_000
 
 const noRights: Rights = { admin: false, trusted: false, remote: false, image: false, upload: false }
@@ -51,6 +56,8 @@ export class RoomStore {
   private socket: RoomSocket
   private offs: (() => void)[] = []
   private nekoRetry?: number
+  private nekoRetryMs = NEKO_RETRY_MS
+  private nekoFailures = 0
   private typingTimers = new Map<string, number>()
 
   constructor(
@@ -72,7 +79,12 @@ export class RoomStore {
       this.socket.on('message', (msg) => this.onMessage(msg)),
       neko.on('status', (s) => {
         this.video.value = s
-        if (s === 'connected') this.restarting.value = null
+        if (s === 'connected') {
+          this.restarting.value = null
+          if (this.error.value === NEKO_FAILURE_NOTICE) this.error.value = null
+          this.nekoRetryMs = NEKO_RETRY_MS
+          this.nekoFailures = 0
+        }
         if (s === 'disconnected') this.isHost.value = false
       }),
       neko.on('stream', (s) => (this.stream.value = s)),
@@ -173,11 +185,16 @@ export class RoomStore {
 
   private retryNekoToken() {
     window.clearTimeout(this.nekoRetry)
+    if (++this.nekoFailures >= NEKO_FAILURES_BEFORE_NOTICE && !this.restarting.value) {
+      this.error.value = NEKO_FAILURE_NOTICE
+    }
+    const delay = this.nekoRetryMs
+    this.nekoRetryMs = Math.min(this.nekoRetryMs * 2, NEKO_RETRY_MAX_MS)
     this.nekoRetry = window.setTimeout(() => {
       if (!this.paused.value && this.server.value === 'connected' && this.neko.status === 'disconnected') {
         this.socket.send({ type: 'neko_token' })
       }
-    }, NEKO_RETRY_MS)
+    }, delay)
   }
 
   // ---- server messages -----------------------------------------------------
@@ -198,7 +215,7 @@ export class RoomStore {
         break
       case 'neko':
         window.clearTimeout(this.nekoRetry)
-        this.error.value = null
+        if (this.nekoFailures < NEKO_FAILURES_BEFORE_NOTICE) this.error.value = null
         if (!this.paused.value) {
           this.neko.connect(msg.path, msg.token, {
             audioOnly: this.audioOnly.value,

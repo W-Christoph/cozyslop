@@ -136,6 +136,7 @@ func (s *Server) Restart() {
 	s.tokens = make(map[string]string)
 	s.host = ""
 	s.implicit = false
+	s.screen = neko.ScreenSize{}
 	s.signalLocked()
 	s.mu.Unlock()
 	for o := range observers {
@@ -252,6 +253,9 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			s.screen = in
 		}
+	case r.URL.Path == "/api/room/screen" && r.Method == http.MethodGet:
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(s.screen)
 	case r.URL.Path == "/api/room/screen/configurations" && r.Method == http.MethodGet:
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(Screens)

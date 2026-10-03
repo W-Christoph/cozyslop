@@ -28,13 +28,15 @@ func (c *Client) SetImplicitHosting(ctx context.Context, implicit bool) error {
 }
 
 // WatchHost calls onHost with the neko session id of the remote holder
-// ("" = nobody) whenever it changes, until ctx ends. It reconnects on its own.
-func (c *Client) WatchHost(ctx context.Context, onHost func(hostID string)) {
+// ("" = nobody) whenever it changes, until ctx ends. It reconnects on its own
+// and calls onConnect after every successful (re)connect, which is also the
+// first sign that neko may have restarted and lost its runtime settings.
+func (c *Client) WatchHost(ctx context.Context, onConnect func(), onHost func(hostID string)) {
 	log := slog.With("neko", c.base.Host)
 	backoff := time.Second
 	for ctx.Err() == nil {
 		start := time.Now()
-		err := c.watchHostOnce(ctx, onHost)
+		err := c.watchHostOnce(ctx, onConnect, onHost)
 		if ctx.Err() != nil {
 			return
 		}
@@ -51,7 +53,7 @@ func (c *Client) WatchHost(ctx context.Context, onHost func(hostID string)) {
 	}
 }
 
-func (c *Client) watchHostOnce(ctx context.Context, onHost func(string)) error {
+func (c *Client) watchHostOnce(ctx context.Context, onConnect func(), onHost func(string)) error {
 	token, err := c.observerToken(ctx)
 	if err != nil {
 		return err
@@ -71,6 +73,7 @@ func (c *Client) watchHostOnce(ctx context.Context, onHost func(string)) error {
 	}
 	defer conn.CloseNow()
 	conn.SetReadLimit(1 << 20)
+	onConnect()
 
 	type controlHost struct {
 		HasHost bool   `json:"has_host"`

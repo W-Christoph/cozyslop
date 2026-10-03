@@ -132,7 +132,7 @@ func (r *Room) run(ctx context.Context) {
 	}
 	close(r.ready)
 	r.log.Info("neko ready")
-	r.neko.WatchHost(ctx, r.setHost)
+	r.neko.WatchHost(ctx, func() { r.reapplyNekoSettings(ctx) }, r.setHost)
 }
 
 // prepareNeko removes neko members left from a previous run (CozyCast owns
@@ -157,6 +157,7 @@ func (r *Room) prepareNeko(ctx context.Context) error {
 }
 
 // applyScreen sets the desktop resolution; "" keeps the container default.
+// Setting the size it already has is skipped: it would restart the stream.
 func (r *Room) applyScreen(ctx context.Context, screen string) error {
 	if screen == "" {
 		return nil
@@ -165,7 +166,25 @@ func (r *Room) applyScreen(ctx context.Context, screen string) error {
 	if err != nil {
 		return err
 	}
+	if current, err := r.neko.Screen(ctx); err == nil && current == size {
+		return nil
+	}
 	return r.neko.SetScreen(ctx, size)
+}
+
+// reapplyNekoSettings restores the settings neko holds only at runtime. It
+// runs whenever the event stream reconnects, because neko may have
+// restarted (container restart, crash) and come back with its defaults.
+func (r *Room) reapplyNekoSettings(ctx context.Context) {
+	r.mu.Lock()
+	set := r.settings
+	r.mu.Unlock()
+	if err := r.applyScreen(ctx, set.Screen); err != nil {
+		r.log.Warn("reapply neko screen", "err", err)
+	}
+	if err := r.neko.SetImplicitHosting(ctx, !set.RemoteOwnership); err != nil {
+		r.log.Warn("reapply neko implicit hosting", "err", err)
+	}
 }
 
 // ---- joining and leaving --------------------------------------------------

@@ -173,6 +173,13 @@ func (c *Client) SetScreen(ctx context.Context, s ScreenSize) error {
 	return c.do(ctx, http.MethodPost, "/api/room/screen", s, nil, true)
 }
 
+// Screen returns the current desktop size.
+func (c *Client) Screen(ctx context.Context) (ScreenSize, error) {
+	var s ScreenSize
+	err := c.do(ctx, http.MethodGet, "/api/room/screen", nil, &s, true)
+	return s, err
+}
+
 // ScreenConfigurations lists the resolutions the desktop supports.
 func (c *Client) ScreenConfigurations(ctx context.Context) ([]ScreenSize, error) {
 	var list []ScreenSize

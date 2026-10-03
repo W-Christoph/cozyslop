@@ -1,0 +1,21 @@
+.identity {
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: var(--space-1);
+  border-radius: var(--radius);
+  background: var(--color-button-accent);
+  color: var(--color-text);
+  font-size: 0.8em;
+}
+
+.inviteName {
+  width: 10em;
+}
+
+.actions {
+  min-width: 8em;
+}

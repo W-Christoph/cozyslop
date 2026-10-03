@@ -1,0 +1,21 @@
+.form {
+  width: min(400px, 100%);
+  align-items: center;
+  padding: var(--space-4);
+  background: var(--color-menu);
+  border-radius: var(--radius);
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.row input,
+.row select {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 1em;
+}

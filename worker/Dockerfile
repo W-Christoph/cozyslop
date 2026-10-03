@@ -18,8 +18,12 @@ RUN set -eux; \
 # the same base, so the runtime libraries already match.
 COPY --from=firefox /usr/lib/firefox /usr/lib/firefox
 COPY --from=firefox --chown=neko:neko /home/neko/.mozilla /home/neko/.mozilla
-RUN ln -s /usr/lib/firefox/firefox /usr/bin/firefox
+# Downloads is a volume; creating it here gives fresh volumes the right owner.
+RUN ln -s /usr/lib/firefox/firefox /usr/bin/firefox && \
+    install -d -o neko -g neko /home/neko/Downloads
 
-COPY firefox/mozilla.cfg /usr/lib/firefox/mozilla.cfg
-COPY firefox/policies.json /usr/lib/firefox/distribution/policies.json
-COPY supervisord.conf /etc/neko/supervisord/cozycast.conf
+# Explicit modes: Firefox runs as neko and must be able to read these,
+# whatever permissions the files have in the checkout.
+COPY --chmod=0644 firefox/mozilla.cfg /usr/lib/firefox/mozilla.cfg
+COPY --chmod=0644 firefox/policies.json /usr/lib/firefox/distribution/policies.json
+COPY --chmod=0644 supervisord.conf /etc/neko/supervisord/cozycast.conf

@@ -111,8 +111,11 @@ services:
       - "52000:52000/udp"
       - "52000:52000/tcp"
     volumes:
-      - ./data/rooms/default/firefox:/home/neko/.mozilla/firefox/profile.default
-      - ./data/rooms/default/downloads:/home/neko/Downloads
+      # Named volumes take their ownership from the image, so the desktop's
+      # non-root user can write to them (bind-mounted host folders would be
+      # created as root).
+      - room-default-firefox:/home/neko/.mozilla/firefox/profile.default
+      - room-default-downloads:/home/neko/Downloads
 
   # A second room: uncomment, then add "second=http://room-second:8080" to
   # COZYCAST_ROOMS above (comma separated).
@@ -126,9 +129,13 @@ services:
   #     - "52001:52001/udp"
   #     - "52001:52001/tcp"
   #   volumes:
-  #     - ./data/rooms/second/firefox:/home/neko/.mozilla/firefox/profile.default
-  #     - ./data/rooms/second/downloads:/home/neko/Downloads
+  #     - room-second-firefox:/home/neko/.mozilla/firefox/profile.default
+  #     - room-second-downloads:/home/neko/Downloads
+  # (and add both names under volumes: at the bottom)
 
 volumes:
   # Accounts, chat, uploads and certificates.
   server-data:
+  # Each room's browser profile (logins, history) and downloaded files.
+  room-default-firefox:
+  room-default-downloads:

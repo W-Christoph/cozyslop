@@ -9,26 +9,26 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"sort"
 	"time"
 
 	"cozycast/internal/auth"
+	"cozycast/internal/hub"
 	"cozycast/internal/ratelimit"
-	"cozycast/internal/room"
+	"cozycast/internal/rights"
 	"cozycast/internal/store"
 )
 
 type Deps struct {
 	Store *store.Store
 	Auth  *auth.Service
-	Rooms map[string]*room.Room
+	Hub   *hub.Hub
 	Web   fs.FS
 }
 
 type Server struct {
 	store *store.Store
 	auth  *auth.Service
-	rooms map[string]*room.Room
+	hub   *hub.Hub
 	web   fs.FS
 	log   *slog.Logger
 
@@ -40,7 +40,7 @@ func New(d Deps) *Server {
 	return &Server{
 		store:         d.Store,
 		auth:          d.Auth,
-		rooms:         d.Rooms,
+		hub:           d.Hub,
 		web:           d.Web,
 		log:           slog.Default(),
 		loginLimit:    ratelimit.New(10, 30*time.Second),
@@ -84,19 +84,41 @@ func sameOrigin(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) room(r *http.Request) *room.Room {
-	return s.rooms[r.PathValue("room")]
-}
-
+// listRooms returns the rooms the requester may see. Hidden rooms are only
+// listed for people who can join them.
 func (s *Server) listRooms(w http.ResponseWriter, r *http.Request) {
+	id, err := s.auth.Identify(w, r)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
 	type roomInfo struct {
-		Name string `json:"name"`
+		Name      string `json:"name"`
+		Access    string `json:"access"`
+		UserCount int    `json:"userCount"`
+		Open      bool   `json:"open"` // the requester may join
 	}
-	list := make([]roomInfo, 0, len(s.rooms))
-	for name := range s.rooms {
-		list = append(list, roomInfo{Name: name})
+	list := []roomInfo{}
+	now := time.Now().Unix()
+	for _, rm := range s.hub.Rooms() {
+		in := rights.Input{Room: rm.Settings(), User: id.User, Now: now}
+		if id.User != nil {
+			if in.Perm, err = s.store.Permission(r.Context(), rm.Name, id.User.ID); err != nil {
+				s.internalError(w, r, err)
+				return
+			}
+		} else if ban, err := s.store.AnonBan(r.Context(), rm.Name, id.AnonID, id.IP); err == nil {
+			in.AnonBan = ban
+		} else if !errors.Is(err, store.ErrNotFound) {
+			s.internalError(w, r, err)
+			return
+		}
+		open := rights.Admit(in) == nil
+		if in.Room.Hidden && !open {
+			continue
+		}
+		list = append(list, roomInfo{Name: rm.Name, Access: in.Room.Access, UserCount: rm.UserCount(), Open: open})
 	}
-	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 	writeJSON(w, http.StatusOK, list)
 }
 

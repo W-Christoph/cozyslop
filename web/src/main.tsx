@@ -5,6 +5,6 @@ import './styles/base.css'
 
 // Prototype routing: /room/<name>, defaulting to "default".
 const room = location.pathname.match(/^\/room\/([^/]+)/)?.[1] ?? 'default'
-const name = new URLSearchParams(location.search).get('name') ?? 'Anonymous'
+const access = new URLSearchParams(location.search).get('access') ?? undefined
 
-render(<RoomPage room={decodeURIComponent(room)} name={name} />, document.getElementById('app')!)
+render(<RoomPage room={decodeURIComponent(room)} access={access} />, document.getElementById('app')!)

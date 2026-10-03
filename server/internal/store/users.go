@@ -40,12 +40,18 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 // CreateUser inserts u. Username is stored lowercase; ID and CreatedAt are
 // filled in.
 func (s *Store) CreateUser(ctx context.Context, u *User) error {
+	return s.createUser(ctx, s.db, u)
+}
+
+func (s *Store) createUser(ctx context.Context, db interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}, u *User) error {
 	u.Username = strings.ToLower(u.Username)
 	u.CreatedAt = s.unix()
 	if u.NameColor == "" {
 		u.NameColor = "#fff"
 	}
-	res, err := s.db.ExecContext(ctx,
+	res, err := db.ExecContext(ctx,
 		`INSERT INTO users (username, password_hash, nickname, name_color, avatar, admin, verified, disabled, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.Username, u.PasswordHash, u.Nickname, u.NameColor, u.Avatar,

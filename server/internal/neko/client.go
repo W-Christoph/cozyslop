@@ -7,6 +7,8 @@ package neko
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -138,4 +140,12 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any, admin
 		return json.NewDecoder(res.Body).Decode(out)
 	}
 	return nil
+}
+
+func randomPassword() string {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b)
 }

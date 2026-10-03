@@ -15,8 +15,8 @@ import (
 	"cozycast/internal/auth"
 	"cozycast/internal/config"
 	"cozycast/internal/httpapi"
+	"cozycast/internal/hub"
 	"cozycast/internal/neko"
-	"cozycast/internal/room"
 	"cozycast/internal/store"
 	"cozycast/webui"
 )
@@ -50,17 +50,23 @@ func run() error {
 	}
 	go sweepSessions(ctx, db)
 
-	defaults := room.Permissions{Remote: cfg.DefaultRemote, Upload: cfg.DefaultUpload}
-	rooms := make(map[string]*room.Room, len(cfg.Rooms))
+	mediaDir := filepath.Join(cfg.DataDir, "media")
+	for _, dir := range []string{"chat", "avatars"} {
+		if err := os.MkdirAll(filepath.Join(mediaDir, dir), 0o750); err != nil {
+			return err
+		}
+	}
+
+	rooms := make([]hub.RoomConfig, 0, len(cfg.Rooms))
 	for _, rc := range cfg.Rooms {
 		nc, err := neko.NewClient(rc.NekoURL, cfg.NekoAPIToken)
 		if err != nil {
 			return err
 		}
-		rm := room.New(rc.Name, nc, defaults)
-		rooms[rc.Name] = rm
-		go rm.Start(ctx)
+		rooms = append(rooms, hub.RoomConfig{Name: rc.Name, Neko: nc})
 	}
+	h := hub.New(db, filepath.Join(mediaDir, "chat"), rooms)
+	h.Start(ctx)
 
 	var web fs.FS = webui.FS()
 	if cfg.WebDir != "" {
@@ -72,7 +78,7 @@ func run() error {
 		Handler: httpapi.New(httpapi.Deps{
 			Store: db,
 			Auth:  auth.New(db, cfg.TrustProxy),
-			Rooms: rooms,
+			Hub:   h,
 			Web:   web,
 		}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,

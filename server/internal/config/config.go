@@ -22,8 +22,6 @@ type Config struct {
 	NekoAPIToken  string
 	Rooms         []Room
 	WebDir        string // serve the UI from disk instead of the embedded build (dev)
-	DefaultRemote bool
-	DefaultUpload bool
 }
 
 func FromEnv() (Config, error) {
@@ -34,8 +32,6 @@ func FromEnv() (Config, error) {
 		InitAdminPass: os.Getenv("COZYCAST_INIT_ADMIN_PASSWORD"),
 		NekoAPIToken:  os.Getenv("COZYCAST_NEKO_API_TOKEN"),
 		WebDir:        os.Getenv("COZYCAST_WEB_DIR"),
-		DefaultRemote: envBool("COZYCAST_DEFAULT_REMOTE", true),
-		DefaultUpload: envBool("COZYCAST_DEFAULT_UPLOAD", false),
 	}
 	if c.NekoAPIToken == "" {
 		return c, errors.New("COZYCAST_NEKO_API_TOKEN is required")

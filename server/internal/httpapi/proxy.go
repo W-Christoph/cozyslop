@@ -9,10 +9,11 @@ import (
 // nekoPaths are the neko endpoints browsers may reach. Everything else
 // (member management, room settings, neko's own UI) stays private, even
 // though neko would also reject non-admin sessions on its own.
+// Uploads go through the file transfer plugin, which neko gates by the
+// member's upload right; neko's drop/dialog uploads only check remote
+// control, so they are not exposed.
 var nekoPaths = []string{
 	"api/ws",
-	"api/room/upload/drop",
-	"api/room/upload/dialog",
 	"api/filetransfer",
 }
 
@@ -26,7 +27,7 @@ func nekoPathAllowed(p string) bool {
 }
 
 func (s *Server) nekoProxy(w http.ResponseWriter, r *http.Request) {
-	rm := s.room(r)
+	rm := s.hub.Room(r.PathValue("room"))
 	path := r.PathValue("path")
 	if rm == nil || !nekoPathAllowed(path) {
 		http.NotFound(w, r)

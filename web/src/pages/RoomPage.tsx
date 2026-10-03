@@ -6,12 +6,13 @@ import { RemoteScreen } from '../components/RemoteScreen'
 import { useRoom } from '../room/useRoom'
 import styles from './RoomPage.module.css'
 
-export function RoomPage({ room, name }: { room: string; name: string }) {
-  const r = useRoom(room, name)
+export function RoomPage({ room, access }: { room: string; access?: string }) {
+  const r = useRoom(room, access)
   const [muted, setMuted] = useState(true)
 
-  const status =
-    r.server.value !== 'connected'
+  const status = r.kicked.value
+    ? `You can't be in this room (${r.kicked.value}).`
+    : r.server.value !== 'connected'
       ? 'Connecting to server…'
       : r.error.value ?? (r.video.value === 'connected' ? 'Live' : 'Connecting to desktop…')
 

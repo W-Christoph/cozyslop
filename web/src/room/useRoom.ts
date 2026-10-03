@@ -4,29 +4,33 @@
 import { signal } from '@preact/signals'
 import { useEffect, useMemo } from 'preact/hooks'
 import { NekoClient, type NekoStatus } from '../neko/client'
-import { RoomSocket, type Permissions } from './socket'
+import type { KickReason, Rights } from './protocol'
+import { RoomSocket } from './socket'
 
 const NEKO_RETRY_MS = 1_500
 
-export function useRoom(room: string, name: string) {
+const noRights: Rights = { admin: false, trusted: false, remote: false, image: false, upload: false }
+
+export function useRoom(room: string, access?: string) {
   const state = useMemo(
     () => ({
       neko: new NekoClient(),
       server: signal<'connecting' | 'connected'>('connecting'),
       video: signal<NekoStatus>('disconnected'),
       stream: signal<MediaStream | null>(null),
-      permissions: signal<Permissions>({ remote: false, upload: false }),
+      rights: signal<Rights>(noRights),
+      kicked: signal<KickReason | null>(null),
       isHost: signal(false),
       canHost: signal(false),
       hasHost: signal(false),
       error: signal<string | null>(null),
     }),
-    [room, name],
+    [room, access],
   )
 
   useEffect(() => {
     const { neko } = state
-    const socket = new RoomSocket(room, name)
+    const socket = new RoomSocket(room, access)
     let retry: number | undefined
 
     const offs = [
@@ -40,7 +44,12 @@ export function useRoom(room: string, name: string) {
       socket.on('message', (msg) => {
         switch (msg.type) {
           case 'welcome':
-            state.permissions.value = msg.permissions
+          case 'rights':
+            state.rights.value = msg.rights
+            break
+          case 'kicked':
+            state.kicked.value = msg.reason
+            neko.disconnect()
             break
           case 'neko':
             state.error.value = null
@@ -65,7 +74,7 @@ export function useRoom(room: string, name: string) {
         // Token may be stale (neko restarted, session removed): ask for a
         // new one rather than retrying the old one.
         window.clearTimeout(retry)
-        retry = window.setTimeout(() => socket.send({ type: 'neko/token' }), NEKO_RETRY_MS)
+        retry = window.setTimeout(() => socket.send({ type: 'neko_token' }), NEKO_RETRY_MS)
       }),
     ]
 

@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"cozycast/internal/hub"
 	"cozycast/internal/neko"
-	"cozycast/internal/room"
 )
 
 func TestNekoProxy(t *testing.T) {
@@ -20,7 +20,7 @@ func TestNekoProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(New(Deps{Rooms: map[string]*room.Room{"default": room.New("default", nc, room.Permissions{})}}).Handler())
+	srv := httptest.NewServer(New(Deps{Hub: hub.New(nil, "", []hub.RoomConfig{{Name: "default", Neko: nc}})}).Handler())
 	defer srv.Close()
 
 	tests := []struct {
@@ -31,6 +31,7 @@ func TestNekoProxy(t *testing.T) {
 		{"/neko/default/api/ws?token=abc", http.StatusOK, "/api/ws"},
 		{"/neko/default/api/filetransfer/x", http.StatusOK, "/api/filetransfer/x"},
 		{"/neko/default/api/members", http.StatusNotFound, ""},
+		{"/neko/default/api/room/upload/drop", http.StatusNotFound, ""},
 		{"/neko/default/api/wsx", http.StatusNotFound, ""},
 		{"/neko/other/api/ws", http.StatusNotFound, ""},
 	}

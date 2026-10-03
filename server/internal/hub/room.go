@@ -1,0 +1,646 @@
+package hub
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"hash/fnv"
+	"log/slog"
+	"math"
+	"strconv"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"cozycast/internal/auth"
+	"cozycast/internal/neko"
+	"cozycast/internal/ratelimit"
+	"cozycast/internal/rights"
+	"cozycast/internal/store"
+)
+
+var (
+	ErrNotPresent = errors.New("hub: user is not in the room")
+	ErrNotAllowed = errors.New("hub: not allowed")
+)
+
+// DeniedError is returned by Join when the identity may not enter.
+type DeniedError struct{ Denial rights.Denial }
+
+func (e *DeniedError) Error() string { return "hub: join denied: " + e.Denial.Reason }
+
+type Room struct {
+	Name     string
+	NekoPath string // public path the browser uses to reach this room's neko
+
+	hub   *Hub
+	neko  *neko.Client
+	log   *slog.Logger
+	ready chan struct{} // closed once neko is up and cleaned
+
+	chatUser  *ratelimit.Limiter
+	chatAnon  *ratelimit.Limiter
+	whisperID atomic.Int64
+
+	mu       sync.Mutex
+	settings store.RoomSettings
+	members  map[string]*member // by identity key
+	clients  map[string]*Client // by client id
+	hostID   string             // neko session id (= client id) holding the remote
+}
+
+// member is one person in the room, with all their tabs.
+type member struct {
+	key      string
+	user     *store.User // nil for anonymous
+	anonID   string
+	ip       string
+	perm     store.Permission
+	grant    *rights.Grant // from a temporary access invite
+	rights   rights.Rights
+	joinedAt int64 // unix ms
+	lastSeen int64 // unix ms; when the member was last active
+	clients  map[string]*Client
+}
+
+// Client is one browser tab.
+type Client struct {
+	ID   string
+	send func(any) // must not block
+	kill func()    // closes the connection; Leave follows
+
+	// guarded by Room.mu
+	m      *member
+	active bool
+	muted  bool
+	typing time.Time // last typing broadcast, for throttling
+
+	nekoMu       sync.Mutex // serializes neko member creation and updates
+	nekoPassword string
+}
+
+func newRoom(h *Hub, name string, nc *neko.Client) *Room {
+	return &Room{
+		Name:     name,
+		NekoPath: "/neko/" + name,
+		hub:      h,
+		neko:     nc,
+		log:      slog.With("room", name),
+		ready:    make(chan struct{}),
+		chatUser: ratelimit.New(10, 500*time.Millisecond),
+		chatAnon: ratelimit.New(5, time.Second),
+		settings: store.RoomSettings{Name: name, Access: "public"},
+		members:  make(map[string]*member),
+		clients:  make(map[string]*Client),
+	}
+}
+
+func (r *Room) Neko() *neko.Client { return r.neko }
+
+// UserCount is the number of people (not tabs) in the room.
+func (r *Room) UserCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.members)
+}
+
+// run loads settings, prepares neko and follows the remote until ctx ends.
+func (r *Room) run(ctx context.Context) {
+	if s, err := r.hub.store.RoomSettings(ctx, r.Name); err != nil {
+		r.log.Error("load room settings", "err", err)
+	} else {
+		r.mu.Lock()
+		r.settings = s
+		r.mu.Unlock()
+	}
+
+	for {
+		if r.neko.Healthy(ctx) {
+			err := r.prepareNeko(ctx)
+			if err == nil {
+				break
+			}
+			r.log.Warn("prepare neko", "err", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(2 * time.Second):
+		}
+	}
+	close(r.ready)
+	r.log.Info("neko ready")
+	r.neko.WatchHost(ctx, r.setHost)
+}
+
+// prepareNeko removes neko members left from a previous run (CozyCast owns
+// all of them) and applies room settings neko enforces.
+func (r *Room) prepareNeko(ctx context.Context) error {
+	members, err := r.neko.ListMembers(ctx)
+	if err != nil {
+		return err
+	}
+	for _, m := range members {
+		if err := r.neko.DeleteMember(ctx, m.ID); err != nil && !errors.Is(err, neko.ErrNotFound) {
+			return err
+		}
+	}
+	r.mu.Lock()
+	ownership := r.settings.RemoteOwnership
+	r.mu.Unlock()
+	return r.neko.SetImplicitHosting(ctx, !ownership)
+}
+
+// ---- joining and leaving --------------------------------------------------
+
+type JoinRequest struct {
+	Identity   auth.Identity
+	AccessCode string // temporary access invite, optional
+	Send       func(any)
+	Kill       func()
+}
+
+// Join admits a new tab, sends it the welcome message and announces it.
+func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
+	id := req.Identity
+	in := rights.Input{User: id.User, Now: time.Now().Unix()}
+	var err error
+	if id.User != nil {
+		in.Perm, err = r.hub.store.Permission(ctx, r.Name, id.User.ID)
+	} else {
+		in.AnonBan, err = r.hub.store.AnonBan(ctx, r.Name, id.AnonID, id.IP)
+		if errors.Is(err, store.ErrNotFound) {
+			in.AnonBan, err = nil, nil
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	if req.AccessCode != "" {
+		inv, err := r.hub.store.Invite(ctx, req.AccessCode)
+		if err == nil && inv.Temporary && inv.Room == r.Name && inv.Valid(in.Now) {
+			in.Grant = &rights.Grant{Remote: inv.Remote, Image: inv.Image, Upload: inv.Upload}
+		}
+	}
+
+	r.mu.Lock()
+	in.Room = r.settings
+	r.mu.Unlock()
+	if d := rights.Admit(in); d != nil {
+		return nil, &DeniedError{*d}
+	}
+	// Count the access invite only once it actually let someone in.
+	if in.Grant != nil {
+		_, err := r.hub.store.UseAccessInvite(ctx, req.AccessCode, r.Name)
+		if errors.Is(err, store.ErrInvalidInvite) {
+			in.Grant = nil
+			if d := rights.Admit(in); d != nil {
+				return nil, &DeniedError{*d}
+			}
+		} else if err != nil {
+			return nil, err
+		}
+	}
+
+	c := &Client{ID: "c-" + randomID(), send: req.Send, kill: req.Kill, active: true}
+	now := time.Now().UnixMilli()
+
+	r.mu.Lock()
+	key := id.Key()
+	m := r.members[key]
+	isNew := m == nil
+	if isNew {
+		m = &member{key: key, anonID: id.AnonID, joinedAt: now, lastSeen: now, clients: make(map[string]*Client)}
+		r.members[key] = m
+	}
+	m.user, m.perm, m.ip = id.User, in.Perm, id.IP
+	if in.Grant != nil {
+		m.grant = mergeGrant(m.grant, in.Grant)
+	}
+	c.m = m
+	m.clients[c.ID] = c
+	r.clients[c.ID] = c
+	changed := r.recomputeLocked(m)
+
+	// History is read under the lock: a chat message is either in it or
+	// broadcast to this client afterwards, never lost in between.
+	history, err := r.hub.store.ChatHistory(ctx, r.Name)
+	if err != nil {
+		r.removeClientLocked(c)
+		r.mu.Unlock()
+		return nil, err
+	}
+	c.send(welcomeMsg{
+		Type:     "welcome",
+		ClientID: c.ID,
+		Self:     r.userLocked(m),
+		Rights:   m.rights,
+		Settings: r.settings,
+		Users:    r.usersLocked(),
+		History:  r.toChat(history),
+		Remote:   r.holderLocked(),
+	})
+	var resync []*Client
+	if isNew {
+		r.broadcastLocked(userMsg{Type: "user_joined", User: r.userLocked(m)}, m)
+	} else if changed {
+		resync = r.pushRightsLocked(m)
+	}
+	r.mu.Unlock()
+
+	r.syncNeko(ctx, resync)
+	r.log.Info("client joined", "client", c.ID, "identity", key)
+	return c, nil
+}
+
+// Leave removes a tab; the person leaves once their last tab is gone.
+func (r *Room) Leave(ctx context.Context, c *Client) {
+	r.mu.Lock()
+	r.removeClientLocked(c)
+	r.mu.Unlock()
+
+	if err := r.neko.DeleteMember(ctx, c.ID); err != nil && !errors.Is(err, neko.ErrNotFound) {
+		r.log.Warn("delete neko member", "client", c.ID, "err", err)
+	}
+	r.log.Info("client left", "client", c.ID)
+}
+
+func (r *Room) removeClientLocked(c *Client) {
+	if _, ok := r.clients[c.ID]; !ok {
+		return
+	}
+	delete(r.clients, c.ID)
+	m := c.m
+	before := r.userLocked(m)
+	delete(m.clients, c.ID)
+	if len(m.clients) == 0 {
+		delete(r.members, m.key)
+		r.broadcastLocked(userLeftMsg{Type: "user_left", Key: m.key}, nil)
+		return
+	}
+	if after := r.userLocked(m); after != before {
+		r.broadcastLocked(userMsg{Type: "user_updated", User: after}, nil)
+	}
+}
+
+// ---- rights ---------------------------------------------------------------
+
+// recomputeLocked updates m.rights from its inputs and reports a change.
+func (r *Room) recomputeLocked(m *member) bool {
+	next := rights.Compute(rights.Input{Room: r.settings, User: m.user, Perm: m.perm, Grant: m.grant})
+	if next == m.rights {
+		return false
+	}
+	m.rights = next
+	return true
+}
+
+// pushRightsLocked tells m's tabs about their new rights and returns the
+// tabs whose neko member must be updated (outside the lock).
+func (r *Room) pushRightsLocked(m *member) []*Client {
+	clients := make([]*Client, 0, len(m.clients))
+	for _, c := range m.clients {
+		c.send(rightsMsg{Type: "rights", Rights: m.rights})
+		clients = append(clients, c)
+	}
+	return clients
+}
+
+// refreshUser re-reads an account and its permission in this room.
+func (r *Room) refreshUser(ctx context.Context, userID int64) {
+	key := "u:" + strconv.FormatInt(userID, 10)
+	r.mu.Lock()
+	_, present := r.members[key]
+	r.mu.Unlock()
+	if !present {
+		return
+	}
+
+	u, err := r.hub.store.UserByID(ctx, userID)
+	if errors.Is(err, store.ErrNotFound) || (err == nil && u.Disabled) {
+		r.kick(key, kickedMsg{Type: "kicked", Reason: "deleted"})
+		return
+	}
+	if err != nil {
+		r.log.Warn("refresh user", "user", userID, "err", err)
+		return
+	}
+	perm, err := r.hub.store.Permission(ctx, r.Name, userID)
+	if err != nil {
+		r.log.Warn("refresh permission", "user", userID, "err", err)
+		return
+	}
+
+	r.mu.Lock()
+	m := r.members[key]
+	if m == nil {
+		r.mu.Unlock()
+		return
+	}
+	before := r.userLocked(m)
+	m.user, m.perm = u, perm
+	in := rights.Input{Room: r.settings, User: u, Perm: perm, Grant: m.grant, Now: time.Now().Unix()}
+	if d := rights.Admit(in); d != nil {
+		r.kickLocked(m, kickedMsg{Type: "kicked", Reason: d.Reason, BannedUntil: d.BannedUntil})
+		r.mu.Unlock()
+		return
+	}
+	var resync []*Client
+	if r.recomputeLocked(m) {
+		resync = r.pushRightsLocked(m)
+	}
+	if after := r.userLocked(m); after != before {
+		r.broadcastLocked(userMsg{Type: "user_updated", User: after}, nil)
+		resync = m.clientList() // the neko display name may have changed
+	}
+	r.mu.Unlock()
+	r.syncNeko(ctx, resync)
+}
+
+// reloadSettings applies changed room settings to everyone present.
+func (r *Room) reloadSettings(ctx context.Context) {
+	s, err := r.hub.store.RoomSettings(ctx, r.Name)
+	if err != nil {
+		r.log.Warn("reload room settings", "err", err)
+		return
+	}
+
+	r.mu.Lock()
+	ownershipChanged := s.RemoteOwnership != r.settings.RemoteOwnership
+	r.settings = s
+	r.broadcastLocked(settingsMsg{Type: "room_settings", Settings: s}, nil)
+	var resync []*Client
+	now := time.Now().Unix()
+	for _, m := range r.members {
+		// Anonymous bans do not depend on settings, so they are not re-checked.
+		in := rights.Input{Room: s, User: m.user, Perm: m.perm, Grant: m.grant, Now: now}
+		if d := rights.Admit(in); d != nil {
+			r.kickLocked(m, kickedMsg{Type: "kicked", Reason: d.Reason, BannedUntil: d.BannedUntil})
+			continue
+		}
+		if r.recomputeLocked(m) {
+			resync = append(resync, r.pushRightsLocked(m)...)
+		}
+	}
+	r.mu.Unlock()
+
+	if ownershipChanged {
+		if err := r.neko.SetImplicitHosting(ctx, !s.RemoteOwnership); err != nil {
+			r.log.Warn("set neko implicit hosting", "err", err)
+		}
+	}
+	r.syncNeko(ctx, resync)
+}
+
+// ---- moderation -----------------------------------------------------------
+
+// Ban bans the person with the given identity key from this room until
+// `until` (unix seconds, nil = forever) and disconnects them. Accounts are
+// banned by account; anonymous users by browser id and IP.
+func (r *Room) Ban(ctx context.Context, key string, until *int64) error {
+	r.mu.Lock()
+	m := r.members[key]
+	if m == nil {
+		r.mu.Unlock()
+		return ErrNotPresent
+	}
+	user, anonID, ip := m.user, m.anonID, m.ip
+	r.mu.Unlock()
+
+	var err error
+	if user != nil {
+		err = r.hub.store.BanUser(ctx, r.Name, user.ID, until)
+	} else {
+		err = r.hub.store.AddAnonBan(ctx, r.Name, anonID, ip, until)
+	}
+	if err != nil {
+		return err
+	}
+	r.kick(key, kickedMsg{Type: "kicked", Reason: "banned", BannedUntil: until})
+	return nil
+}
+
+// Kick disconnects a person without banning them; they may rejoin.
+func (r *Room) Kick(key string) error {
+	if !r.kick(key, kickedMsg{Type: "kicked", Reason: "kicked"}) {
+		return ErrNotPresent
+	}
+	return nil
+}
+
+func (r *Room) kick(key string, msg kickedMsg) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	m := r.members[key]
+	if m == nil {
+		return false
+	}
+	r.kickLocked(m, msg)
+	return true
+}
+
+// kickLocked tells every tab of m why, then closes them. The sockets call
+// Leave themselves.
+func (r *Room) kickLocked(m *member, msg kickedMsg) {
+	for _, c := range m.clients {
+		c.send(msg)
+		c.kill()
+	}
+}
+
+// ResetRemote takes the remote from whoever holds it.
+func (r *Room) ResetRemote(ctx context.Context) error {
+	return r.neko.ResetControl(ctx)
+}
+
+// ---- neko -----------------------------------------------------------------
+
+// NekoToken returns a fresh neko session token for the tab, creating its
+// neko member first if needed (first call, or neko restarted).
+func (r *Room) NekoToken(ctx context.Context, c *Client) (string, error) {
+	select {
+	case <-r.ready:
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+
+	c.nekoMu.Lock()
+	defer c.nekoMu.Unlock()
+
+	if c.nekoPassword != "" {
+		token, err := r.neko.Login(ctx, c.ID, c.nekoPassword)
+		if err == nil {
+			return token, nil
+		}
+		r.log.Info("neko login failed, recreating member", "client", c.ID, "err", err)
+		_ = r.neko.DeleteMember(ctx, c.ID)
+	}
+
+	password := randomID() + randomID()
+	if err := r.neko.CreateMember(ctx, c.ID, password, r.nekoProfile(c)); err != nil {
+		return "", fmt.Errorf("create neko member: %w", err)
+	}
+	c.nekoPassword = password
+	return r.neko.Login(ctx, c.ID, password)
+}
+
+// syncNeko pushes current rights and names to the tabs' neko members.
+func (r *Room) syncNeko(ctx context.Context, clients []*Client) {
+	for _, c := range clients {
+		c.nekoMu.Lock()
+		if c.nekoPassword != "" {
+			if err := r.neko.UpdateProfile(ctx, c.ID, r.nekoProfile(c)); err != nil && !errors.Is(err, neko.ErrNotFound) {
+				r.log.Warn("update neko member", "client", c.ID, "err", err)
+			}
+		}
+		c.nekoMu.Unlock()
+	}
+}
+
+func (r *Room) nekoProfile(c *Client) neko.Profile {
+	r.mu.Lock()
+	name := r.userLocked(c.m).Nickname
+	rt := c.m.rights
+	r.mu.Unlock()
+	return neko.Profile{
+		Name:               name,
+		CanLogin:           true,
+		CanConnect:         true,
+		CanWatch:           true,
+		CanHost:            rt.Remote,
+		CanAccessClipboard: rt.Remote,
+		Plugins: map[string]any{
+			"filetransfer.enabled": rt.Upload,
+			"chat.can_send":        false,
+			"chat.can_receive":     false,
+		},
+	}
+}
+
+// setHost is called by the neko event stream when the remote changes hands.
+func (r *Room) setHost(hostID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if hostID == r.hostID {
+		return
+	}
+	r.hostID = hostID
+	r.broadcastLocked(remoteMsg{Type: "remote", Holder: r.holderLocked()}, nil)
+}
+
+func (r *Room) holderLocked() *string {
+	if c := r.clients[r.hostID]; c != nil {
+		return &c.m.key
+	}
+	return nil
+}
+
+// ---- helpers --------------------------------------------------------------
+
+// broadcastLocked sends msg to every tab except those of `except`.
+func (r *Room) broadcastLocked(msg any, except *member) {
+	for _, c := range r.clients {
+		if except != nil && c.m == except {
+			continue
+		}
+		c.send(msg)
+	}
+}
+
+func (m *member) clientList() []*Client {
+	list := make([]*Client, 0, len(m.clients))
+	for _, c := range m.clients {
+		list = append(list, c)
+	}
+	return list
+}
+
+func (r *Room) usersLocked() []User {
+	users := make([]User, 0, len(r.members))
+	for _, m := range r.members {
+		users = append(users, r.userLocked(m))
+	}
+	return users
+}
+
+func (r *Room) userLocked(m *member) User {
+	u := User{
+		Key:       m.key,
+		Admin:     m.rights.Admin,
+		JoinedAt:  m.joinedAt,
+		LastSeen:  m.lastSeen,
+		Anonymous: m.user == nil,
+		Muted:     true,
+	}
+	for _, c := range m.clients {
+		u.Active = u.Active || c.active
+		u.Muted = u.Muted && c.muted
+	}
+	if m.user != nil {
+		u.Nickname, u.NameColor, u.AvatarURL = m.user.Nickname, m.user.NameColor, avatarURL(m.user)
+	} else {
+		u.Nickname, u.NameColor, u.AvatarURL = "Anonymous", anonColor(m.anonID), "/png/default_avatar_on_alpha.png"
+	}
+	return u
+}
+
+func avatarURL(u *store.User) string {
+	if u.Avatar == "" {
+		return "/png/default_avatar.png"
+	}
+	return "/media/avatars/" + u.Avatar
+}
+
+// anonColor gives each anonymous browser a stable, readable name colour.
+func anonColor(anonID string) string {
+	h := fnv.New32a()
+	h.Write([]byte(anonID))
+	return hslHex(float64(h.Sum32()%360), 0.65, 0.65)
+}
+
+func hslHex(hue, sat, light float64) string {
+	c := (1 - math.Abs(2*light-1)) * sat
+	x := c * (1 - math.Abs(math.Mod(hue/60, 2)-1))
+	m := light - c/2
+	var rf, gf, bf float64
+	switch {
+	case hue < 60:
+		rf, gf, bf = c, x, 0
+	case hue < 120:
+		rf, gf, bf = x, c, 0
+	case hue < 180:
+		rf, gf, bf = 0, c, x
+	case hue < 240:
+		rf, gf, bf = 0, x, c
+	case hue < 300:
+		rf, gf, bf = x, 0, c
+	default:
+		rf, gf, bf = c, 0, x
+	}
+	to := func(v float64) int { return int((v+m)*255 + 0.5) }
+	return fmt.Sprintf("#%02x%02x%02x", to(rf), to(gf), to(bf))
+}
+
+func mergeGrant(a, b *rights.Grant) *rights.Grant {
+	if a == nil {
+		return b
+	}
+	return &rights.Grant{Remote: a.Remote || b.Remote, Image: a.Image || b.Image, Upload: a.Upload || b.Upload}
+}
+
+func randomID() string {
+	b := make([]byte, 9)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// Settings returns the room's current settings.
+func (r *Room) Settings() store.RoomSettings {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.settings
+}

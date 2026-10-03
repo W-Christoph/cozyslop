@@ -4,51 +4,36 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
+	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
-	"cozycast/internal/room"
+	"cozycast/internal/hub"
 )
 
 const (
-	sendBuffer   = 64
+	sendBuffer   = 256
 	writeTimeout = 10 * time.Second
 	pingInterval = 20 * time.Second
-	maxNameRunes = 32
+
+	// Close code for "the server ended this on purpose"; the browser does
+	// not reconnect.
+	statusKicked websocket.StatusCode = 4000
 )
 
-// Messages from server to browser.
-type welcomeMsg struct {
-	Type        string           `json:"type"` // "welcome"
-	ID          string           `json:"id"`
-	Name        string           `json:"name"`
-	Permissions room.Permissions `json:"permissions"`
-}
-
-type nekoMsg struct {
-	Type  string `json:"type"` // "neko"
-	Token string `json:"token"`
-	Path  string `json:"path"`
-}
-
-type errorMsg struct {
-	Type    string `json:"type"` // "error"
-	Message string `json:"message"`
-}
-
-// Messages from browser to server.
-type clientMsg struct {
-	Type string `json:"type"`
-}
-
 func (s *Server) roomSocket(w http.ResponseWriter, r *http.Request) {
-	rm := s.room(r)
+	rm := s.hub.Room(r.PathValue("room"))
 	if rm == nil {
 		http.NotFound(w, r)
+		return
+	}
+	// Identify before the upgrade so a fresh anonymous cookie is set on the
+	// handshake response.
+	id, err := s.auth.Identify(w, r)
+	if err != nil {
+		s.internalError(w, r, err)
 		return
 	}
 
@@ -60,54 +45,68 @@ func (s *Server) roomSocket(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
+	sock := newSocket(conn)
+	go sock.writeLoop(ctx, cancel)
 
-	out := make(chan any, sendBuffer)
-	send := func(msg any) {
-		select {
-		case out <- msg:
-		default:
-			// A client that cannot keep up is dropped rather than
-			// allowed to stall the room.
-			cancel()
-		}
-	}
-	go writeLoop(ctx, cancel, conn, out)
-
-	client := rm.Join(displayName(r.URL.Query().Get("name")), send)
-	defer rm.Leave(context.WithoutCancel(ctx), client)
-
-	send(welcomeMsg{Type: "welcome", ID: client.ID, Name: client.Name, Permissions: client.Permissions()})
-	s.sendNekoToken(ctx, rm, client)
-
-	for {
-		var msg clientMsg
-		if err := wsjson.Read(ctx, conn, &msg); err != nil {
-			if !errors.Is(err, context.Canceled) && websocket.CloseStatus(err) == -1 {
-				s.log.Debug("room socket read", "client", client.ID, "err", err)
-			}
-			conn.Close(websocket.StatusNormalClosure, "")
-			return
-		}
-		switch msg.Type {
-		case "neko/token":
-			// Sent by the browser when its neko connection was rejected,
-			// e.g. after the neko container restarted.
-			s.sendNekoToken(ctx, rm, client)
-		}
-	}
-}
-
-func (s *Server) sendNekoToken(ctx context.Context, rm *room.Room, c *room.Client) {
-	token, err := rm.NekoToken(ctx, c)
-	if err != nil {
-		s.log.Error("issue neko token", "room", rm.Name, "client", c.ID, "err", err)
-		c.Send(errorMsg{Type: "error", Message: "The room's desktop is not reachable right now."})
+	client, err := rm.Join(ctx, hub.JoinRequest{
+		Identity:   id,
+		AccessCode: r.URL.Query().Get("access"),
+		Send:       sock.send,
+		Kill:       sock.kill,
+	})
+	var denied *hub.DeniedError
+	if errors.As(err, &denied) {
+		sock.send(map[string]any{"type": "kicked", "reason": denied.Denial.Reason, "bannedUntil": denied.Denial.BannedUntil})
+		sock.kill()
+		<-ctx.Done()
 		return
 	}
-	c.Send(nekoMsg{Type: "neko", Token: token, Path: rm.NekoPath})
+	if err != nil {
+		s.log.Error("join room", "room", rm.Name, "err", err)
+		conn.Close(websocket.StatusInternalError, "")
+		return
+	}
+	defer rm.Leave(context.WithoutCancel(ctx), client)
+
+	go rm.SendNekoToken(ctx, client)
+
+	for {
+		var msg hub.ClientMsg
+		if err := wsjson.Read(ctx, conn, &msg); err != nil {
+			return
+		}
+		rm.Handle(ctx, client, msg)
+	}
 }
 
-func writeLoop(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn, out <-chan any) {
+// socket queues outgoing messages so the hub never blocks on a slow browser.
+type socket struct {
+	conn    *websocket.Conn
+	out     chan any
+	closing chan struct{}
+	once    sync.Once
+}
+
+func newSocket(conn *websocket.Conn) *socket {
+	return &socket{conn: conn, out: make(chan any, sendBuffer), closing: make(chan struct{})}
+}
+
+func (s *socket) send(msg any) {
+	select {
+	case s.out <- msg:
+	default:
+		// A browser that cannot keep up is dropped rather than allowed to
+		// stall the room; it reconnects and gets a fresh state.
+		s.kill()
+	}
+}
+
+// kill closes the connection after the queued messages are written.
+func (s *socket) kill() {
+	s.once.Do(func() { close(s.closing) })
+}
+
+func (s *socket) writeLoop(ctx context.Context, cancel context.CancelFunc) {
 	defer cancel()
 	ping := time.NewTicker(pingInterval)
 	defer ping.Stop()
@@ -115,16 +114,25 @@ func writeLoop(ctx context.Context, cancel context.CancelFunc, conn *websocket.C
 		select {
 		case <-ctx.Done():
 			return
-		case msg := <-out:
-			wctx, wcancel := context.WithTimeout(ctx, writeTimeout)
-			err := wsjson.Write(wctx, conn, msg)
-			wcancel()
-			if err != nil {
+		case msg := <-s.out:
+			if s.write(ctx, msg) != nil {
 				return
+			}
+		case <-s.closing:
+			for {
+				select {
+				case msg := <-s.out:
+					if s.write(ctx, msg) != nil {
+						return
+					}
+				default:
+					s.conn.Close(statusKicked, "")
+					return
+				}
 			}
 		case <-ping.C:
 			pctx, pcancel := context.WithTimeout(ctx, writeTimeout)
-			err := conn.Ping(pctx)
+			err := s.conn.Ping(pctx)
 			pcancel()
 			if err != nil {
 				return
@@ -133,13 +141,8 @@ func writeLoop(ctx context.Context, cancel context.CancelFunc, conn *websocket.C
 	}
 }
 
-func displayName(raw string) string {
-	name := strings.TrimSpace(raw)
-	if utf8.RuneCountInString(name) > maxNameRunes {
-		name = string([]rune(name)[:maxNameRunes])
-	}
-	if name == "" {
-		name = "Anonymous"
-	}
-	return name
+func (s *socket) write(ctx context.Context, msg any) error {
+	wctx, cancel := context.WithTimeout(ctx, writeTimeout)
+	defer cancel()
+	return wsjson.Write(wctx, s.conn, msg)
 }

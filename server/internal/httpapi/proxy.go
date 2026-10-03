@@ -11,17 +11,15 @@ import (
 // though neko would also reject non-admin sessions on its own.
 // Uploads go through the file transfer plugin, which neko gates by the
 // member's upload right; neko's drop/dialog uploads only check remote
-// control, so they are not exposed.
-var nekoPaths = []string{
-	"api/ws",
-	"api/filetransfer",
-}
-
-func nekoPathAllowed(p string) bool {
-	for _, allowed := range nekoPaths {
-		if p == allowed || strings.HasPrefix(p, allowed+"/") {
-			return true
-		}
+// control, so they are not exposed. The same plugin serves the desktop's
+// Downloads folder on GET, to anyone with the upload right: only POST (an
+// upload) is let through.
+func nekoRequestAllowed(method, p string) bool {
+	switch {
+	case p == "api/ws" || strings.HasPrefix(p, "api/ws/"):
+		return true
+	case p == "api/filetransfer":
+		return method == http.MethodPost
 	}
 	return false
 }
@@ -29,7 +27,7 @@ func nekoPathAllowed(p string) bool {
 func (s *Server) nekoProxy(w http.ResponseWriter, r *http.Request) {
 	rm := s.hub.Room(r.PathValue("room"))
 	path := r.PathValue("path")
-	if rm == nil || !nekoPathAllowed(path) {
+	if rm == nil || !nekoRequestAllowed(r.Method, path) {
 		http.NotFound(w, r)
 		return
 	}

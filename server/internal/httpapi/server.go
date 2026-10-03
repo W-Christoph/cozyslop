@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -112,7 +113,34 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/media", http.NotFound)
 	mux.HandleFunc("/neko/{room}/{path...}", s.nekoProxy)
 	mux.Handle("/", spaHandler(s.web))
-	return sameOrigin(validateMediaPath(mux))
+	return bodyDeadline(sameOrigin(validateMediaPath(mux)))
+}
+
+// How long a request body may take to arrive. Uploads to the room desktop
+// (through the neko proxy) can be large.
+var (
+	bodyTimeout       = 30 * time.Second
+	uploadBodyTimeout = 10 * time.Minute
+	nekoBodyTimeout   = 2 * time.Hour
+)
+
+// bodyDeadline stops a client from holding a connection open by never
+// finishing its request body. WebSocket upgrades have no body and lose the
+// deadline when the connection is taken over.
+func bodyDeadline(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ContentLength != 0 {
+			d := bodyTimeout
+			switch p := r.URL.Path; {
+			case strings.HasPrefix(p, "/neko/"):
+				d = nekoBodyTimeout
+			case p == "/api/me/avatar", strings.HasPrefix(p, "/api/rooms/") && strings.HasSuffix(p, "/media"):
+				d = uploadBodyTimeout
+			}
+			_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(d))
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // sameOrigin rejects state-changing requests sent by other sites. Session

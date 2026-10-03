@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"bufio"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"image"
@@ -37,6 +39,14 @@ var mediaContentTypes = map[string]string{
 }
 
 var errUnsupportedMedia = errors.New("unsupported media")
+
+// maxGIFPixels caps the pixels of all frames of a chat GIF together:
+// validating it keeps every frame in memory, one byte per pixel.
+var maxGIFPixels int64 = 100_000_000
+
+// decodeSlots bounds how many uploads are decoded at once; one decode can
+// need more than a hundred megabytes.
+var decodeSlots = make(chan struct{}, 2)
 
 // readUpload streams one multipart file to disk. The body and the file have
 // separate caps so multipart overhead cannot lower the advertised file limit.
@@ -123,6 +133,8 @@ func (s *Server) uploadError(w http.ResponseWriter, r *http.Request, err error) 
 // decodeUpload checks dimensions before allocating pixels. Avatars use only
 // the first GIF frame; chat validates every frame and retains the original file.
 func decodeUpload(f *os.File, allFrames bool) (image.Image, string, error) {
+	decodeSlots <- struct{}{}
+	defer func() { <-decodeSlots }()
 	cfg, format, err := image.DecodeConfig(f)
 	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width > 8000 || cfg.Height > 8000 || int64(cfg.Width)*int64(cfg.Height) > 40_000_000 {
 		return nil, "", errUnsupportedMedia
@@ -135,6 +147,12 @@ func decodeUpload(f *os.File, allFrames bool) (image.Image, string, error) {
 		return nil, "", err
 	}
 	if format == "gif" && allFrames {
+		if pixels, err := gifFramePixels(f, maxGIFPixels); err != nil || pixels > maxGIFPixels {
+			return nil, "", errUnsupportedMedia
+		}
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			return nil, "", err
+		}
 		animation, err := gif.DecodeAll(f)
 		if err != nil {
 			return nil, "", errUnsupportedMedia
@@ -146,6 +164,76 @@ func decodeUpload(f *os.File, allFrames bool) (image.Image, string, error) {
 		return nil, "", errUnsupportedMedia
 	}
 	return img, ext, nil
+}
+
+// gifFramePixels adds up the pixels of every frame of a GIF by walking its
+// blocks, without decoding any. It stops once the sum is over limit.
+func gifFramePixels(r io.Reader, limit int64) (int64, error) {
+	br := bufio.NewReader(r)
+	skip := func(n int) error {
+		_, err := br.Discard(n)
+		return err
+	}
+	// A colour table follows when the top bit of the flags is set.
+	skipColorTable := func(flags byte) error {
+		if flags&0x80 == 0 {
+			return nil
+		}
+		return skip(3 << (1 + flags&7))
+	}
+	skipSubBlocks := func() error {
+		for {
+			n, err := br.ReadByte()
+			if err != nil || n == 0 {
+				return err
+			}
+			if err := skip(int(n)); err != nil {
+				return err
+			}
+		}
+	}
+
+	var b [13]byte // header and logical screen descriptor
+	if _, err := io.ReadFull(br, b[:]); err != nil {
+		return 0, err
+	}
+	if err := skipColorTable(b[10]); err != nil {
+		return 0, err
+	}
+	var total int64
+	for {
+		block, err := br.ReadByte()
+		if err != nil {
+			return 0, err
+		}
+		switch block {
+		case 0x3B: // trailer
+			return total, nil
+		case 0x21: // extension: a label, then data
+			if err := skip(1); err != nil {
+				return 0, err
+			}
+		case 0x2C: // image: position, size, flags, colour table, LZW code size, then data
+			if _, err := io.ReadFull(br, b[:9]); err != nil {
+				return 0, err
+			}
+			total += int64(binary.LittleEndian.Uint16(b[4:])) * int64(binary.LittleEndian.Uint16(b[6:]))
+			if total > limit {
+				return total, nil
+			}
+			if err := skipColorTable(b[8]); err != nil {
+				return 0, err
+			}
+			if err := skip(1); err != nil {
+				return 0, err
+			}
+		default:
+			return 0, errUnsupportedMedia
+		}
+		if err := skipSubBlocks(); err != nil {
+			return 0, err
+		}
+	}
 }
 
 func randomMediaName(ext string) (string, error) {

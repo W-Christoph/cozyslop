@@ -135,7 +135,7 @@ func newFixtureWithRestart(t *testing.T, set store.RoomSettings, restart func(co
 		fakes = append(fakes, fake)
 	}
 	h := New(s, t.TempDir(), configs)
-	h.Start(ctx)
+	requireOK(t, h.Start(ctx))
 	t.Cleanup(func() {
 		cancel()
 		waitCtx, stop := observerDeadline()
@@ -242,7 +242,7 @@ func TestStartup(t *testing.T) {
 			done := make(chan struct{})
 			go func() { defer close(done); h.Room("main").SendNekoToken(ctx, c) }()
 			requireEqual(t, rec.count("neko"), 0)
-			h.Start(ctx)
+			requireOK(t, h.Start(ctx))
 			token := rec.wait(t, "neko").(nekoMsg)
 			if token.Token == "" {
 				t.Fatal("empty token")

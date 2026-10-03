@@ -20,10 +20,12 @@ Every connection has an **identity key**, which groups all tabs of one person:
 | Account | `u:<user id>` | nickname, colour, avatar from the account |
 | Anonymous | `a:<anon id>` | "Anonymous", colour derived from the anon id, default avatar |
 
-The anon id is a random value in the `cozy_anon` cookie (HttpOnly, 1 year), so
-an anonymous user keeps their identity across reloads and reconnects (and can
-still edit their own messages). Bans on anonymous users apply to the anon id
-**and** the IP address.
+The anon id is a hash of the random value in the `cozy_anon` cookie (HttpOnly,
+1 year), so an anonymous user keeps their identity across reloads and
+reconnects (and can still edit their own messages). Everyone in the room sees
+the anon id; the cookie value itself is never sent to other users, so knowing
+an anon id is not enough to act as that person. Bans on anonymous users apply
+to the anon id **and** the IP address.
 
 Each browser tab is additionally a **client** with its own id, which is also
 its neko member id.

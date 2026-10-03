@@ -7,6 +7,7 @@ package hub
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -57,12 +58,24 @@ func (h *Hub) Rooms() []*Room {
 	return list
 }
 
-// Start runs background work for every room until ctx ends.
-func (h *Hub) Start(ctx context.Context) {
+// Start loads every room's settings, then runs background work for the
+// rooms until ctx ends. Call it before serving: a room whose settings have
+// not been loaded lets everyone in.
+func (h *Hub) Start(ctx context.Context) error {
+	for _, r := range h.rooms {
+		s, err := h.store.RoomSettings(ctx, r.Name)
+		if err != nil {
+			return fmt.Errorf("load settings of room %s: %w", r.Name, err)
+		}
+		r.mu.Lock()
+		r.settings = s
+		r.mu.Unlock()
+	}
 	for _, r := range h.rooms {
 		go r.run(ctx)
 	}
 	go h.sweepChat(ctx)
+	return nil
 }
 
 // UserChanged re-reads an account (profile, flags) and applies it to its

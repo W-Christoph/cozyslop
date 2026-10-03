@@ -30,7 +30,7 @@ var ErrInvalidCredentials = errors.New("invalid username or password")
 // Identity is who is making a request: an account, or an anonymous browser.
 type Identity struct {
 	User   *store.User // nil for anonymous
-	AnonID string      // always set; stable per browser
+	AnonID string      // always set; stable per browser, derived from the cozy_anon cookie
 	IP     string
 }
 
@@ -69,10 +69,11 @@ func (a *Service) Identify(w http.ResponseWriter, r *http.Request) (Identity, er
 	id := Identity{IP: a.ClientIP(r)}
 
 	if c, err := r.Cookie(anonCookie); err == nil && validToken(c.Value) {
-		id.AnonID = c.Value
+		id.AnonID = anonID(c.Value)
 	} else {
-		id.AnonID = newToken()
-		a.setCookie(w, r, anonCookie, id.AnonID, anonCookieTTL)
+		token := newToken()
+		id.AnonID = anonID(token)
+		a.setCookie(w, r, anonCookie, token, anonCookieTTL)
 	}
 
 	if c, err := r.Cookie(sessionCookie); err == nil && validToken(c.Value) {
@@ -197,4 +198,12 @@ func validToken(s string) bool {
 func hashToken(token string) []byte {
 	h := sha256.Sum256([]byte(token))
 	return h[:]
+}
+
+// anonID is the public id of an anonymous browser. Everyone in a room sees
+// it (as "a:<anon id>"), so it must not be the cookie itself: knowing it is
+// not enough to become that person.
+func anonID(token string) string {
+	h := sha256.Sum256([]byte("cozycast anon id:" + token))
+	return base64.RawURLEncoding.EncodeToString(h[:16])
 }

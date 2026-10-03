@@ -41,7 +41,8 @@ type Room struct {
 	log   *slog.Logger
 	ready chan struct{} // closed once neko is up and cleaned
 
-	chatUser  *ratelimit.Limiter
+	inbound   *ratelimit.Limiter // per person: every message type
+	chatUser  *ratelimit.Limiter // per person: new chat messages
 	chatAnon  *ratelimit.Limiter
 	whisperID atomic.Int64
 	restart   func(ctx context.Context) error // nil = container control disabled
@@ -82,8 +83,9 @@ type Client struct {
 	muted  bool
 	typing time.Time // last typing broadcast, for throttling
 
-	nekoMu       sync.Mutex // serializes neko member creation and updates
+	nekoMu       sync.Mutex // serializes neko member creation, updates and deletion
 	nekoPassword string
+	gone         bool // left or kicked: no more neko members for this tab
 }
 
 func newRoom(h *Hub, name string, nc *neko.Client) *Room {
@@ -94,6 +96,7 @@ func newRoom(h *Hub, name string, nc *neko.Client) *Room {
 		neko:     nc,
 		log:      slog.With("room", name),
 		ready:    make(chan struct{}),
+		inbound:  ratelimit.New(40, 200*time.Millisecond),
 		chatUser: ratelimit.New(10, 500*time.Millisecond),
 		chatAnon: ratelimit.New(5, time.Second),
 		settings: store.RoomSettings{Name: name, Access: "public"},
@@ -111,16 +114,8 @@ func (r *Room) UserCount() int {
 	return len(r.members)
 }
 
-// run loads settings, prepares neko and follows the remote until ctx ends.
+// run prepares neko and follows the remote until ctx ends.
 func (r *Room) run(ctx context.Context) {
-	if s, err := r.hub.store.RoomSettings(ctx, r.Name); err != nil {
-		r.log.Error("load room settings", "err", err)
-	} else {
-		r.mu.Lock()
-		r.settings = s
-		r.mu.Unlock()
-	}
-
 	for {
 		if r.neko.Healthy(ctx) {
 			err := r.prepareNeko(ctx)
@@ -309,9 +304,14 @@ func (r *Room) Leave(ctx context.Context, c *Client) {
 	r.removeClientLocked(c)
 	r.mu.Unlock()
 
+	// Under nekoMu, so a token request still in flight cannot create the
+	// member after it was deleted.
+	c.nekoMu.Lock()
+	c.gone = true
 	if err := r.neko.DeleteMember(ctx, c.ID); err != nil && !errors.Is(err, neko.ErrNotFound) {
 		r.log.Warn("delete neko member", "client", c.ID, "err", err)
 	}
+	c.nekoMu.Unlock()
 	r.log.Info("client left", "client", c.ID)
 }
 
@@ -495,13 +495,17 @@ func (r *Room) kick(key string, msg kickedMsg) bool {
 	return true
 }
 
-// kickLocked tells every tab of m why, then closes them. The sockets call
-// Leave themselves.
+// kickLocked tells every tab of m why, removes them from the room and closes
+// them. They are gone at once: whatever a tab still sends while its socket
+// closes is ignored (see Handle). The sockets call Leave themselves, which
+// deletes their neko members.
 func (r *Room) kickLocked(m *member, msg kickedMsg) {
-	for _, c := range m.clients {
+	for _, c := range m.clientList() {
 		c.send(msg)
+		r.removeClientLocked(c)
 		c.kill()
 	}
+	m.rights = rights.Rights{}
 }
 
 // ResetRemote takes the remote from whoever holds it.
@@ -522,6 +526,9 @@ func (r *Room) NekoToken(ctx context.Context, c *Client) (string, error) {
 
 	c.nekoMu.Lock()
 	defer c.nekoMu.Unlock()
+	if c.gone {
+		return "", ErrNotPresent
+	}
 
 	if c.nekoPassword != "" {
 		token, err := r.neko.Login(ctx, c.ID, c.nekoPassword)

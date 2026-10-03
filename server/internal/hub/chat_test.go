@@ -353,3 +353,29 @@ func TestConcurrentChatAndJoinOrdering(t *testing.T) {
 		requireEqual(t, rec.count("error"), 0)
 	}
 }
+
+func TestInboundRateLimitCoversEveryMessageType(t *testing.T) {
+	f := newFixture(t, store.RoomSettings{})
+	// A refill interval longer than the test, as in TestChatLimitsAndRateLimit.
+	f.r.inbound = ratelimit.New(6, time.Hour)
+	c, a := f.join(anon("flooder"))
+	tab, b := f.join(anon("flooder"))
+	_, watch := f.join(anon("watcher"))
+	for i := 0; i < 6; i++ {
+		f.r.Handle(f.ctx, c, ClientMsg{Type: "typing", Typing: false})
+	}
+	requireEqual(t, watch.count("typing"), 6)
+	// The bucket is per person, and no message type is exempt.
+	for _, msg := range []ClientMsg{
+		{Type: "typing"}, {Type: "activity"}, {Type: "muted", Muted: true}, {Type: "chat_edit", ID: 1, Body: "x"},
+		{Type: "chat_send", Body: "x"}, {Type: "unknown"},
+	} {
+		f.r.Handle(f.ctx, tab, msg)
+		expectError(t, b, "You are sending messages too fast.")
+	}
+	requireEqual(t, watch.count("typing")+watch.count("user_updated")+watch.count("chat"), 6)
+	requireEqual(t, a.count("error"), 0)
+	other, rec := f.join(anon("independent"))
+	f.r.Handle(f.ctx, other, ClientMsg{Type: "chat_send", Body: "separate bucket"})
+	rec.wait(t, "chat")
+}

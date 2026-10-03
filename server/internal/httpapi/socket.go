@@ -21,6 +21,8 @@ const (
 	// Close code for "the server ended this on purpose"; the browser does
 	// not reconnect.
 	statusKicked websocket.StatusCode = 4000
+	// Close code for a browser that fell behind; it reconnects.
+	statusOverflow = websocket.StatusTryAgainLater
 )
 
 func (s *Server) roomSocket(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +87,7 @@ type socket struct {
 	out     chan any
 	closing chan struct{}
 	once    sync.Once
+	code    websocket.StatusCode // set before closing is closed
 }
 
 func newSocket(conn *websocket.Conn) *socket {
@@ -93,17 +96,28 @@ func newSocket(conn *websocket.Conn) *socket {
 
 func (s *socket) send(msg any) {
 	select {
+	case <-s.closing:
+		return // nothing is queued after the reason for closing
+	default:
+	}
+	select {
 	case s.out <- msg:
 	default:
 		// A browser that cannot keep up is dropped rather than allowed to
 		// stall the room; it reconnects and gets a fresh state.
-		s.kill()
+		s.close(statusOverflow)
 	}
 }
 
-// kill closes the connection after the queued messages are written.
-func (s *socket) kill() {
-	s.once.Do(func() { close(s.closing) })
+// kill closes the connection for good, after the messages queued so far
+// (the reason, usually) are written.
+func (s *socket) kill() { s.close(statusKicked) }
+
+func (s *socket) close(code websocket.StatusCode) {
+	s.once.Do(func() {
+		s.code = code
+		close(s.closing)
+	})
 }
 
 func (s *socket) writeLoop(ctx context.Context, cancel context.CancelFunc) {
@@ -119,17 +133,11 @@ func (s *socket) writeLoop(ctx context.Context, cancel context.CancelFunc) {
 				return
 			}
 		case <-s.closing:
-			for {
-				select {
-				case msg := <-s.out:
-					if s.write(ctx, msg) != nil {
-						return
-					}
-				default:
-					s.conn.Close(statusKicked, "")
-					return
-				}
+			if s.code == statusKicked {
+				s.drain(ctx)
 			}
+			s.conn.Close(s.code, "")
+			return
 		case <-ping.C:
 			pctx, pcancel := context.WithTimeout(ctx, writeTimeout)
 			err := s.conn.Ping(pctx)
@@ -137,6 +145,23 @@ func (s *socket) writeLoop(ctx context.Context, cancel context.CancelFunc) {
 			if err != nil {
 				return
 			}
+		}
+	}
+}
+
+// drain writes what is queued, within one write timeout in total: a browser
+// that reads slowly cannot keep a closing connection open.
+func (s *socket) drain(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
+	defer cancel()
+	for {
+		select {
+		case msg := <-s.out:
+			if wsjson.Write(ctx, s.conn, msg) != nil {
+				return
+			}
+		default:
+			return
 		}
 	}
 }

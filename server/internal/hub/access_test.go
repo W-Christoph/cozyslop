@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"cozycast/internal/auth"
+	"cozycast/internal/neko"
+	"cozycast/internal/neko/nekotest"
 	"cozycast/internal/rights"
 	"cozycast/internal/store"
 )
@@ -364,4 +366,69 @@ func TestModeration(t *testing.T) {
 // cannot also serve as the deadline for waiting for its observers to disconnect.
 func observerDeadline() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), testTimeout)
+}
+
+func TestKickedTabIsGoneAtOnce(t *testing.T) {
+	f := newFixture(t, store.RoomSettings{})
+	id := f.flags(f.user("root"), true, true)
+	c, rec := f.join(id)
+	_, watch := f.join(anon("watcher"))
+	rec.wait(t, "welcome")
+	f.r.SendNekoToken(f.ctx, c)
+	rec.wait(t, "neko")
+
+	// The socket has not closed yet (no Leave), as while it drains.
+	requireOK(t, f.r.Kick(id.Key()))
+	rec.wait(t, "kicked")
+	rec.assertKills(t, 1)
+	requireEqual(t, f.r.UserCount(), 1)
+	requireEqual(t, watch.wait(t, "user_left").(userLeftMsg).Key, id.Key())
+
+	sent := len(rec.snapshot())
+	for _, msg := range []ClientMsg{
+		{Type: "chat_send", Body: "still here"}, {Type: "whisper", To: "a:watcher", Body: "psst"},
+		{Type: "remote_reset"}, {Type: "restart"}, {Type: "typing", Typing: true}, {Type: "neko_token"}, {Type: "unknown"},
+	} {
+		f.r.Handle(f.ctx, c, msg)
+	}
+	requireEqual(t, len(rec.snapshot()), sent)
+	requireEqual(t, watch.count("chat")+watch.count("typing")+watch.count("restarting"), 0)
+	requireEqual(t, errors.Is(f.r.PostMedia(f.ctx, id.Key(), "image", "none"), ErrNotPresent), true)
+
+	// Once the socket is closed the tab cannot get a neko member back.
+	f.r.Leave(f.ctx, c)
+	if _, ok := f.fake.Member(c.ID); ok {
+		t.Fatal("neko member survived Leave")
+	}
+	_, err := f.r.NekoToken(f.ctx, c)
+	requireEqual(t, errors.Is(err, ErrNotPresent), true)
+	if _, ok := f.fake.Member(c.ID); ok {
+		t.Fatal("neko member recreated after Leave")
+	}
+}
+
+func TestStartLoadsSettingsBeforeAdmission(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s, err := store.Open(ctx, ":memory:")
+	requireOK(t, err)
+	requireOK(t, s.SaveRoomSettings(ctx, store.RoomSettings{Name: "main", Access: "invite"}))
+	fake := nekotest.New(t, "secret")
+	nc, err := neko.NewClient(fake.URL(), "secret")
+	requireOK(t, err)
+
+	// Settings are in place when Start returns, not some time later.
+	h := New(s, t.TempDir(), []RoomConfig{{Name: "main", Neko: nc}})
+	requireOK(t, h.Start(ctx))
+	assertDenied(t, h.Room("main"), ctx, anon("guest"), "", "invite", nil)
+	cancel()
+	waitCtx, stop := observerDeadline()
+	defer stop()
+	requireOK(t, fake.WaitObservers(waitCtx, 0))
+
+	// A server that cannot read its settings does not start.
+	requireOK(t, s.Close())
+	if err := New(s, t.TempDir(), []RoomConfig{{Name: "main", Neko: nc}}).Start(context.Background()); err == nil {
+		t.Fatal("Start succeeded without settings")
+	}
 }

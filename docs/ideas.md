@@ -20,8 +20,8 @@ CozyCast does not use; none of them needs a patched neko.
 - **Downloads from the room.** neko's file transfer plugin also lists and
   serves the desktop's Downloads folder (a `filetransfer/update` WebSocket
   event with the file list, `GET /api/filetransfer?filename=` to download). CozyCast
-  only uses the upload half. Needs a download permission and a small file
-  list in the UI.
+  only uses the upload half, and its proxy only lets `POST` through. Needs a
+  download permission and a small file list in the UI.
 - **RTMP broadcast** (`NEKO_CAPTURE_BROADCAST_*`, `/api/room/broadcast`).
   Stream the room to Twitch/YouTube/an RTMP server, started by an admin.
   Costs one extra encode while it runs.

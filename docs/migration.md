@@ -24,6 +24,15 @@ Passwords keep working, and users log in once on the new server.
    scp cozycast-export.tar.gz new-server:/path/to/cozycast-next/import/
    ```
 
+   The archive is private (mode 600) and the server container does not run
+   as your user, so hand the file to the server's user (uid 65532) on the
+   new server. Without this the server stops at startup with
+   `permission denied`:
+
+   ```bash
+   sudo chown 65532:65532 /path/to/cozycast-next/import/cozycast-export.tar.gz
+   ```
+
 3. On the new server, set up `.env` from `.env.example` (including
    `PUBLIC_IP` and `NEKO_API_TOKEN`). Configure the same room names in
    `COZYCAST_ROOMS` in `compose.yaml`, with a worker for each room.
@@ -40,6 +49,8 @@ Passwords keep working, and users log in once on the new server.
    `docker compose logs room-default`. Check that you can log in. Delete `cozycast-export.tar.gz` from both
    machines; it contains password hashes. The mounted `import/` directory
    can stay empty. A failed database import rolls back and stops startup.
+   A failed desktop import (for example a damaged archive) leaves the room's
+   home folder as it was and is tried again on the next start.
 
 Migrated: accounts and bcrypt password hashes, nicknames, colours, admin
 and verified flags, disabled/locked/expired account status, valid referenced

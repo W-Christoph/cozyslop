@@ -70,8 +70,9 @@ home_files=0
 profile_name=""
 if [ -d "$home" ]; then
     mkdir "$tmp/home"
+    # "{} +", not "{} \;": only then does a failed copy fail find, and the export.
     find "$home" -mindepth 1 -maxdepth 1 ! -name '.*' ! -name '*.pid' ! -name '*.log' ! -name 'worker.restart' \
-        -exec cp -R {} "$tmp/home/" \;
+        -exec cp -R -t "$tmp/home/" {} +
     home_files=$(find "$tmp/home" -type f | wc -l | tr -d ' ')
 
     # The default Firefox profile: the install default if there is one,

@@ -118,7 +118,9 @@ func run() error {
 		rooms = append(rooms, room)
 	}
 	h := hub.New(db, filepath.Join(mediaDir, "chat"), rooms)
-	h.Start(ctx)
+	if err := h.Start(ctx); err != nil {
+		return err
+	}
 
 	var web fs.FS = webui.FS()
 	if cfg.WebDir != "" {
@@ -183,7 +185,9 @@ func run() error {
 }
 
 func newServer(addr string, h http.Handler) *http.Server {
-	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
+	// Request bodies get their deadline per route (httpapi); WebSockets and
+	// uploads must not be cut off by a server-wide one.
+	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
 }
 
 // hsts tells browsers to use HTTPS for this site from now on.

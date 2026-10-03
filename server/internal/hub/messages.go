@@ -19,6 +19,20 @@ const (
 
 // Handle processes one message from a tab.
 func (r *Room) Handle(ctx context.Context, c *Client, msg ClientMsg) {
+	r.mu.Lock()
+	_, present := r.clients[c.ID]
+	key := c.m.key
+	r.mu.Unlock()
+	if !present {
+		return // kicked; its socket is closing
+	}
+	// Typing, presence and edits reach the whole room too, so everything a
+	// person sends counts here; new chat messages have a tighter limit.
+	if !r.inbound.Allow(key) {
+		c.send(errorMsg{Type: "error", Message: "You are sending messages too fast."})
+		return
+	}
+
 	var err error
 	switch msg.Type {
 	case "chat_send":
@@ -75,7 +89,7 @@ func (r *Room) SendNekoToken(ctx context.Context, c *Client) { r.sendNekoToken(c
 func (r *Room) sendNekoToken(ctx context.Context, c *Client) {
 	token, err := r.NekoToken(ctx, c)
 	if err != nil {
-		if ctx.Err() == nil {
+		if ctx.Err() == nil && !errors.Is(err, ErrNotPresent) {
 			r.log.Error("issue neko token", "client", c.ID, "err", err)
 			c.send(errorMsg{Type: "error", Message: "The room's desktop is not reachable right now."})
 		}

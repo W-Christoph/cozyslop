@@ -17,6 +17,12 @@ const TYPING_TIMEOUT_MS = 3_000
 
 const noRights: Rights = { admin: false, trusted: false, remote: false, image: false, upload: false }
 
+export interface DesktopUpload {
+  state: 'idle' | 'uploading' | 'done' | 'error'
+  progress: number // 0..1
+  message: string
+}
+
 export interface Kick {
   reason: KickReason
   bannedUntil?: number | null // unix seconds; null = forever
@@ -48,6 +54,7 @@ export class RoomStore {
 
   // local playback: paused = no stream at all; audioOnly = sound without video
   readonly paused = signal(false)
+  readonly desktopUpload = signal<DesktopUpload>({ state: 'idle', progress: 0, message: '' })
   readonly audioOnly = signal(false)
 
   readonly selfKey = computed(() => this.self.value?.key ?? null)
@@ -56,6 +63,7 @@ export class RoomStore {
   private socket: RoomSocket
   private offs: (() => void)[] = []
   private nekoRetry?: number
+  private uploadReset?: number
   private nekoRetryMs = NEKO_RETRY_MS
   private nekoFailures = 0
   private typingTimers = new Map<string, number>()
@@ -100,6 +108,7 @@ export class RoomStore {
 
   dispose() {
     window.clearTimeout(this.nekoRetry)
+    window.clearTimeout(this.uploadReset)
     this.typingTimers.forEach((t) => window.clearTimeout(t))
     this.offs.forEach((off) => off())
     this.socket.close()
@@ -176,6 +185,25 @@ export class RoomStore {
   // Admins: take the remote away from whoever holds it.
   resetRemote() {
     this.socket.send({ type: 'remote_reset' })
+  }
+
+  // Upload files into the room desktop's Downloads folder; progress and the
+  // outcome are in desktopUpload.
+  async uploadToDesktop(files: File[]) {
+    if (files.length === 0 || this.desktopUpload.value.state === 'uploading') return
+    window.clearTimeout(this.uploadReset)
+    const set = (state: DesktopUpload['state'], progress: number, message: string) =>
+      (this.desktopUpload.value = { state, progress, message })
+    const what = files.length === 1 ? files[0].name : `${files.length} files`
+    set('uploading', 0, `Uploading ${what}…`)
+    try {
+      if (!this.rights.value.upload) throw new Error('You are not allowed to upload files.')
+      await this.neko.upload(files, (p) => set('uploading', p, `Uploading ${what}… ${Math.round(p * 100)}%`))
+      set('done', 1, `Uploaded ${what} to Downloads.`)
+    } catch (e) {
+      set('error', 0, e instanceof Error ? e.message : 'Upload failed.')
+    }
+    this.uploadReset = window.setTimeout(() => set('idle', 0, ''), 5_000)
   }
 
   restart() {

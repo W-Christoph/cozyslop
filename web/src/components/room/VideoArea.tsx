@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'preact/hooks'
 import { MobileRemoteControls } from './MobileRemoteControls'
 import { RemoteScreen } from './RemoteScreen'
+import { DesktopUploadStatus, useDesktopDrop } from './DesktopUpload'
 import { useRoomStore } from './RoomContext'
 import styles from './VideoArea.module.css'
 
@@ -9,6 +10,7 @@ const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.
 
 export function VideoArea() {
   const store = useRoomStore()
+  const drop = useDesktopDrop()
   const pointer = useRef({ x: store.neko.screen.width / 2, y: store.neko.screen.height / 2 })
   const [blocked, setBlocked] = useState(false)
   const video = useRef<HTMLVideoElement>(null)
@@ -27,7 +29,8 @@ export function VideoArea() {
   }
   return (
     <div class={styles.area}>
-      <main class={styles.screen} aria-label="Room screen">
+      <main class={styles.screen} aria-label="Room screen" {...drop}>
+        <DesktopUploadStatus />
         <RemoteScreen mobile={mobile} pointer={pointer} video={video} onPlaybackBlocked={onPlaybackBlocked} />
         <span class={styles.status} role="status">{paused ? 'Paused' : store.server.value !== 'connected' ? 'Connecting to server…' : store.video.value === 'connected' ? 'Live' : 'Connecting to desktop…'}</span>
         {paused || blocked ? (

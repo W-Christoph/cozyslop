@@ -47,6 +47,8 @@ export class NekoClient extends Emitter<NekoEvents> {
   status: NekoStatus = 'disconnected'
 
   private ws?: WebSocket
+  private path = ''
+  private token = ''
   private peer?: RTCPeerConnection
   private channel?: RTCDataChannel
   private pendingCandidates: RTCIceCandidateInit[] = []
@@ -63,6 +65,8 @@ export class NekoClient extends Emitter<NekoEvents> {
   connect(path: string, token: string, { audioOnly = false, video = '' } = {}) {
     this.teardown()
     this.setStatus('connecting')
+    this.path = path
+    this.token = token
 
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const ws = new WebSocket(`${proto}//${location.host}${path}/api/ws?token=${encodeURIComponent(token)}`)
@@ -138,6 +142,28 @@ export class NekoClient extends Emitter<NekoEvents> {
 
   paste(text: string) {
     this.send('control/paste', { text })
+  }
+
+  // Upload files into the desktop's Downloads folder (neko's file transfer;
+  // neko checks the upload right). Resolves when the upload finished.
+  upload(files: File[], onProgress?: (fraction: number) => void): Promise<void> {
+    if (!this.token) return Promise.reject(new Error('Not connected to the room.'))
+    const form = new FormData()
+    for (const f of files) form.append('files', f, f.name)
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${this.path}/api/filetransfer?token=${encodeURIComponent(this.token)}`)
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress?.(e.loaded / e.total)
+      }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve()
+        else if (xhr.status === 403) reject(new Error('You are not allowed to upload files.'))
+        else reject(new Error(`Upload failed (${xhr.status}).`))
+      }
+      xhr.onerror = () => reject(new Error('Upload failed: connection lost.'))
+      xhr.send(form)
+    })
   }
 
   // ---- internals -------------------------------------------------------

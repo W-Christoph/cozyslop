@@ -119,16 +119,11 @@ the internet, and the old stack on the same machine for comparison.
   held. Real keyboards are fine; text from mobile keyboards should go through
   neko's paste path.
 
-## Roadmap
+## Ideas
 
-1. Accounts: SQLite, login/registration, import of existing CozyCast users
-   (bcrypt hashes carry over, so passwords keep working).
-2. Chat, user list, room permissions, bans and invites.
-3. Port the rest of the CozyCast frontend (chat UI, settings, profiles,
-   admin pages, mobile controls).
-4. Automatic HTTPS and a short setup guide.
-5. Pause encoding when nobody is watching; a CPU benchmark script for real
-   servers.
+Unused neko features (per-viewer quality, downloads from the room, RTMP
+broadcast, hardware encoding, ...) and deferred networking work (TURN relay,
+hosting at home, LAN isolation) are collected in [docs/ideas.md](docs/ideas.md).
 
 ## License
 

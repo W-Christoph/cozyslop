@@ -114,7 +114,7 @@ connections immediately.
   Re-redeeming a permanent invite on the same account does not use it up.
 - Permission, role, ban and account changes reach connected users at once.
 - Global settings (front page message, registration mode) are persisted.
-- Uploaded images are decoded and re-encoded; avatars are resized.
+- Avatars are decoded, center-cropped, resized and re-encoded; chat images are fully decoded to validate them and served with a locked-down content type.
 - New: desktop upload permission, change own password.
 - Stream settings and room restarts from the UI require opting in to Docker
   socket access (planned); otherwise they live in `.env`.

@@ -26,6 +26,7 @@ type Config struct {
 	NekoAPIToken  string
 	Rooms         []Room
 	WebDir        string // serve the UI from disk instead of the embedded build (dev)
+	MaxUploadMB   int64  // maximum chat media file size in MiB
 }
 
 func FromEnv() (Config, error) {
@@ -44,6 +45,11 @@ func FromEnv() (Config, error) {
 	if c.NekoAPIToken == "" {
 		return c, errors.New("COZYCAST_NEKO_API_TOKEN is required")
 	}
+	maxUploadMB, err := strconv.ParseInt(env("COZYCAST_MAX_UPLOAD_MB", "10"), 10, 64)
+	if err != nil || maxUploadMB <= 0 || maxUploadMB > ((1<<63-1)-(64<<10))/(1<<20) {
+		return c, errors.New("COZYCAST_MAX_UPLOAD_MB must be a positive integer size in MiB")
+	}
+	c.MaxUploadMB = maxUploadMB
 
 	rooms, err := parseRooms(env("COZYCAST_ROOMS", "default=http://room-default:8080"))
 	if err != nil {

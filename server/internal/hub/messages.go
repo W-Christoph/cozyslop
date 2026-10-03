@@ -109,6 +109,21 @@ func (r *Room) sendChat(ctx context.Context, c *Client, body string) error {
 	return r.post(ctx, c.m.key, "text", body, "")
 }
 
+// CanPostMedia checks presence and image rights before an upload is read.
+// PostMedia checks them again once the upload is ready.
+func (r *Room) CanPostMedia(key string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	m := r.members[key]
+	if m == nil {
+		return ErrNotPresent
+	}
+	if !m.rights.Image {
+		return ErrNotAllowed
+	}
+	return nil
+}
+
 // PostMedia adds an uploaded image or video to the chat on behalf of the
 // person with the given identity key. They must be in the room with the
 // image right.

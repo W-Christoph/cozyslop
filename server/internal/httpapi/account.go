@@ -207,6 +207,7 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u.Nickname, u.NameColor = req.Nickname, req.NameColor
+	s.hub.UserChanged(r.Context(), u.ID)
 	writeJSON(w, http.StatusOK, map[string]any{"user": toMe(u)})
 }
 

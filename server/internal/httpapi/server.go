@@ -20,18 +20,23 @@ import (
 )
 
 type Deps struct {
-	Store *store.Store
-	Auth  *auth.Service
-	Hub   *hub.Hub
-	Web   fs.FS
+	Store       *store.Store
+	Auth        *auth.Service
+	Hub         *hub.Hub
+	Web         fs.FS
+	MediaDir    string // avatars and chat subdirectories
+	MaxUploadMB int64  // chat media; defaults to 10 MiB
 }
 
 type Server struct {
-	store *store.Store
-	auth  *auth.Service
-	hub   *hub.Hub
-	web   fs.FS
-	log   *slog.Logger
+	store          *store.Store
+	auth           *auth.Service
+	hub            *hub.Hub
+	web            fs.FS
+	log            *slog.Logger
+	mediaDir       string
+	maxUploadBytes int64
+	avatarMu       sync.Mutex // avatar replacement, removal and account deletion
 
 	adminMu sync.Mutex // enabled-admin count checks and updates
 
@@ -40,14 +45,19 @@ type Server struct {
 }
 
 func New(d Deps) *Server {
+	if d.MaxUploadMB <= 0 {
+		d.MaxUploadMB = 10
+	}
 	return &Server{
-		store:         d.Store,
-		auth:          d.Auth,
-		hub:           d.Hub,
-		web:           d.Web,
-		log:           slog.Default(),
-		loginLimit:    ratelimit.New(10, 30*time.Second),
-		registerLimit: ratelimit.New(3, 10*time.Minute),
+		store:          d.Store,
+		auth:           d.Auth,
+		hub:            d.Hub,
+		web:            d.Web,
+		log:            slog.Default(),
+		mediaDir:       d.MediaDir,
+		maxUploadBytes: d.MaxUploadMB << 20,
+		loginLimit:     ratelimit.New(10, 30*time.Second),
+		registerLimit:  ratelimit.New(3, 10*time.Minute),
 	}
 }
 
@@ -60,6 +70,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/me", s.getMe)
 	mux.HandleFunc("PATCH /api/me", s.updateMe)
 	mux.HandleFunc("POST /api/me/password", s.changePassword)
+	mux.HandleFunc("POST /api/me/avatar", s.uploadAvatar)
+	mux.HandleFunc("DELETE /api/me/avatar", s.deleteAvatar)
 
 	mux.HandleFunc("GET /api/admin/users", s.adminListUsers)
 	mux.HandleFunc("PATCH /api/admin/users/{username}", s.adminUpdateUser)
@@ -87,9 +99,14 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/rooms", s.listRooms)
 	mux.HandleFunc("GET /api/rooms/{room}/ws", s.roomSocket)
+	mux.HandleFunc("POST /api/rooms/{room}/media", s.uploadChatMedia)
+	mux.HandleFunc("GET /media/avatars/{file}", s.serveAvatar)
+	mux.HandleFunc("GET /media/chat/{file}", s.serveChatMedia)
+	mux.HandleFunc("/media/{path...}", http.NotFound)
+	mux.HandleFunc("/media", http.NotFound)
 	mux.HandleFunc("/neko/{room}/{path...}", s.nekoProxy)
 	mux.Handle("/", spaHandler(s.web))
-	return sameOrigin(mux)
+	return sameOrigin(validateMediaPath(mux))
 }
 
 // sameOrigin rejects state-changing requests sent by other sites. Session

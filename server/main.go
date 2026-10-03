@@ -93,10 +93,12 @@ func run() error {
 	}
 
 	handler := httpapi.New(httpapi.Deps{
-		Store: db,
-		Auth:  auth.New(db, cfg.TrustProxy),
-		Hub:   h,
-		Web:   web,
+		Store:       db,
+		Auth:        auth.New(db, cfg.TrustProxy),
+		Hub:         h,
+		Web:         web,
+		MediaDir:    mediaDir,
+		MaxUploadMB: cfg.MaxUploadMB,
 	}).Handler()
 
 	var servers []*http.Server

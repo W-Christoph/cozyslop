@@ -48,6 +48,14 @@ for account invites and `/access/<code>` for temporary room-access invites.
 | `GET /api/me` | Anyone | None | 200 `{"user":<own account>}` or `{"user":null}` | Invalid sessions become anonymous |
 | `PATCH /api/me` | Account | `{"nickname":"Alice","nameColor":"#f90"}`; both required | 200 `{"user":<own account>}` | 400 invalid nickname/colour; 409 `"That nickname is another account's username."` |
 | `POST /api/me/password` | Account | `{"current":"…","new":"…"}` | 204; keeps the current session and ends every other session | 403 `"Your current password is wrong."`; 400 invalid new password; 429 attempt rate limit |
+| `POST /api/me/avatar` | Account | Multipart form field `avatar`; PNG, JPEG, GIF or WebP, at most 5 MiB | 200 `{"user":<own account>}`; saves a 256×256 PNG and deletes the previous avatar | 415 `"Use a PNG, JPEG, GIF or WebP image."`; 413 `"File is too large."`; 400 malformed multipart or missing/duplicate field |
+| `DELETE /api/me/avatar` | Account | None | 200 `{"user":<own account>}`; clears the avatar and deletes its file | Common account errors |
+
+Profile and avatar changes reach live room connections as `user_updated`.
+Avatars are decoded (GIF uses its first frame), center-cropped to a square,
+resized with Catmull–Rom interpolation and re-encoded as PNG. Images wider or
+taller than 8000 pixels, or over 40 megapixels, are rejected before full decode
+with the same 415 error as unsupported or invalid images.
 
 Usernames are 2–12 ASCII letters/digits, optionally separated by single `-`,
 `_` or `.`; stored lowercase and looked up case-insensitively. Passwords are
@@ -71,7 +79,7 @@ All callers: admin.
 |---|---|---|---|
 | `GET /api/admin/users` | None | 200 array of admin accounts, ordered by username | Common admin errors |
 | `PATCH /api/admin/users/{username}` | Any subset of `{"admin":true,"verified":true,"disabled":false}` | 200 updated admin account; disabling deletes all sessions; flags reach live room connections | 404 `"Unknown user."`; 403 `"You can't remove your own admin rights or disable yourself."`; 409 `"There must be at least one admin."` |
-| `DELETE /api/admin/users/{username}` | None | 204; deletes account, sessions and permissions; disconnects live room connections | 404 unknown user; 403 `"You can't delete yourself."`; 409 `"Remove admin rights first."` |
+| `DELETE /api/admin/users/{username}` | None | 204; deletes account, sessions, permissions and avatar file; disconnects live room connections | 404 unknown user; 403 `"You can't delete yourself."`; 409 `"Remove admin rights first."` |
 | `POST /api/admin/users/{username}/password` | `{"password":"…"}` | 204; resets password and deletes all of the user's sessions | 404 unknown user; 400 `"Passwords are 8-100 characters."` |
 
 Admins may change their own verification flag, but may not change their own
@@ -137,6 +145,7 @@ successful room join, using the WebSocket `access` query parameter.
 |---|---|---|---|---|
 | `GET /api/rooms` | Anyone | No body | 200 array of `{"name":"default","access":"public","userCount":0,"open":true}` ordered by name; `open` means caller may join; hidden rooms appear only if caller may join | 500 on storage failure |
 | `GET /api/rooms/{room}/ws?access=<optional temporary invite>` | Anyone admitted by room access rules and bans | WebSocket upgrade with account/anonymous cookies; optional room-bound temporary invite | 101; JSON room protocol, starting with `welcome`; admission denial sends `kicked` and closes with code 4000 | 404 unknown room (plain HTTP response); cross-origin upgrade rejected; banned/account/verified/invite admission denial |
+| `POST /api/rooms/{room}/media` | Identity currently joined through the room WebSocket with image rights | Multipart form field `file`; PNG, JPEG, GIF, WebP, MP4 or WebM | 204; stores the original file and broadcasts an image/video chat message | 404 `"Unknown room."`; 403 `"Join the room first."` / `"You are not allowed to post images."`; 415 `"Unsupported file type."`; 413 `"File is too large."`; 400 malformed multipart or missing/duplicate field |
 | `/neko/{room}/api/ws` | Holder of the per-tab neko token issued by the room WebSocket | Proxied neko WebSocket handshake, including token query | Upstream WebSocket response | 404 unknown room or disallowed path; upstream auth errors; 502 if upstream unavailable |
 | `/neko/{room}/api/filetransfer` and subpaths | Holder of a per-tab neko token with upload rights | Methods, query and body follow neko's file-transfer plugin | Upstream response | Upstream auth/permission errors; 404 unknown room or disallowed path; 502 if upstream unavailable |
 
@@ -149,6 +158,31 @@ rights, room settings, remote ownership, moderation and per-tab neko tokens.
 See [the protocol definitions](../server/internal/hub/protocol.go) for message
 fields and types. Admission and effective rights are described in
 [architecture](architecture.md#permissions).
+
+Chat media files are limited to `COZYCAST_MAX_UPLOAD_MB` MiB (default 10;
+positive integer). Uploads stream to temporary files; request bodies allow
+an additional 64 KiB of multipart overhead, with the file limit checked
+separately. Permission is checked before reading and again before posting.
+Content determines the type and extension; the supplied filename and MIME
+type do not. Chat images undergo a dimension check with the same limits as
+avatars and a full decode (all GIF frames), then are stored unchanged to
+preserve animation. MP4 requires an ISO BMFF `ftyp` signature at offset 4;
+WebM requires an EBML header. Media files are deleted when their chat messages
+are removed or pruned.
+
+## Uploaded files
+
+| Method and path | Caller | Response | Notable errors |
+|---|---|---|---|
+| `GET /media/avatars/{file}` / `HEAD /media/avatars/{file}` | Anyone | File with `Cache-Control: public, max-age=31536000, immutable` | 404 missing file or invalid filename/path |
+| `GET /media/chat/{file}` / `HEAD /media/chat/{file}` | Anyone | File with `Cache-Control: private, max-age=3600`; supports byte ranges (206), including video seeking | 404 missing file or invalid filename/path; 416 unsatisfiable range |
+
+Filenames must match `^[0-9a-f]{32,64}\.(png|jpg|jpeg|gif|webp|mp4|webm)$`;
+new uploads use 32 random hex characters and imported avatars may use 64.
+Content types are fixed by the extension (`jpg`/`jpeg` → `image/jpeg`, other
+image extensions → their `image/*` type, videos → `video/mp4`/`video/webm`),
+never sniffed. Responses set `X-Content-Type-Options: nosniff` and
+`Content-Security-Policy: default-src 'none'; sandbox`.
 
 ## Web UI
 

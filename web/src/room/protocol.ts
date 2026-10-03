@@ -24,6 +24,7 @@ export interface RoomSettings {
 
 export interface User {
   key: string // identity key, "u:<id>" or "a:<anon id>"
+  username: string // account name; "" for anonymous users
   nickname: string
   nameColor: string
   avatarUrl: string

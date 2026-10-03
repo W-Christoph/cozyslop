@@ -12,7 +12,8 @@ import (
 
 // User is a person in the room as everyone else sees them.
 type User struct {
-	Key       string `json:"key"` // identity key, "u:<id>" or "a:<anon id>"
+	Key       string `json:"key"`      // identity key, "u:<id>" or "a:<anon id>"
+	Username  string `json:"username"` // account name; "" for anonymous users
 	Nickname  string `json:"nickname"`
 	NameColor string `json:"nameColor"`
 	AvatarURL string `json:"avatarUrl"`

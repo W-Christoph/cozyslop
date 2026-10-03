@@ -579,7 +579,7 @@ func (r *Room) userLocked(m *member) User {
 		u.Muted = u.Muted && c.muted
 	}
 	if m.user != nil {
-		u.Nickname, u.NameColor, u.AvatarURL = m.user.Nickname, m.user.NameColor, avatarURL(m.user)
+		u.Username, u.Nickname, u.NameColor, u.AvatarURL = m.user.Username, m.user.Nickname, m.user.NameColor, avatarURL(m.user)
 	} else {
 		u.Nickname, u.NameColor, u.AvatarURL = "Anonymous", anonColor(m.anonID), "/png/default_avatar_on_alpha.png"
 	}

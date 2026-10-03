@@ -1,7 +1,7 @@
 #!/bin/sh
-# Container entrypoint: before the desktop starts, import the old CozyCast
+# Called by entrypoint.sh before the desktop starts: import the old CozyCast
 # room's home folder (files, folders, Firefox profile) from a migration
-# archive, once. Then hand over to neko's normal startup (supervisord).
+# archive, once.
 #
 # COZYCAST_IMPORT_HOME points at cozycast-export.tar.gz (see
 # migrate/export-cozycast.sh). A marker in the home folder makes sure an
@@ -56,5 +56,3 @@ if [ -n "$archive" ] && [ -f "$archive" ] && [ ! -e "$marker" ]; then
         echo "import-home: import failed; starting without it" >&2
     fi
 fi
-
-exec "$@"

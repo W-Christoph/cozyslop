@@ -1,7 +1,6 @@
 package store
 
 import (
-	"cmp"
 	"context"
 	"database/sql"
 	"errors"
@@ -16,16 +15,16 @@ type RoomSettings struct {
 	DefaultRemote   bool   `json:"defaultRemote"`
 	DefaultImage    bool   `json:"defaultImage"`
 	DefaultUpload   bool   `json:"defaultUpload"`
-	Screen          string `json:"screen"`  // "1280x720@30"; "" = the room container's default
-	Quality         string `json:"quality"` // high | medium | low (capture pipeline)
+	Screen          string `json:"screen"` // "1280x720@30"; "" = the room container's default
+	Stream          string `json:"stream"` // capture pipeline id, e.g. "b2500-s100"; "" = neko's default
 }
 
-const roomColumns = "name, access, hidden, remote_ownership, center_remote, default_remote, default_image, default_upload, screen, quality"
+const roomColumns = "name, access, hidden, remote_ownership, center_remote, default_remote, default_image, default_upload, screen, stream"
 
 func scanRoomSettings(row interface{ Scan(...any) error }) (RoomSettings, error) {
 	var set RoomSettings
 	err := row.Scan(&set.Name, &set.Access, &set.Hidden, &set.RemoteOwnership,
-		&set.CenterRemote, &set.DefaultRemote, &set.DefaultImage, &set.DefaultUpload, &set.Screen, &set.Quality)
+		&set.CenterRemote, &set.DefaultRemote, &set.DefaultImage, &set.DefaultUpload, &set.Screen, &set.Stream)
 	return set, err
 }
 
@@ -33,22 +32,20 @@ func scanRoomSettings(row interface{ Scan(...any) error }) (RoomSettings, error)
 func (s *Store) RoomSettings(ctx context.Context, name string) (RoomSettings, error) {
 	set, err := scanRoomSettings(s.db.QueryRowContext(ctx, "SELECT "+roomColumns+" FROM rooms WHERE name = ?", name))
 	if errors.Is(err, sql.ErrNoRows) {
-		return RoomSettings{Name: name, Access: "public", Quality: "medium"}, nil
+		return RoomSettings{Name: name, Access: "public"}, nil
 	}
 	return set, err
 }
 
-// SaveRoomSettings stores set; an empty Quality means "medium".
 func (s *Store) SaveRoomSettings(ctx context.Context, set RoomSettings) error {
-	set.Quality = cmp.Or(set.Quality, "medium")
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO rooms (`+roomColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (name) DO UPDATE SET access = excluded.access, hidden = excluded.hidden,
 		 remote_ownership = excluded.remote_ownership, center_remote = excluded.center_remote,
 		 default_remote = excluded.default_remote, default_image = excluded.default_image,
-		 default_upload = excluded.default_upload, screen = excluded.screen, quality = excluded.quality`,
+		 default_upload = excluded.default_upload, screen = excluded.screen, stream = excluded.stream`,
 		set.Name, set.Access, set.Hidden, set.RemoteOwnership, set.CenterRemote,
-		set.DefaultRemote, set.DefaultImage, set.DefaultUpload, set.Screen, set.Quality)
+		set.DefaultRemote, set.DefaultImage, set.DefaultUpload, set.Screen, set.Stream)
 	return err
 }
 
@@ -56,15 +53,6 @@ func (s *Store) SaveRoomSettings(ctx context.Context, set RoomSettings) error {
 func ValidAccess(s string) bool {
 	switch s {
 	case "public", "account", "verified", "invite":
-		return true
-	}
-	return false
-}
-
-// ValidQuality reports whether s names a stream quality preset.
-func ValidQuality(s string) bool {
-	switch s {
-	case "high", "medium", "low":
 		return true
 	}
 	return false

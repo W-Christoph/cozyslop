@@ -249,7 +249,7 @@ export class RoomStore {
         if (!this.paused.value) {
           this.neko.connect(msg.path, msg.token, {
             audioOnly: this.audioOnly.value,
-            video: this.settings.value?.quality,
+            video: this.settings.value?.stream,
           })
         }
         break
@@ -282,11 +282,11 @@ export class RoomStore {
         this.rights.value = msg.rights
         break
       case 'room_settings': {
-        const quality = this.settings.value?.quality
+        const stream = this.settings.value?.stream
         this.settings.value = msg.settings
-        // Follow the room's quality preset without reconnecting.
-        if (msg.settings.quality !== quality && this.neko.status !== 'disconnected') {
-          this.neko.setVideo(msg.settings.quality)
+        // Follow the room's stream choice without reconnecting.
+        if (msg.settings.stream !== stream && msg.settings.stream && this.neko.status !== 'disconnected') {
+          this.neko.setVideo(msg.settings.stream)
         }
         break
       }

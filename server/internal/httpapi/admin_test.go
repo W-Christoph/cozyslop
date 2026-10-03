@@ -252,19 +252,19 @@ func TestAdminRoomSettings(t *testing.T) {
 		t.Fatalf("name from body used: %+v", saved)
 	}
 	delete(req, "name")
-	// Stream settings: omitted keeps the stored value, invalid quality is
-	// rejected, and a screen needs the room's desktop to confirm it (the test
-	// neko is unreachable, so any change is refused with 503).
-	req["quality"] = "high"
+	// Stream settings: omitted keeps the stored value, "" (neko's default) is
+	// always allowed, and choosing a stream or screen needs the room's
+	// desktop to confirm it (the test neko is unreachable: 503).
+	req["stream"] = ""
 	a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 200, &saved)
-	delete(req, "quality")
+	delete(req, "stream")
 	a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 200, &saved)
-	if saved.Quality != "high" || saved.Screen != "" {
+	if saved.Stream != "" || saved.Screen != "" {
 		t.Fatalf("stream settings not kept: %+v", saved)
 	}
-	req["quality"] = "ultra"
-	a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 400, nil)
-	delete(req, "quality")
+	req["stream"] = "b2500-s100"
+	a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 503, nil)
+	delete(req, "stream")
 	req["screen"] = "1920x1080@30"
 	a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 503, nil)
 	req["screen"] = "big"

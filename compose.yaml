@@ -23,46 +23,16 @@ x-room: &room
     # drag-and-drop and file-dialog uploads only check remote control.
     NEKO_DESKTOP_UPLOAD_DROP: "false"
     NEKO_DESKTOP_FILE_CHOOSER_DIALOG: "false"
-    # Encode once, H.264 for cheap decoding everywhere. Three quality presets;
-    # each room picks one in its settings and neko only runs presets someone
-    # is watching. Resolution and frame rate follow the room's screen setting.
-    # A keyframe every 2 s: new viewers wait for one before the picture
-    # appears (neko's on-demand keyframe did not take effect in testing).
-    NEKO_CAPTURE_VIDEO_CODEC: h264
-    # Must list the pipeline ids below (space separated: neko does not split
-    # on commas); neko crashes or finds no stream otherwise.
-    NEKO_CAPTURE_VIDEO_IDS: medium high low # space separated; the first is the default
+    # Encode once, H.264 for cheap decoding everywhere. The worker generates
+    # one capture pipeline per bitrate and stream size (see
+    # worker/entrypoint.sh); each room picks one in its settings, and neko
+    # only runs pipelines someone is watching. Resolution and frame rate
+    # follow the room's screen setting; a keyframe every 2 s.
+    COZYCAST_X264_PRESET: ${X264_PRESET:-veryfast}
+    COZYCAST_STREAM_BITRATES: ${STREAM_BITRATES:-1000 1500 2500 4000 6000 8000}
+    COZYCAST_STREAM_SCALES: ${STREAM_SCALES:-100 75 67 50}
     # Draw the host's mouse pointer into the stream so everyone sees it.
     NEKO_CAPTURE_VIDEO_SHOW_POINTER: "true"
-    NEKO_CAPTURE_VIDEO_PIPELINES: >-
-      {
-        "high": {
-          "fps": "fps",
-          "gst_prefix": "! video/x-raw,format=I420",
-          "gst_encoder": "x264enc",
-          "gst_params": {"threads": 2, "bitrate": 4000, "key-int-max": "fps * 2", "byte-stream": true,
-                         "tune": "zerolatency", "speed-preset": "${X264_PRESET:-veryfast}"},
-          "gst_suffix": "! video/x-h264,stream-format=byte-stream,profile=constrained-baseline"
-        },
-        "medium": {
-          "fps": "fps",
-          "gst_prefix": "! video/x-raw,format=I420",
-          "gst_encoder": "x264enc",
-          "gst_params": {"threads": 2, "bitrate": 2500, "key-int-max": "fps * 2", "byte-stream": true,
-                         "tune": "zerolatency", "speed-preset": "${X264_PRESET:-veryfast}"},
-          "gst_suffix": "! video/x-h264,stream-format=byte-stream,profile=constrained-baseline"
-        },
-        "low": {
-          "fps": "fps",
-          "width": "round(width / 3) * 2",
-          "height": "round(height / 3) * 2",
-          "gst_prefix": "! video/x-raw,format=I420",
-          "gst_encoder": "x264enc",
-          "gst_params": {"threads": 2, "bitrate": 1000, "key-int-max": "fps * 2", "byte-stream": true,
-                         "tune": "zerolatency", "speed-preset": "${X264_PRESET:-veryfast}"},
-          "gst_suffix": "! video/x-h264,stream-format=byte-stream,profile=constrained-baseline"
-        }
-      }
     NEKO_WEBRTC_NAT1TO1: ${PUBLIC_IP:?set PUBLIC_IP in .env}
 
 services:

@@ -82,6 +82,9 @@ func (s *Server) ImplicitHosting() bool { s.mu.Lock(); defer s.mu.Unlock(); retu
 // Screen is the last screen size set through the API (zero if never).
 func (s *Server) Screen() neko.ScreenSize { s.mu.Lock(); defer s.mu.Unlock(); return s.screen }
 
+// Streams are the capture pipelines the fake neko offers, the default first.
+var Streams = []string{"b2500-s100", "b1000-s100", "b1000-s50"}
+
 // Screens are the resolutions the fake desktop supports.
 var Screens = []neko.ScreenSize{{Width: 1920, Height: 1080, Rate: 30}, {Width: 1280, Height: 720, Rate: 30}, {Width: 800, Height: 600, Rate: 30}}
 
@@ -283,7 +286,10 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	o := &observer{conn: conn, events: make(chan any, 1024)}
-	o.events <- map[string]any{"event": "system/init", "payload": map[string]any{"control_host": hostPayload(s.host)}}
+	o.events <- map[string]any{"event": "system/init", "payload": map[string]any{
+		"control_host": hostPayload(s.host),
+		"webrtc":       map[string]any{"videos": Streams},
+	}}
 	s.observers[o] = true
 	s.signalLocked()
 	s.mu.Unlock()

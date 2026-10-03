@@ -8,12 +8,12 @@ import (
 func TestRoomSettings(t *testing.T) {
 	ctx := context.Background()
 	s := openTest(t)
-	defaults := RoomSettings{Name: "main", Access: "public", Quality: "medium"}
+	defaults := RoomSettings{Name: "main", Access: "public"}
 	if got, err := s.RoomSettings(ctx, "main"); err != nil || got != defaults {
 		t.Fatalf("defaults: %v %+v", err, got)
 	}
 	set := RoomSettings{Name: "main", Access: "invite", Hidden: true, RemoteOwnership: true,
-		CenterRemote: true, DefaultRemote: true, DefaultImage: true, DefaultUpload: true, Quality: "medium"}
+		CenterRemote: true, DefaultRemote: true, DefaultImage: true, DefaultUpload: true}
 	for _, want := range []RoomSettings{set, defaults} {
 		if err := s.SaveRoomSettings(ctx, want); err != nil {
 			t.Fatal(err)
@@ -22,7 +22,7 @@ func TestRoomSettings(t *testing.T) {
 			t.Fatalf("saved: %v %+v, want %+v", err, got, want)
 		}
 	}
-	if got, err := s.RoomSettings(ctx, "other"); err != nil || got != (RoomSettings{Name: "other", Access: "public", Quality: "medium"}) {
+	if got, err := s.RoomSettings(ctx, "other"); err != nil || got != (RoomSettings{Name: "other", Access: "public"}) {
 		t.Fatalf("other defaults: %v %+v", err, got)
 	}
 	if err := s.SaveRoomSettings(ctx, RoomSettings{Name: "main", Access: "invalid"}); err == nil {

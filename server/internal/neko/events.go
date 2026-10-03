@@ -27,11 +27,16 @@ func (c *Client) SetImplicitHosting(ctx context.Context, implicit bool) error {
 	return c.do(ctx, http.MethodPost, "/api/room/settings", map[string]bool{"implicit_hosting": implicit}, nil, true)
 }
 
+// Init is what neko reports when the event stream (re)connects.
+type Init struct {
+	Videos []string // capture pipeline ids, the default first
+}
+
 // WatchHost calls onHost with the neko session id of the remote holder
 // ("" = nobody) whenever it changes, until ctx ends. It reconnects on its own
 // and calls onConnect after every successful (re)connect, which is also the
 // first sign that neko may have restarted and lost its runtime settings.
-func (c *Client) WatchHost(ctx context.Context, onConnect func(), onHost func(hostID string)) {
+func (c *Client) WatchHost(ctx context.Context, onConnect func(Init), onHost func(hostID string)) {
 	log := slog.With("neko", c.base.Host)
 	backoff := time.Second
 	for ctx.Err() == nil {
@@ -53,7 +58,7 @@ func (c *Client) WatchHost(ctx context.Context, onConnect func(), onHost func(ho
 	}
 }
 
-func (c *Client) watchHostOnce(ctx context.Context, onConnect func(), onHost func(string)) error {
+func (c *Client) watchHostOnce(ctx context.Context, onConnect func(Init), onHost func(string)) error {
 	token, err := c.observerToken(ctx)
 	if err != nil {
 		return err
@@ -73,7 +78,6 @@ func (c *Client) watchHostOnce(ctx context.Context, onConnect func(), onHost fun
 	}
 	defer conn.CloseNow()
 	conn.SetReadLimit(1 << 20)
-	onConnect()
 
 	type controlHost struct {
 		HasHost bool   `json:"has_host"`
@@ -96,10 +100,14 @@ func (c *Client) watchHostOnce(ctx context.Context, onConnect func(), onHost fun
 		case "system/init":
 			var init struct {
 				ControlHost controlHost `json:"control_host"`
+				WebRTC      struct {
+					Videos []string `json:"videos"`
+				} `json:"webrtc"`
 			}
 			if json.Unmarshal(msg.Payload, &init) != nil {
 				continue
 			}
+			onConnect(Init{Videos: init.WebRTC.Videos})
 			host = init.ControlHost
 		case "control/host":
 			if json.Unmarshal(msg.Payload, &host) != nil {

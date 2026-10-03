@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -291,8 +292,8 @@ func (s *Server) adminSaveRoomSettings(w http.ResponseWriter, r *http.Request) {
 		DefaultRemote   bool    `json:"defaultRemote"`
 		DefaultImage    bool    `json:"defaultImage"`
 		DefaultUpload   bool    `json:"defaultUpload"`
-		Screen          *string `json:"screen"`  // omitted = unchanged
-		Quality         *string `json:"quality"` // omitted = unchanged
+		Screen          *string `json:"screen"` // omitted = unchanged
+		Stream          *string `json:"stream"` // omitted = unchanged
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -309,13 +310,20 @@ func (s *Server) adminSaveRoomSettings(w http.ResponseWriter, r *http.Request) {
 	set := store.RoomSettings{Name: room, Access: req.Access, Hidden: req.Hidden,
 		RemoteOwnership: req.RemoteOwnership, CenterRemote: req.CenterRemote,
 		DefaultRemote: req.DefaultRemote, DefaultImage: req.DefaultImage, DefaultUpload: req.DefaultUpload,
-		Screen: current.Screen, Quality: current.Quality}
-	if req.Quality != nil {
-		if !store.ValidQuality(*req.Quality) {
-			writeError(w, http.StatusBadRequest, "Quality must be high, medium or low.")
-			return
+		Screen: current.Screen, Stream: current.Stream}
+	if req.Stream != nil && *req.Stream != current.Stream {
+		if *req.Stream != "" {
+			streams := s.hub.Room(room).Streams()
+			if streams == nil {
+				writeError(w, http.StatusServiceUnavailable, "The room's desktop is not reachable right now.")
+				return
+			}
+			if !slices.Contains(streams, *req.Stream) {
+				writeError(w, http.StatusBadRequest, "The room does not offer that stream.")
+				return
+			}
 		}
-		set.Quality = *req.Quality
+		set.Stream = *req.Stream
 	}
 	if req.Screen != nil && *req.Screen != current.Screen {
 		if *req.Screen != "" && !s.screenSupported(w, r, room, *req.Screen) {
@@ -331,8 +339,9 @@ func (s *Server) adminSaveRoomSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, set)
 }
 
-// adminRoomScreens lists the desktop resolutions the room supports.
-func (s *Server) adminRoomScreens(w http.ResponseWriter, r *http.Request) {
+// adminStreamOptions lists what the room's desktop supports: screen sizes
+// ("1280x720@30") and capture pipelines ("b2500-s100", the default first).
+func (s *Server) adminStreamOptions(w http.ResponseWriter, r *http.Request) {
 	if s.requireAdmin(w, r) == nil {
 		return
 	}
@@ -342,8 +351,11 @@ func (s *Server) adminRoomScreens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	list, err := rm.Neko().ScreenConfigurations(r.Context())
-	if err != nil {
-		s.log.Warn("list neko screens", "room", rm.Name, "err", err)
+	streams := rm.Streams()
+	if err != nil || streams == nil {
+		if err != nil {
+			s.log.Warn("list neko screens", "room", rm.Name, "err", err)
+		}
 		writeError(w, http.StatusServiceUnavailable, "The room's desktop is not reachable right now.")
 		return
 	}
@@ -351,7 +363,7 @@ func (s *Server) adminRoomScreens(w http.ResponseWriter, r *http.Request) {
 	for _, size := range list {
 		screens = append(screens, size.String())
 	}
-	writeJSON(w, http.StatusOK, screens)
+	writeJSON(w, http.StatusOK, map[string][]string{"screens": screens, "streams": streams})
 }
 
 // screenSupported checks a requested resolution against the room's desktop,

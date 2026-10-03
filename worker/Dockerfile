@@ -28,7 +28,9 @@ COPY --chmod=0644 firefox/mozilla.cfg /usr/lib/firefox/mozilla.cfg
 COPY --chmod=0644 firefox/policies.json /usr/lib/firefox/distribution/policies.json
 COPY --chmod=0644 supervisord.conf /etc/neko/supervisord/cozycast.conf
 
-# Imports an old CozyCast room's home folder on first start, then runs neko.
+# Generates the stream pipelines and imports an old CozyCast room's home
+# folder on first start, then runs neko.
 COPY --chmod=0755 import-home.sh /usr/local/bin/cozycast-import-home
-ENTRYPOINT ["/usr/local/bin/cozycast-import-home"]
+COPY --chmod=0755 entrypoint.sh /usr/local/bin/cozycast-entrypoint
+ENTRYPOINT ["/usr/local/bin/cozycast-entrypoint"]
 CMD ["/usr/bin/supervisord", "-c", "/etc/neko/supervisord.conf"]

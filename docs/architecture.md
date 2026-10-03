@@ -55,9 +55,11 @@ embedded SQL files applied in order at startup (`server/internal/store/migration
 - `rooms`: name, access (`public` | `account` | `verified` | `invite`),
   hidden, remote_ownership, center_remote, default_remote, default_image,
   default_upload, screen (desktop size, e.g. `1280x720@30`, applied through
-  neko's API), quality (`high` | `medium` | `low`: which capture pipeline
-  viewers watch; pipelines are defined in `compose.yaml` and only run while
-  watched). Rooms themselves come from configuration (`COZYCAST_ROOMS`); a row
+  neko's API), stream (which capture pipeline viewers watch, e.g.
+  `b2500-s100` = 2.5 Mbit/s at full size). The worker generates one pipeline
+  per bitrate and stream size (`worker/entrypoint.sh`, configurable via
+  `STREAM_BITRATES`/`STREAM_SCALES`); neko only runs those being watched, and
+  the server learns the list from neko when it connects. Rooms themselves come from configuration (`COZYCAST_ROOMS`); a row
   holds their settings.
 - `room_permissions`: (room, user_id) unique; remote, image, upload, trusted,
   invited, invite_name, banned, banned_until.

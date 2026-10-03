@@ -9,6 +9,7 @@ import (
 	"hash/fnv"
 	"log/slog"
 	"math"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -52,6 +53,7 @@ type Room struct {
 	hostID   string             // neko session id (= client id) holding the remote
 
 	lastRestart time.Time // for the trusted-user cooldown
+	streams     []string  // capture pipelines neko offers, the default first
 }
 
 // member is one person in the room, with all their tabs.
@@ -94,7 +96,7 @@ func newRoom(h *Hub, name string, nc *neko.Client) *Room {
 		ready:    make(chan struct{}),
 		chatUser: ratelimit.New(10, 500*time.Millisecond),
 		chatAnon: ratelimit.New(5, time.Second),
-		settings: store.RoomSettings{Name: name, Access: "public", Quality: "medium"},
+		settings: store.RoomSettings{Name: name, Access: "public"},
 		members:  make(map[string]*member),
 		clients:  make(map[string]*Client),
 	}
@@ -135,7 +137,15 @@ func (r *Room) run(ctx context.Context) {
 	}
 	close(r.ready)
 	r.log.Info("neko ready")
-	r.neko.WatchHost(ctx, func() { r.reapplyNekoSettings(ctx) }, r.setHost)
+	r.neko.WatchHost(ctx, func(init neko.Init) {
+		r.mu.Lock()
+		r.streams = init.Videos
+		// Tabs that joined before neko reported its streams may have been
+		// told about a stream it does not offer.
+		r.broadcastLocked(settingsMsg{Type: "room_settings", Settings: r.publicSettingsLocked()}, nil)
+		r.mu.Unlock()
+		r.reapplyNekoSettings(ctx)
+	}, r.setHost)
 }
 
 // prepareNeko removes neko members left from a previous run (CozyCast owns
@@ -274,7 +284,7 @@ func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
 		ClientID: c.ID,
 		Self:     r.userLocked(m),
 		Rights:   m.rights,
-		Settings: r.settings,
+		Settings: r.publicSettingsLocked(),
 		Users:    r.usersLocked(),
 		History:  r.toChat(history),
 		Remote:   r.holderLocked(),
@@ -409,7 +419,7 @@ func (r *Room) reloadSettings(ctx context.Context) {
 	ownershipChanged := s.RemoteOwnership != r.settings.RemoteOwnership
 	screenChanged := s.Screen != r.settings.Screen
 	r.settings = s
-	r.broadcastLocked(settingsMsg{Type: "room_settings", Settings: s}, nil)
+	r.broadcastLocked(settingsMsg{Type: "room_settings", Settings: r.publicSettingsLocked()}, nil)
 	var resync []*Client
 	now := time.Now().Unix()
 	for _, m := range r.members {
@@ -687,4 +697,23 @@ func (r *Room) Settings() store.RoomSettings {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.settings
+}
+
+// Streams returns the capture pipelines the room's neko offers (default
+// first), or nil while neko has not reported them yet.
+func (r *Room) Streams() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.streams)
+}
+
+// publicSettingsLocked is what browsers get: a stream neko does not offer
+// (e.g. after the operator changed the stream list) falls back to neko's
+// default instead of leaving viewers without video.
+func (r *Room) publicSettingsLocked() store.RoomSettings {
+	set := r.settings
+	if set.Stream != "" && r.streams != nil && !slices.Contains(r.streams, set.Stream) {
+		set.Stream = ""
+	}
+	return set
 }

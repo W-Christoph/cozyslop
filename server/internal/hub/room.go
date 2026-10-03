@@ -43,12 +43,15 @@ type Room struct {
 	chatUser  *ratelimit.Limiter
 	chatAnon  *ratelimit.Limiter
 	whisperID atomic.Int64
+	restart   func(ctx context.Context) error // nil = container control disabled
 
 	mu       sync.Mutex
 	settings store.RoomSettings
 	members  map[string]*member // by identity key
 	clients  map[string]*Client // by client id
 	hostID   string             // neko session id (= client id) holding the remote
+
+	lastRestart time.Time // for the trusted-user cooldown
 }
 
 // member is one person in the room, with all their tabs.
@@ -275,6 +278,7 @@ func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
 		Users:    r.usersLocked(),
 		History:  r.toChat(history),
 		Remote:   r.holderLocked(),
+		Restart:  r.restart != nil,
 	})
 	var resync []*Client
 	if isNew {

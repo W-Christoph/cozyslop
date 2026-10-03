@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -42,6 +43,8 @@ func (r *Room) Handle(ctx context.Context, c *Client, msg ClientMsg) {
 		}
 	case "neko_token":
 		r.sendNekoToken(ctx, c)
+	case "restart":
+		err = r.Restart(c)
 	default:
 		c.send(errorMsg{Type: "error", Message: "Unknown message type."})
 		return
@@ -309,4 +312,41 @@ func (r *Room) isAdmin(c *Client) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return c.m.rights.Admin
+}
+
+// RestartCooldown is how often trusted users may restart a room; admins may
+// restart it any time.
+const RestartCooldown = time.Hour
+
+// Restart restarts the room's container on behalf of a tab, if container
+// control is enabled and the tab's person may do it.
+func (r *Room) Restart(c *Client) error {
+	if r.restart == nil {
+		return &userError{"Restarting is not enabled on this server."}
+	}
+	r.mu.Lock()
+	rt := c.m.rights
+	if !rt.Admin && !rt.Trusted {
+		r.mu.Unlock()
+		return ErrNotAllowed
+	}
+	if wait := time.Until(r.lastRestart.Add(RestartCooldown)); !rt.Admin && wait > 0 {
+		r.mu.Unlock()
+		return &userError{fmt.Sprintf("The room was restarted recently. Try again in %d minutes.", int(wait.Minutes())+1)}
+	}
+	r.lastRestart = time.Now()
+	r.broadcastLocked(restartingMsg{Type: "restarting", By: r.userLocked(c.m).Nickname}, nil)
+	r.mu.Unlock()
+
+	r.log.Info("restarting room", "by", c.m.key)
+	// The restart outlives the request: the requester's socket may close
+	// while the desktop goes down.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		if err := r.restart(ctx); err != nil {
+			r.log.Error("restart room", "err", err)
+		}
+	}()
+	return nil
 }

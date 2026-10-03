@@ -29,12 +29,17 @@ type Hub struct {
 type RoomConfig struct {
 	Name string
 	Neko *neko.Client
+	// Restart restarts the room's container; nil when the operator has not
+	// enabled container control.
+	Restart func(ctx context.Context) error
 }
 
 func New(s *store.Store, mediaDir string, rooms []RoomConfig) *Hub {
 	h := &Hub{store: s, mediaDir: mediaDir, rooms: make(map[string]*Room), log: slog.Default()}
 	for _, rc := range rooms {
-		h.rooms[rc.Name] = newRoom(h, rc.Name, rc.Neko)
+		r := newRoom(h, rc.Name, rc.Neko)
+		r.restart = rc.Restart
+		h.rooms[rc.Name] = r
 	}
 	return h
 }

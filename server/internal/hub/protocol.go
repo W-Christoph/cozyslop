@@ -48,6 +48,7 @@ type welcomeMsg struct {
 	Users    []User             `json:"users"`
 	History  []ChatMessage      `json:"history"` // oldest first; replaces what the browser had
 	Remote   *string            `json:"remote"`  // identity key of the remote holder
+	Restart  bool               `json:"restart"` // the room can be restarted (admins, trusted)
 }
 
 type nekoMsg struct {
@@ -101,6 +102,12 @@ type settingsMsg struct {
 type remoteMsg struct {
 	Type   string  `json:"type"`   // "remote"
 	Holder *string `json:"holder"` // identity key, nil = nobody
+}
+
+// The room's desktop is restarting; streams come back by themselves.
+type restartingMsg struct {
+	Type string `json:"type"` // "restarting"
+	By   string `json:"by"`   // nickname of who restarted it
 }
 
 // Sent right before the server closes the socket on purpose.

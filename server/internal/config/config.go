@@ -26,6 +26,7 @@ type Config struct {
 	NekoAPIToken  string
 	Rooms         []Room
 	WebDir        string // serve the UI from disk instead of the embedded build (dev)
+	SourceURL     string // where users can get this server's source code (AGPL)
 	MaxUploadMB   int64  // maximum chat media file size in MiB
 }
 
@@ -41,6 +42,7 @@ func FromEnv() (Config, error) {
 		InitAdminPass: os.Getenv("COZYCAST_INIT_ADMIN_PASSWORD"),
 		NekoAPIToken:  os.Getenv("COZYCAST_NEKO_API_TOKEN"),
 		WebDir:        os.Getenv("COZYCAST_WEB_DIR"),
+		SourceURL:     env("COZYCAST_SOURCE_URL", "https://github.com/W-Christoph/cozyslop"),
 	}
 	if c.NekoAPIToken == "" {
 		return c, errors.New("COZYCAST_NEKO_API_TOKEN is required")

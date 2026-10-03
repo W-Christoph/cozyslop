@@ -65,7 +65,10 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, set)
+	writeJSON(w, http.StatusOK, struct {
+		store.Settings
+		SourceURL string `json:"sourceUrl"`
+	}{set, s.sourceURL})
 }
 
 func (s *Server) getMe(w http.ResponseWriter, r *http.Request) {

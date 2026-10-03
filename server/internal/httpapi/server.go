@@ -26,6 +26,9 @@ type Deps struct {
 	Web         fs.FS
 	MediaDir    string // avatars and chat subdirectories
 	MaxUploadMB int64  // chat media; defaults to 10 MiB
+	// SourceURL is where users get this server's source code; the AGPL
+	// requires offering it to everyone using the server over the network.
+	SourceURL string
 }
 
 type Server struct {
@@ -33,6 +36,7 @@ type Server struct {
 	auth           *auth.Service
 	hub            *hub.Hub
 	web            fs.FS
+	sourceURL      string
 	log            *slog.Logger
 	mediaDir       string
 	maxUploadBytes int64
@@ -53,6 +57,7 @@ func New(d Deps) *Server {
 		auth:           d.Auth,
 		hub:            d.Hub,
 		web:            d.Web,
+		sourceURL:      d.SourceURL,
 		log:            slog.Default(),
 		mediaDir:       d.MediaDir,
 		maxUploadBytes: d.MaxUploadMB << 20,

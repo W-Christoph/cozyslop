@@ -99,6 +99,7 @@ func run() error {
 		Web:         web,
 		MediaDir:    mediaDir,
 		MaxUploadMB: cfg.MaxUploadMB,
+		SourceURL:   cfg.SourceURL,
 	}).Handler()
 
 	var servers []*http.Server

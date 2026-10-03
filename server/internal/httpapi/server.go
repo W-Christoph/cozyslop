@@ -4,31 +4,84 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
+	"time"
 
+	"cozycast/internal/auth"
+	"cozycast/internal/ratelimit"
 	"cozycast/internal/room"
+	"cozycast/internal/store"
 )
 
+type Deps struct {
+	Store *store.Store
+	Auth  *auth.Service
+	Rooms map[string]*room.Room
+	Web   fs.FS
+}
+
 type Server struct {
+	store *store.Store
+	auth  *auth.Service
 	rooms map[string]*room.Room
 	web   fs.FS
 	log   *slog.Logger
+
+	loginLimit    *ratelimit.Limiter // per IP: login attempts
+	registerLimit *ratelimit.Limiter // per IP: account creations
 }
 
-func New(rooms map[string]*room.Room, web fs.FS) *Server {
-	return &Server{rooms: rooms, web: web, log: slog.Default()}
+func New(d Deps) *Server {
+	return &Server{
+		store:         d.Store,
+		auth:          d.Auth,
+		rooms:         d.Rooms,
+		web:           d.Web,
+		log:           slog.Default(),
+		loginLimit:    ratelimit.New(10, 30*time.Second),
+		registerLimit: ratelimit.New(3, 10*time.Minute),
+	}
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/settings", s.getSettings)
+	mux.HandleFunc("POST /api/auth/login", s.login)
+	mux.HandleFunc("POST /api/auth/logout", s.logout)
+	mux.HandleFunc("POST /api/auth/register", s.register)
+	mux.HandleFunc("GET /api/me", s.getMe)
+	mux.HandleFunc("PATCH /api/me", s.updateMe)
+	mux.HandleFunc("POST /api/me/password", s.changePassword)
 	mux.HandleFunc("GET /api/rooms", s.listRooms)
 	mux.HandleFunc("GET /api/rooms/{room}/ws", s.roomSocket)
 	mux.HandleFunc("/neko/{room}/{path...}", s.nekoProxy)
 	mux.Handle("/", spaHandler(s.web))
-	return mux
+	return sameOrigin(mux)
+}
+
+// sameOrigin rejects state-changing requests sent by other sites. Session
+// cookies are SameSite=Lax already; this also covers same-site subdomains
+// and old browsers.
+func sameOrigin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet, http.MethodHead, http.MethodOptions:
+		default:
+			if origin := r.Header.Get("Origin"); origin != "" {
+				u, err := url.Parse(origin)
+				if err != nil || u.Host != r.Host {
+					writeError(w, http.StatusForbidden, "cross-origin request rejected")
+					return
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) room(r *http.Request) *room.Room {
@@ -49,8 +102,39 @@ func (s *Server) listRooms(w http.ResponseWriter, r *http.Request) {
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// writeError sends {"error": msg}. Messages are shown to users as-is.
+func writeError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// internalError logs err and sends a generic 500.
+func (s *Server) internalError(w http.ResponseWriter, r *http.Request, err error) {
+	s.log.Error("request failed", "method", r.Method, "path", r.URL.Path, "err", err)
+	writeError(w, http.StatusInternalServerError, "Something went wrong.")
+}
+
+const maxJSONBody = 64 << 10
+
+// readJSON decodes a JSON request body into v, answering 400 itself on
+// failure.
+func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBody))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeError(w, http.StatusRequestEntityTooLarge, "Request too large.")
+		} else {
+			writeError(w, http.StatusBadRequest, "Invalid request.")
+		}
+		return false
+	}
+	return true
 }
 
 // spaHandler serves static files and falls back to index.html so client-side

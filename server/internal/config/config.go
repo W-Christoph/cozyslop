@@ -16,6 +16,9 @@ type Room struct {
 
 type Config struct {
 	Listen        string
+	DataDir       string // database and uploaded files
+	TrustProxy    bool   // take client IP/scheme from X-Forwarded-* headers
+	InitAdminPass string // creates the "admin" account if it does not exist
 	NekoAPIToken  string
 	Rooms         []Room
 	WebDir        string // serve the UI from disk instead of the embedded build (dev)
@@ -26,6 +29,9 @@ type Config struct {
 func FromEnv() (Config, error) {
 	c := Config{
 		Listen:        env("COZYCAST_LISTEN", ":8080"),
+		DataDir:       env("COZYCAST_DATA_DIR", "data"),
+		TrustProxy:    envBool("COZYCAST_TRUST_PROXY", false),
+		InitAdminPass: os.Getenv("COZYCAST_INIT_ADMIN_PASSWORD"),
 		NekoAPIToken:  os.Getenv("COZYCAST_NEKO_API_TOKEN"),
 		WebDir:        os.Getenv("COZYCAST_WEB_DIR"),
 		DefaultRemote: envBool("COZYCAST_DEFAULT_REMOTE", true),

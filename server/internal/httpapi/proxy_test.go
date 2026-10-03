@@ -20,7 +20,7 @@ func TestNekoProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(New(map[string]*room.Room{"default": room.New("default", nc, room.Permissions{})}, nil).Handler())
+	srv := httptest.NewServer(New(Deps{Rooms: map[string]*room.Room{"default": room.New("default", nc, room.Permissions{})}}).Handler())
 	defer srv.Close()
 
 	tests := []struct {

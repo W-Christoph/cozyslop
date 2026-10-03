@@ -8,13 +8,16 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"cozycast/internal/auth"
 	"cozycast/internal/config"
 	"cozycast/internal/httpapi"
 	"cozycast/internal/neko"
 	"cozycast/internal/room"
+	"cozycast/internal/store"
 	"cozycast/webui"
 )
 
@@ -34,6 +37,19 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
+		return err
+	}
+	db, err := store.Open(ctx, filepath.Join(cfg.DataDir, "cozycast.db"))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if err := ensureAdmin(ctx, db, cfg.InitAdminPass); err != nil {
+		return err
+	}
+	go sweepSessions(ctx, db)
+
 	defaults := room.Permissions{Remote: cfg.DefaultRemote, Upload: cfg.DefaultUpload}
 	rooms := make(map[string]*room.Room, len(cfg.Rooms))
 	for _, rc := range cfg.Rooms {
@@ -52,8 +68,13 @@ func run() error {
 	}
 
 	srv := &http.Server{
-		Addr:              cfg.Listen,
-		Handler:           httpapi.New(rooms, web).Handler(),
+		Addr: cfg.Listen,
+		Handler: httpapi.New(httpapi.Deps{
+			Store: db,
+			Auth:  auth.New(db, cfg.TrustProxy),
+			Rooms: rooms,
+			Web:   web,
+		}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -75,4 +96,37 @@ func run() error {
 		return err
 	}
 	return nil
+}
+
+// ensureAdmin creates the "admin" account on first start (CozyCast did the
+// same). An existing account is left alone, including its password.
+func ensureAdmin(ctx context.Context, db *store.Store, password string) error {
+	if password == "" {
+		return nil
+	}
+	_, err := db.UserByUsername(ctx, "admin")
+	if !errors.Is(err, store.ErrNotFound) {
+		return err
+	}
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return err
+	}
+	slog.Info("creating admin account")
+	return db.CreateUser(ctx, &store.User{Username: "admin", PasswordHash: hash, Nickname: "admin", Admin: true, Verified: true})
+}
+
+func sweepSessions(ctx context.Context, db *store.Store) {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		if err := db.DeleteExpiredSessions(ctx); err != nil && ctx.Err() == nil {
+			slog.Warn("delete expired sessions", "err", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }

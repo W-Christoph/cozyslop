@@ -87,6 +87,8 @@ disk, or use `npm run dev` (Vite proxies `/api` and `/neko` to
 | `COZYCAST_DEFAULT_UPLOAD` | `false` | upload permission for new connections |
 | `COZYCAST_WEB_DIR` | | serve the UI from this directory instead of the embedded build |
 
+Room restarts from the UI are an [opt-in Docker control feature](docs/architecture.md#room-websocket); enable the commented socket, environment and group settings in `compose.yaml`.
+
 ## Measurements
 
 From the prototype, tested end to end with headless Chromium against the

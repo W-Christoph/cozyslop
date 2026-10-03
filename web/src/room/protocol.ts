@@ -63,6 +63,7 @@ export type ServerMessage =
       users: User[]
       history: ChatMessage[] // oldest first; replaces what we had
       remote: string | null
+      restart: boolean
     }
   | { type: 'neko'; token: string; path: string }
   | { type: 'user_joined' | 'user_updated'; user: User }
@@ -74,6 +75,7 @@ export type ServerMessage =
   | { type: 'rights'; rights: Rights }
   | { type: 'room_settings'; settings: RoomSettings }
   | { type: 'remote'; holder: string | null }
+  | { type: 'restarting'; by: string }
   | { type: 'kicked'; reason: KickReason; bannedUntil?: number | null }
   | { type: 'error'; message: string }
 
@@ -86,4 +88,5 @@ export type ClientMessage =
   | { type: 'muted'; muted: boolean }
   | { type: 'whisper'; to: string; body: string }
   | { type: 'remote_reset' }
+  | { type: 'restart' }
   | { type: 'neko_token' }

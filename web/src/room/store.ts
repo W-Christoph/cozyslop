@@ -35,6 +35,8 @@ export class RoomStore {
   readonly chat = signal<readonly ChatMessage[]>([])
   readonly typing = signal<ReadonlySet<string>>(new Set()) // identity keys
   readonly remoteHolder = signal<string | null>(null) // identity key
+  readonly restartAvailable = signal(false)
+  readonly restarting = signal<string | null>(null) // nickname
 
   // remote, as neko sees this tab
   readonly isHost = signal(false)
@@ -70,6 +72,7 @@ export class RoomStore {
       this.socket.on('message', (msg) => this.onMessage(msg)),
       neko.on('status', (s) => {
         this.video.value = s
+        if (s === 'connected') this.restarting.value = null
         if (s === 'disconnected') this.isHost.value = false
       }),
       neko.on('stream', (s) => (this.stream.value = s)),
@@ -78,8 +81,7 @@ export class RoomStore {
         if (this.paused.value) return
         // The token may be stale (neko restarted, session removed): ask for
         // a new one rather than retrying the old one.
-        window.clearTimeout(this.nekoRetry)
-        this.nekoRetry = window.setTimeout(() => this.socket.send({ type: 'neko_token' }), NEKO_RETRY_MS)
+        this.retryNekoToken()
       }),
     )
   }
@@ -164,6 +166,20 @@ export class RoomStore {
     this.socket.send({ type: 'remote_reset' })
   }
 
+  restart() {
+    this.error.value = null
+    this.socket.send({ type: 'restart' })
+  }
+
+  private retryNekoToken() {
+    window.clearTimeout(this.nekoRetry)
+    this.nekoRetry = window.setTimeout(() => {
+      if (!this.paused.value && this.server.value === 'connected' && this.neko.status === 'disconnected') {
+        this.socket.send({ type: 'neko_token' })
+      }
+    }, NEKO_RETRY_MS)
+  }
+
   // ---- server messages -----------------------------------------------------
 
   private onMessage(msg: ServerMessage) {
@@ -176,10 +192,12 @@ export class RoomStore {
           this.users.value = new Map(msg.users.map((u) => [u.key, u]))
           this.chat.value = msg.history
           this.remoteHolder.value = msg.remote
+          this.restartAvailable.value = msg.restart
           this.error.value = null
         })
         break
       case 'neko':
+        window.clearTimeout(this.nekoRetry)
         this.error.value = null
         if (!this.paused.value) {
           this.neko.connect(msg.path, msg.token, {
@@ -228,12 +246,20 @@ export class RoomStore {
       case 'remote':
         this.remoteHolder.value = msg.holder
         break
+      case 'restarting':
+        this.restarting.value = msg.by
+        break
       case 'kicked':
         this.kicked.value = { reason: msg.reason, bannedUntil: msg.bannedUntil }
         this.neko.disconnect()
         break
       case 'error':
         this.error.value = msg.message
+        // A restart can take longer than the first token retry. Keep trying
+        // after a failed token request until the desktop comes back.
+        if (this.restarting.value !== null && this.neko.status === 'disconnected' && !this.paused.value) {
+          this.retryNekoToken()
+        }
         break
     }
   }

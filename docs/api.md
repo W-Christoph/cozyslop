@@ -156,6 +156,12 @@ separate CozyCast JSON schema applies to proxied requests or responses.
 
 The room WebSocket carries presence, chat, typing, activity, mute status,
 rights, room settings, remote ownership, moderation and per-tab neko tokens.
+`welcome.restart` is a boolean indicating whether container control is enabled.
+Clients send `{"type":"restart"}` to restart the room's desktop; admins are
+always allowed and trusted users are allowed once per hour per room. The
+server broadcasts `{"type":"restarting","by":"<nickname>"}` to everyone
+before restarting. Disabled, unauthorized and cooldown requests receive an
+`error` message through the usual room protocol.
 See [the protocol definitions](../server/internal/hub/protocol.go) for message
 fields and types. Admission and effective rights are described in
 [architecture](architecture.md#permissions).

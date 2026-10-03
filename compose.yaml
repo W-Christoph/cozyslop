@@ -86,9 +86,17 @@ services:
       COZYCAST_ACME_EMAIL: ${ACME_EMAIL:-}
       # Creates the "admin" account on first start.
       COZYCAST_INIT_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # Opt-in room restart control from the UI. This gives the server
+      # control over Docker on the host; only needed for UI room restarts.
+      # Uncomment this, the socket volume, and group_add below together.
+      # COZYCAST_DOCKER: "true"
     volumes:
       - server-data:/data
       - ./import:/import:ro
+      # - /var/run/docker.sock:/var/run/docker.sock
+    # The server runs as a non-root user; set DOCKER_GID in .env so it can
+    # access the socket's group (see .env.example).
+    # group_add: ["${DOCKER_GID}"]
     depends_on:
       - room-default
 

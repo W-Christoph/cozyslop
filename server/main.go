@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 	"cozycast/internal/auth"
 	"cozycast/internal/config"
+	"cozycast/internal/docker"
 	"cozycast/internal/httpapi"
 	"cozycast/internal/hub"
 	"cozycast/internal/legacy"
@@ -76,13 +78,44 @@ func run() error {
 	}
 	go sweepSessions(ctx, db)
 
+	var dc *docker.Client
+	var project string
+	if cfg.Docker {
+		dc = docker.New(cfg.DockerSocket)
+		project, err = dc.OwnProject(ctx)
+		if err != nil {
+			project = cfg.DockerProject
+			if project == "" {
+				slog.Warn("Docker compose project unavailable; matching containers by service name only", "err", err)
+			}
+		}
+		slog.Info("room container control enabled", "socket", cfg.DockerSocket, "project", project)
+	} else {
+		slog.Info("room container control disabled")
+	}
+
 	rooms := make([]hub.RoomConfig, 0, len(cfg.Rooms))
 	for _, rc := range cfg.Rooms {
 		nc, err := neko.NewClient(rc.NekoURL, cfg.NekoAPIToken)
 		if err != nil {
 			return err
 		}
-		rooms = append(rooms, hub.RoomConfig{Name: rc.Name, Neko: nc})
+		room := hub.RoomConfig{Name: rc.Name, Neko: nc}
+		if dc != nil {
+			u, err := url.Parse(rc.NekoURL)
+			if err != nil {
+				return err
+			}
+			service := u.Hostname()
+			room.Restart = func(ctx context.Context) error {
+				id, err := dc.ServiceContainer(ctx, project, service)
+				if err != nil {
+					return err
+				}
+				return dc.Restart(ctx, id, 10*time.Second)
+			}
+		}
+		rooms = append(rooms, room)
 	}
 	h := hub.New(db, filepath.Join(mediaDir, "chat"), rooms)
 	h.Start(ctx)

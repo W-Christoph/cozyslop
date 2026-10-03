@@ -4,6 +4,7 @@ import { Button } from '../Button'
 import { Modal } from '../Modal'
 import { ProfileEditor } from '../profile/ProfileEditor'
 import { useRoomStore } from './RoomContext'
+import { RestartButton } from './RestartButton'
 import styles from './PersonalSettings.module.css'
 
 type ToggleKey = Exclude<keyof Preferences, 'theme' | 'volume'>
@@ -63,6 +64,8 @@ export function PersonalSettings({ onClose }: { onClose: () => void }) {
         </div>
       </details>
     </div>
+    {store.restartAvailable.value && store.rights.value.trusted && !store.rights.value.admin &&
+      <div class={styles.actions}><RestartButton /></div>}
     <div class={styles.actions}><Button accent onClick={apply}>Apply</Button><Button onClick={onClose}>Close</Button></div>
     <div class={styles.message} role="status">{message}</div>
   </Modal>

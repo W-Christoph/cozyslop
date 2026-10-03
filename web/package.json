@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build && node -e \"require('fs').writeFileSync('../server/webui/dist/.gitkeep', '')\"",
     "typecheck": "tsc --noEmit",
-    "test:chat": "node --test tests/chat.test.mjs"
+    "test:chat": "node --test tests/chat.test.mjs",
+    "test:restart": "node --test tests/restart.test.mjs"
   },
   "dependencies": {
     "@preact/signals": "^2.11.3",

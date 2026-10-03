@@ -108,6 +108,10 @@ type fixture struct {
 }
 
 func newFixture(t *testing.T, set store.RoomSettings, additional ...store.RoomSettings) *fixture {
+	return newFixtureWithRestart(t, set, nil, additional...)
+}
+
+func newFixtureWithRestart(t *testing.T, set store.RoomSettings, restart func(context.Context) error, additional ...store.RoomSettings) *fixture {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	s, err := store.Open(ctx, ":memory:")
@@ -127,7 +131,7 @@ func newFixture(t *testing.T, set store.RoomSettings, additional ...store.RoomSe
 		fake := nekotest.New(t, "admin-secret")
 		nc, err := neko.NewClient(fake.URL(), "admin-secret")
 		requireOK(t, err)
-		configs = append(configs, RoomConfig{Name: settings.Name, Neko: nc})
+		configs = append(configs, RoomConfig{Name: settings.Name, Neko: nc, Restart: restart})
 		fakes = append(fakes, fake)
 	}
 	h := New(s, t.TempDir(), configs)

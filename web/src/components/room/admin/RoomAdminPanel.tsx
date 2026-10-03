@@ -4,6 +4,7 @@ import { InviteModal } from '../../admin/InviteModal'
 import { Button } from '../../Button'
 import { Modal } from '../../Modal'
 import { useRoomStore } from '../RoomContext'
+import { RestartButton } from '../RestartButton'
 import { RoomAccessSettings } from './RoomAccessSettings'
 import { RoomUserManagement } from './RoomUserManagement'
 import { StreamSettings } from './StreamSettings'
@@ -22,6 +23,7 @@ export function RoomAdminPanel() {
         <h2 class={styles.heading}>Admin Tools</h2>
         <Button onClick={() => setModal('invite')}>Create Invite</Button>
         <Button disabled={!store.remoteHolder.value} onClick={() => store.resetRemote()}>Reset Remote</Button>
+        <RestartButton />
         <Button onClick={() => setModal('users')}>User Management</Button>
         <Button onClick={() => setModal('invites')}>Invite Management</Button>
         <Button onClick={() => setModal('whisper')}>Whisper User</Button>

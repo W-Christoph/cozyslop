@@ -108,6 +108,32 @@ Admin actions that change stored state (permissions, bans, room settings)
 are REST endpoints; they notify the hub, which applies the change to live
 connections immediately.
 
+Room restarts are disabled by default. With `COZYCAST_DOCKER=true`, the server
+uses the Docker Engine Unix socket (`COZYCAST_DOCKER_SOCKET`, default
+`/var/run/docker.sock`). It inspects its own container using its hostname to
+find the Compose project, falling back to `COZYCAST_DOCKER_PROJECT` if that
+fails. Without either project it logs a warning and matches by service name
+only; ambiguous matches are rejected. A room's neko URL hostname is its
+Compose service name (e.g. `room-default`). Each restart looks up the running
+container again by Compose labels, then restarts it with a 10-second stop
+timeout.
+
+`welcome.restart` advertises availability. Admins may restart at any time;
+trusted users may restart once per hour per room, shared across users and
+tabs. Every accepted restart, including an admin restart, starts that
+cooldown. It is held in memory and resets when the server restarts. The
+server broadcasts `restarting` with the requester's nickname before issuing
+the restart asynchronously; Docker failures are logged. Browsers reconnect
+their desktop streams and obtain fresh neko tokens. The desktop restarts for
+everyone and open browser tabs/pages are lost.
+
+The socket mount grants the server control over Docker on the host, even
+though this feature only invokes room container restarts. This is a security
+trade-off: a compromised server could control other containers and the host.
+Enable the commented lines in `compose.yaml` only when this access is wanted;
+the non-root server also needs the socket's group via `DOCKER_GID` (see
+`.env.example`). Leaving the option off keeps container control entirely off.
+
 ## Changes from CozyCast
 
 - Sessions expire and can be revoked; logout works.
@@ -121,4 +147,4 @@ connections immediately.
 - New: desktop upload permission, change own password.
 - Stream settings (desktop size, frame rate, quality preset) are changed live
   through neko's API, without restarting anything. Restarting a room from the
-  UI will need opt-in Docker socket access (planned).
+  UI uses opt-in Docker socket access, with the security trade-off above.

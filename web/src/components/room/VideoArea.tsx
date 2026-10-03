@@ -14,7 +14,8 @@ export function VideoArea() {
   const video = useRef<HTMLVideoElement>(null)
   const onPlaybackBlocked = useCallback((value: boolean) => setBlocked(value), [])
   const paused = store.paused.value
-  const loading = store.server.value !== 'connected' || store.video.value !== 'connected'
+  const restarting = store.restarting.value
+  const loading = restarting !== null || store.server.value !== 'connected' || store.video.value !== 'connected'
   const play = () => {
     if (store.paused.value) {
       store.resume()
@@ -36,7 +37,7 @@ export function VideoArea() {
         ) : loading ? (
           <div class={styles.loading} role="status">
             <img src="/svg/loading-cozy.svg" alt="" />
-            <span>{store.error.value ?? 'LOADING...'}</span>
+            <span>{restarting !== null ? `${restarting} restarted the room. Reconnecting…` : store.error.value ?? 'LOADING...'}</span>
           </div>
         ) : store.audioOnly.value ? (
           <div class={styles.audio} role="status">

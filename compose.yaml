@@ -1,0 +1,86 @@
+# CozyCast: one server plus one neko container per room.
+# Configure via .env (see .env.example), then: docker compose up -d --build
+
+x-room: &room
+  build: ./worker
+  image: cozycast-worker
+  restart: unless-stopped
+  shm_size: 2gb
+  environment: &room-env
+    NEKO_DESKTOP_SCREEN: ${SCREEN:-1280x720@30}
+    # CozyCast's server is the only neko admin; browsers get per-user tokens.
+    NEKO_MEMBER_PROVIDER: object
+    NEKO_SESSION_API_TOKEN: ${NEKO_API_TOKEN:?set NEKO_API_TOKEN in .env}
+    NEKO_SESSION_COOKIE_ENABLED: "false"
+    NEKO_SESSION_IMPLICIT_HOSTING: "true"
+    NEKO_SESSION_INACTIVE_CURSORS: "false"
+    NEKO_CHAT_ENABLED: "false"
+    NEKO_FILETRANSFER_ENABLED: "true"
+    NEKO_FILETRANSFER_DIR: /home/neko/Downloads
+    NEKO_FILETRANSFER_USER_UPLOAD: "true"
+    NEKO_FILETRANSFER_USER_DOWNLOAD: "true"
+    # Encode once, H.264 for cheap decoding everywhere. A keyframe every 2s
+    # (key-int-max 60 at 30fps): new viewers wait for one before the picture
+    # appears, and neko's on-demand keyframe did not take effect in testing.
+    NEKO_CAPTURE_VIDEO_CODEC: h264
+    # Must list the pipeline ids below; neko crashes on connect otherwise.
+    NEKO_CAPTURE_VIDEO_IDS: main
+    # Draw the host's mouse pointer into the stream so everyone sees it.
+    NEKO_CAPTURE_VIDEO_SHOW_POINTER: "true"
+    NEKO_CAPTURE_VIDEO_PIPELINES: >-
+      {"main": {
+        "fps": 30,
+        "gst_prefix": "! video/x-raw,format=I420",
+        "gst_encoder": "x264enc",
+        "gst_params": {
+          "threads": 2, "bitrate": "${VIDEO_BITRATE_KBPS:-2500}",
+          "key-int-max": 60, "byte-stream": true,
+          "tune": "zerolatency", "speed-preset": "${X264_PRESET:-veryfast}"
+        },
+        "gst_suffix": "! video/x-h264,stream-format=byte-stream,profile=constrained-baseline"
+      }}
+    NEKO_WEBRTC_NAT1TO1: ${PUBLIC_IP:?set PUBLIC_IP in .env}
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    image: cozycast-server
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:8080"
+    environment:
+      COZYCAST_NEKO_API_TOKEN: ${NEKO_API_TOKEN}
+      COZYCAST_ROOMS: default=http://room-default:8080
+    depends_on:
+      - room-default
+
+  room-default:
+    <<: *room
+    environment:
+      <<: *room-env
+      # Each room needs its own media port, open for UDP and TCP.
+      NEKO_WEBRTC_UDPMUX: 52000
+      NEKO_WEBRTC_TCPMUX: 52000
+    ports:
+      - "52000:52000/udp"
+      - "52000:52000/tcp"
+    volumes:
+      - ./data/rooms/default/firefox:/home/neko/.mozilla/firefox/profile.default
+      - ./data/rooms/default/downloads:/home/neko/Downloads
+
+  # A second room: uncomment, then add "second=http://room-second:8080" to
+  # COZYCAST_ROOMS above (comma separated).
+  # room-second:
+  #   <<: *room
+  #   environment:
+  #     <<: *room-env
+  #     NEKO_WEBRTC_UDPMUX: 52001
+  #     NEKO_WEBRTC_TCPMUX: 52001
+  #   ports:
+  #     - "52001:52001/udp"
+  #     - "52001:52001/tcp"
+  #   volumes:
+  #     - ./data/rooms/second/firefox:/home/neko/.mozilla/firefox/profile.default
+  #     - ./data/rooms/second/downloads:/home/neko/Downloads

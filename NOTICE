@@ -1,0 +1,21 @@
+cozyslop
+Copyright (C) 2026 W-Christoph
+
+Licensed under the GNU Affero General Public License v3.0 or later (see
+LICENSE). Successor to cozycast (https://github.com/Vorlent/cozycast),
+Copyright (C) 2024 Vorlent, W-Christoph.
+
+This project includes third-party code under the Apache License 2.0
+(https://www.apache.org/licenses/LICENSE-2.0):
+
+- web/src/neko/guacamole-keyboard.js
+  Apache Guacamole Keyboard.js, via demodesk/neko-client.
+  Copyright The Apache Software Foundation.
+
+- web/src/neko/client.ts
+  Protocol handling derived from demodesk/neko-client
+  (https://github.com/demodesk/neko-client) and m1k1o/neko
+  (https://github.com/m1k1o/neko).
+
+The room image (worker/) is built on the neko container images
+(https://github.com/m1k1o/neko), Apache License 2.0.

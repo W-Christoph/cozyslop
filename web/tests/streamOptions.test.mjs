@@ -8,10 +8,11 @@ let mod
 try {
   mod = await server.ssrLoadModule('/src/components/room/admin/streamOptions.ts')
 } finally { await server.close() }
-const { bitrates, parseScreen, parseStream, pickRate, pickStream, ratesFor, resolutions, scaledSize, scales } = mod
+const { bitrates, parseScreen, parseStream, pickRate, pickStream, presets, ratesFor, resolutions, scaledSize, scales } = mod
 
 const screens = ['1920x1080@60', '1920x1080@30', '1920x1080@25', '1280x720@60', '1280x720@30', '1368x768@25', '800x600@60'].map(parseScreen)
-const streams = ['b2500-s100', 'b1000-s100', 'b1000-s50', 'b2500-s50', 'b4000-s100'].map(parseStream)
+const streams = ['b2500-s100-veryfast', 'b1000-s100-veryfast', 'b1000-s50-veryfast', 'b2500-s50-veryfast', 'b4000-s100-veryfast',
+  'b2500-s100-ultrafast', 'b1000-s50-ultrafast'].map(parseStream)
 
 test('resolutions are distinct, largest first', () => {
   assert.deepEqual(resolutions(screens), ['1920x1080', '1368x768', '1280x720', '800x600'])
@@ -30,14 +31,23 @@ test('switching resolution keeps a valid frame rate', () => {
   assert.equal(pickRate([], 30), undefined)
 })
 
-test('bitrates and scales are distinct and ordered', () => {
+test('bitrates, scales and presets are distinct and ordered', () => {
   assert.deepEqual(bitrates(streams), [1000, 2500, 4000])
   assert.deepEqual(scales(streams), [100, 50])
+  assert.deepEqual(presets(streams), ['ultrafast', 'veryfast'])
+  assert.deepEqual(presets(['b1-s1-custom', 'b1-s1-medium', 'b1-s1-superfast'].map(parseStream)), ['superfast', 'medium', 'custom'])
+})
+
+test('stream ids carry the preset; old ids have none', () => {
+  assert.deepEqual(parseStream('b2500-s75-superfast'), { id: 'b2500-s75-superfast', kbps: 2500, scale: 75, preset: 'superfast' })
+  assert.equal(parseStream('b2500-s75').preset, '')
 })
 
 test('a missing bitrate/size combination falls back to the closest stream', () => {
-  assert.equal(pickStream(streams, 2500, 50).id, 'b2500-s50')
-  assert.equal(pickStream(streams, 4000, 50).id, 'b2500-s50') // same size, nearest bitrate
+  assert.equal(pickStream(streams, 2500, 50, 'veryfast').id, 'b2500-s50-veryfast')
+  assert.equal(pickStream(streams, 4000, 50, 'veryfast').id, 'b2500-s50-veryfast') // same size, nearest bitrate
+  assert.equal(pickStream(streams, 2500, 50, 'ultrafast').id, 'b1000-s50-ultrafast') // the preset wins over the bitrate
+  assert.equal(pickStream(streams, 2500, 100, 'medium').id, 'b2500-s100-veryfast') // preset not offered
 })
 
 test('scaled sizes match the worker rounding to even pixels', () => {

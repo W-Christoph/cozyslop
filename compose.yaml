@@ -24,11 +24,12 @@ x-room: &room
     NEKO_DESKTOP_UPLOAD_DROP: "false"
     NEKO_DESKTOP_FILE_CHOOSER_DIALOG: "false"
     # Encode once, H.264 for cheap decoding everywhere. The worker generates
-    # one capture pipeline per bitrate and stream size (see
+    # one capture pipeline per bitrate, stream size and x264 preset (see
     # worker/entrypoint.sh); each room picks one in its settings, and neko
     # only runs pipelines someone is watching. Resolution and frame rate
     # follow the room's screen setting; a keyframe every 2 s.
     COZYCAST_X264_PRESET: ${X264_PRESET:-veryfast}
+    COZYCAST_X264_PRESETS: ${X264_PRESETS:-ultrafast superfast veryfast}
     COZYCAST_STREAM_BITRATES: ${STREAM_BITRATES:-1000 1500 2500 4000 6000 8000}
     COZYCAST_STREAM_SCALES: ${STREAM_SCALES:-100 75 67 50}
     # Draw the host's mouse pointer into the stream so everyone sees it.

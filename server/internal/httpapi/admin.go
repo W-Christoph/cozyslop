@@ -340,7 +340,7 @@ func (s *Server) adminSaveRoomSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 // adminStreamOptions lists what the room's desktop supports: screen sizes
-// ("1280x720@30") and capture pipelines ("b2500-s100", the default first).
+// ("1280x720@30") and capture pipelines ("b2500-s100-veryfast", the default first).
 func (s *Server) adminStreamOptions(w http.ResponseWriter, r *http.Request) {
 	if s.requireAdmin(w, r) == nil {
 		return

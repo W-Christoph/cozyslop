@@ -16,7 +16,7 @@ type RoomSettings struct {
 	DefaultImage    bool   `json:"defaultImage"`
 	DefaultUpload   bool   `json:"defaultUpload"`
 	Screen          string `json:"screen"` // "1280x720@30"; "" = the room container's default
-	Stream          string `json:"stream"` // capture pipeline id, e.g. "b2500-s100"; "" = neko's default
+	Stream          string `json:"stream"` // capture pipeline id, e.g. "b2500-s100-veryfast"; "" = neko's default
 }
 
 const roomColumns = "name, access, hidden, remote_ownership, center_remote, default_remote, default_image, default_upload, screen, stream"

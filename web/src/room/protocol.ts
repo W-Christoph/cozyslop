@@ -21,7 +21,7 @@ export interface RoomSettings {
   defaultImage: boolean
   defaultUpload: boolean
   screen: string // "1280x720@30"; "" = the room container's default
-  stream: string // capture pipeline viewers watch, e.g. "b2500-s100"; "" = neko's default
+  stream: string // capture pipeline viewers watch, e.g. "b2500-s100-veryfast"; "" = neko's default
 }
 
 export interface User {

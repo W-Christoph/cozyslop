@@ -262,7 +262,7 @@ func TestAdminRoomSettings(t *testing.T) {
 	if saved.Stream != "" || saved.Screen != "" {
 		t.Fatalf("stream settings not kept: %+v", saved)
 	}
-	req["stream"] = "b2500-s100"
+	req["stream"] = "b2500-s100-veryfast"
 	a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 503, nil)
 	delete(req, "stream")
 	req["screen"] = "1920x1080@30"

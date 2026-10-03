@@ -83,7 +83,7 @@ func (s *Server) ImplicitHosting() bool { s.mu.Lock(); defer s.mu.Unlock(); retu
 func (s *Server) Screen() neko.ScreenSize { s.mu.Lock(); defer s.mu.Unlock(); return s.screen }
 
 // Streams are the capture pipelines the fake neko offers, the default first.
-var Streams = []string{"b2500-s100", "b1000-s100", "b1000-s50"}
+var Streams = []string{"b2500-s100-veryfast", "b1000-s100-veryfast", "b1000-s50-ultrafast"}
 
 // Screens are the resolutions the fake desktop supports.
 var Screens = []neko.ScreenSize{{Width: 1920, Height: 1080, Rate: 30}, {Width: 1280, Height: 720, Rate: 30}, {Width: 800, Height: 600, Rate: 30}}

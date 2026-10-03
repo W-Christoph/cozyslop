@@ -34,9 +34,6 @@ CozyCast does not use; none of them needs a patched neko.
   images. A worker variant built on them would move encoding off the CPU on
   hosts that have a GPU; the pipelines in `worker/entrypoint.sh` would switch
   to `vaapih264enc` / `nvh264enc`.
-- **x264 preset in the UI.** `COZYCAST_X264_PRESET` is only an environment
-  variable. Offering it per room needs presets in the pipeline ids (the
-  pipeline list multiplies quickly) or a container restart with a new value.
 
 ## Networking (deferred)
 

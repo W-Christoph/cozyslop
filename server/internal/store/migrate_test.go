@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Migration 0003 turns the old quality presets into stream ids.
+// Migrations 0003 and 0004 turn the old quality presets into stream ids.
 func TestMigrateQualityToStream(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "old.db")
@@ -40,9 +40,9 @@ func TestMigrateQualityToStream(t *testing.T) {
 	}
 	defer s.Close()
 	for name, want := range map[string]RoomSettings{
-		"h": {Name: "h", Access: "invite", Screen: "1920x1080@30", Stream: "b4000-s100"},
+		"h": {Name: "h", Access: "invite", Screen: "1920x1080@30", Stream: "b4000-s100-veryfast"},
 		"m": {Name: "m", Access: "public", Stream: ""},
-		"l": {Name: "l", Access: "account", Stream: "b1000-s67"},
+		"l": {Name: "l", Access: "account", Stream: "b1000-s67-veryfast"},
 	} {
 		got, err := s.RoomSettings(ctx, name)
 		if err != nil || got != want {

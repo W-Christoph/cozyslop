@@ -2,38 +2,45 @@
 # Container entrypoint: prepare the room, then hand over to neko's normal
 # startup (supervisord).
 #
-# 1. Stream pipelines: every combination of a bitrate ladder and a set of
-#    stream sizes becomes a neko capture pipeline with the id
-#    b<kbps>-s<percent> (e.g. b2500-s100). Rooms pick one in their settings;
-#    neko only runs the pipelines someone is watching, so offering many
-#    costs nothing. Override with COZYCAST_STREAM_BITRATES (kbit/s) and
-#    COZYCAST_STREAM_SCALES (percent of the desktop size), or set
-#    NEKO_CAPTURE_VIDEO_PIPELINES yourself to skip this.
+# 1. Stream pipelines: every combination of a bitrate ladder, a set of
+#    stream sizes and a set of x264 presets becomes a neko capture pipeline
+#    with the id b<kbps>-s<percent>-<preset> (e.g. b2500-s100-veryfast).
+#    Rooms pick one in their settings; neko only runs the pipelines someone
+#    is watching, so offering many costs nothing. Override with
+#    COZYCAST_STREAM_BITRATES (kbit/s), COZYCAST_STREAM_SCALES (percent of
+#    the desktop size), COZYCAST_X264_PRESETS (fastest first) and
+#    COZYCAST_X264_PRESET (the default), or set NEKO_CAPTURE_VIDEO_PIPELINES
+#    yourself to skip this.
 # 2. A one-time import of the old CozyCast room desktop (import-home.sh).
 set -eu
 
 stream_pipelines() {
     bitrates=${COZYCAST_STREAM_BITRATES:-1000 1500 2500 4000 6000 8000}
     scales=${COZYCAST_STREAM_SCALES:-100 75 67 50}
-    preferred=${COZYCAST_STREAM_DEFAULT:-b2500-s100}
     preset=${COZYCAST_X264_PRESET:-veryfast}
+    presets=${COZYCAST_X264_PRESETS:-ultrafast superfast veryfast}
+    # The default preset is always offered.
+    case " $presets " in *" $preset "*) ;; *) presets="$presets $preset" ;; esac
+    preferred=${COZYCAST_STREAM_DEFAULT:-b2500-s100-$preset}
 
     ids="" json="" first="" found=""
     for b in $bitrates; do
         for s in $scales; do
-            id="b$b-s$s"
-            [ -n "$first" ] || first=$id
-            [ "$id" != "$preferred" ] || found=1
             size=""
             if [ "$s" != 100 ]; then
                 # Even dimensions: x264 needs them for 4:2:0 video.
                 size="\"width\": \"round(width * $s / 200) * 2\", \"height\": \"round(height * $s / 200) * 2\", "
             fi
-            json="$json${json:+, }\"$id\": {\"fps\": \"fps\", $size\"gst_prefix\": \"! video/x-raw,format=I420\", \
+            for p in $presets; do
+                id="b$b-s$s-$p"
+                [ -n "$first" ] || first=$id
+                [ "$id" != "$preferred" ] || found=1
+                json="$json${json:+, }\"$id\": {\"fps\": \"fps\", $size\"gst_prefix\": \"! video/x-raw,format=I420\", \
 \"gst_encoder\": \"x264enc\", \"gst_params\": {\"threads\": 2, \"bitrate\": $b, \"key-int-max\": \"fps * 2\", \
-\"byte-stream\": true, \"tune\": \"zerolatency\", \"speed-preset\": \"$preset\"}, \
+\"byte-stream\": true, \"tune\": \"zerolatency\", \"speed-preset\": \"$p\"}, \
 \"gst_suffix\": \"! video/x-h264,stream-format=byte-stream,profile=constrained-baseline\"}"
-            ids="$ids${ids:+ }$id"
+                ids="$ids${ids:+ }$id"
+            done
         done
     done
 

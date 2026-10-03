@@ -10,6 +10,7 @@ import {
   parseStream,
   pickRate,
   pickStream,
+  presets,
   ratesFor,
   resolutions,
   scaledSize,
@@ -66,6 +67,7 @@ export function StreamSettings() {
       stream,
       bitrates: bitrates(options.streams),
       scales: scales(options.streams),
+      presets: presets(options.streams),
     }
   }, [options, draft])
 
@@ -80,9 +82,9 @@ export function StreamSettings() {
     if (!choices?.screen) return
     change('screen', formatScreen({ ...choices.screen, rate }))
   }
-  const setStream = (kbps: number, scale: number) => {
+  const setStream = (kbps: number, scale: number, preset: string) => {
     if (!options) return
-    const stream = pickStream(options.streams, kbps, scale)
+    const stream = pickStream(options.streams, kbps, scale, preset)
     if (stream) change('stream', stream.id)
   }
 
@@ -115,24 +117,38 @@ export function StreamSettings() {
             <>
               <label class={styles.row}>Bitrate
                 <select value={choices.stream.kbps} disabled={busy}
-                  onChange={(e) => setStream(Number(e.currentTarget.value), choices.stream!.scale)}>
+                  onChange={(e) => setStream(Number(e.currentTarget.value), choices.stream!.scale, choices.stream!.preset)}>
                   {choices.bitrates.map((b) => <option key={b} value={b}>{formatBitrate(b)}</option>)}
                 </select>
               </label>
               <label class={styles.row}>Stream size
                 <select value={choices.stream.scale} disabled={busy}
-                  onChange={(e) => setStream(choices.stream!.kbps, Number(e.currentTarget.value))}>
+                  onChange={(e) => setStream(choices.stream!.kbps, Number(e.currentTarget.value), choices.stream!.preset)}>
                   {choices.scales.map((s) => {
                     const size = choices.screen ? scaledSize(choices.screen.width, choices.screen.height, s) : null
                     return <option key={s} value={s}>{s === 100 ? 'Full' : `${s}%`}{size ? ` (${size[0]}×${size[1]})` : ''}</option>
                   })}
                 </select>
               </label>
+              {choices.presets.length > 1 && (
+                <label class={styles.row}>Encoder
+                  <select value={choices.stream.preset} disabled={busy}
+                    onChange={(e) => setStream(choices.stream!.kbps, choices.stream!.scale, e.currentTarget.value)}>
+                    {choices.presets.map((p, i, all) => (
+                      <option key={p} value={p}>
+                        {p[0].toUpperCase() + p.slice(1)}
+                        {i === 0 ? ' (least CPU)' : i === all.length - 1 ? ' (sharpest)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </>
           )}
           <p class={styles.hint}>
             Higher bitrates look better and need more bandwidth per viewer. A smaller stream size is encoded
             at lower resolution: less CPU on the server and less bandwidth, at the cost of sharpness.
+            A faster encoder also saves CPU, but looks blockier at the same bitrate.
           </p>
         </>
       )}

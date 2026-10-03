@@ -47,7 +47,7 @@ func TestNekoRestartRestoresSettings(t *testing.T) {
 }
 
 func TestStreamsAndFallback(t *testing.T) {
-	f := newFixture(t, store.RoomSettings{Stream: "b9999-s100"})
+	f := newFixture(t, store.RoomSettings{Stream: "b9999-s100-veryfast"})
 	deadline := time.Now().Add(testTimeout)
 	for f.r.Streams() == nil {
 		if time.Now().After(deadline) {
@@ -64,8 +64,8 @@ func TestStreamsAndFallback(t *testing.T) {
 	requireEqual(t, rec.wait(t, "welcome").(welcomeMsg).Settings.Stream, "")
 
 	set := f.r.Settings()
-	set.Stream = "b1000-s50"
+	set.Stream = "b1000-s50-ultrafast"
 	requireOK(t, f.s.SaveRoomSettings(f.ctx, set))
 	f.h.RoomSettingsChanged(f.ctx, f.r.Name)
-	requireEqual(t, rec.wait(t, "room_settings").(settingsMsg).Settings.Stream, "b1000-s50")
+	requireEqual(t, rec.wait(t, "room_settings").(settingsMsg).Settings.Stream, "b1000-s50-ultrafast")
 }

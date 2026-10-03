@@ -19,6 +19,10 @@ x-room: &room
     NEKO_FILETRANSFER_DIR: /home/neko/Downloads
     NEKO_FILETRANSFER_USER_UPLOAD: "true"
     NEKO_FILETRANSFER_USER_DOWNLOAD: "true"
+    # Uploads go through file transfer, which checks the upload right;
+    # drag-and-drop and file-dialog uploads only check remote control.
+    NEKO_DESKTOP_UPLOAD_DROP: "false"
+    NEKO_DESKTOP_FILE_CHOOSER_DIALOG: "false"
     # Encode once, H.264 for cheap decoding everywhere. A keyframe every 2s
     # (key-int-max 60 at 30fps): new viewers wait for one before the picture
     # appears, and neko's on-demand keyframe did not take effect in testing.
@@ -50,9 +54,19 @@ services:
     restart: unless-stopped
     ports:
       - "${HTTP_PORT:-80}:8080"
+      - "${HTTPS_PORT:-443}:8443"
     environment:
       COZYCAST_NEKO_API_TOKEN: ${NEKO_API_TOKEN}
       COZYCAST_ROOMS: default=http://room-default:8080
+      COZYCAST_DATA_DIR: /data
+      # Set DOMAIN for automatic HTTPS (Let's Encrypt); ports 80 and 443
+      # must then be reachable from the internet.
+      COZYCAST_DOMAIN: ${DOMAIN:-}
+      COZYCAST_ACME_EMAIL: ${ACME_EMAIL:-}
+      # Creates the "admin" account on first start.
+      COZYCAST_INIT_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    volumes:
+      - server-data:/data
     depends_on:
       - room-default
 
@@ -84,3 +98,7 @@ services:
   #   volumes:
   #     - ./data/rooms/second/firefox:/home/neko/.mozilla/firefox/profile.default
   #     - ./data/rooms/second/downloads:/home/neko/Downloads
+
+volumes:
+  # Accounts, chat, uploads and certificates.
+  server-data:

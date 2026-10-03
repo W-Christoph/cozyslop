@@ -15,10 +15,13 @@ type Room struct {
 }
 
 type Config struct {
-	Listen        string
-	DataDir       string // database and uploaded files
-	TrustProxy    bool   // take client IP/scheme from X-Forwarded-* headers
-	InitAdminPass string // creates the "admin" account if it does not exist
+	Listen        string   // HTTP; with Domains set it only redirects and answers ACME
+	TLSListen     string   // HTTPS, used when Domains is set
+	Domains       []string // enables automatic HTTPS for these host names
+	ACMEEmail     string   // optional contact for Let's Encrypt
+	DataDir       string   // database and uploaded files
+	TrustProxy    bool     // take client IP/scheme from X-Forwarded-* headers
+	InitAdminPass string   // creates the "admin" account if it does not exist
 	NekoAPIToken  string
 	Rooms         []Room
 	WebDir        string // serve the UI from disk instead of the embedded build (dev)
@@ -27,6 +30,9 @@ type Config struct {
 func FromEnv() (Config, error) {
 	c := Config{
 		Listen:        env("COZYCAST_LISTEN", ":8080"),
+		TLSListen:     env("COZYCAST_TLS_LISTEN", ":8443"),
+		Domains:       splitList(os.Getenv("COZYCAST_DOMAIN")),
+		ACMEEmail:     os.Getenv("COZYCAST_ACME_EMAIL"),
 		DataDir:       env("COZYCAST_DATA_DIR", "data"),
 		TrustProxy:    envBool("COZYCAST_TRUST_PROXY", false),
 		InitAdminPass: os.Getenv("COZYCAST_INIT_ADMIN_PASSWORD"),
@@ -83,4 +89,14 @@ func envBool(key string, def bool) bool {
 		return def
 	}
 	return v
+}
+
+func splitList(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }

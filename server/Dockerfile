@@ -14,8 +14,12 @@ RUN go mod download
 COPY server/ ./
 COPY --from=web /src/server/webui/dist ./webui/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /cozycast .
+# The image has no shell; prepare the data dir here so a fresh volume is
+# owned by the nonroot user.
+RUN mkdir /data
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=server /cozycast /cozycast
-EXPOSE 8080
+COPY --from=server --chown=65532:65532 /data /data
+EXPOSE 8080 8443
 ENTRYPOINT ["/cozycast"]

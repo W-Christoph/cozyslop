@@ -19,6 +19,8 @@ import (
 	"cozycast/internal/neko"
 	"cozycast/internal/store"
 	"cozycast/webui"
+
+	"golang.org/x/crypto/acme/autocert"
 )
 
 func main() {
@@ -73,22 +75,43 @@ func run() error {
 		web = os.DirFS(cfg.WebDir)
 	}
 
-	srv := &http.Server{
-		Addr: cfg.Listen,
-		Handler: httpapi.New(httpapi.Deps{
-			Store: db,
-			Auth:  auth.New(db, cfg.TrustProxy),
-			Hub:   h,
-			Web:   web,
-		}).Handler(),
-		ReadHeaderTimeout: 10 * time.Second,
+	handler := httpapi.New(httpapi.Deps{
+		Store: db,
+		Auth:  auth.New(db, cfg.TrustProxy),
+		Hub:   h,
+		Web:   web,
+	}).Handler()
+
+	var servers []*http.Server
+	errc := make(chan error, 2)
+	serve := func(srv *http.Server, tls bool) {
+		servers = append(servers, srv)
+		go func() {
+			slog.Info("listening", "addr", srv.Addr, "tls", tls, "rooms", len(rooms))
+			if tls {
+				errc <- srv.ListenAndServeTLS("", "")
+			} else {
+				errc <- srv.ListenAndServe()
+			}
+		}()
 	}
 
-	errc := make(chan error, 1)
-	go func() {
-		slog.Info("listening", "addr", cfg.Listen, "rooms", len(rooms))
-		errc <- srv.ListenAndServe()
-	}()
+	if len(cfg.Domains) == 0 {
+		serve(newServer(cfg.Listen, handler), false)
+	} else {
+		// Automatic HTTPS: certificates from Let's Encrypt, cached in the
+		// data dir. Plain HTTP only answers ACME challenges and redirects.
+		m := &autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist(cfg.Domains...),
+			Cache:      autocert.DirCache(filepath.Join(cfg.DataDir, "certs")),
+			Email:      cfg.ACMEEmail,
+		}
+		tlsSrv := newServer(cfg.TLSListen, hsts(handler))
+		tlsSrv.TLSConfig = m.TLSConfig()
+		serve(tlsSrv, true)
+		serve(newServer(cfg.Listen, m.HTTPHandler(nil)), false)
+	}
 
 	select {
 	case err := <-errc:
@@ -98,10 +121,24 @@ func run() error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
+	for _, srv := range servers {
+		if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
 	}
 	return nil
+}
+
+func newServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
+}
+
+// hsts tells browsers to use HTTPS for this site from now on.
+func hsts(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // ensureAdmin creates the "admin" account on first start (CozyCast did the

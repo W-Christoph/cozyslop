@@ -1,8 +1,24 @@
 /* Design tokens. Components use only these variables, never raw colours.
-   Values carried over from the old styles.css themes. */
+   Values carried over from CozyCast's three themes (styles.css), renamed:
+   see docs/frontend.md for the old -> new mapping. The theme is set on
+   <html data-theme="..."> from the user's preferences. */
+
+:root {
+  --font-sans: Arial, sans-serif;
+  --radius: 4px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --chat-size: max(12%, 15em);
+
+  --color-orange: #f90;
+  --color-orange-ping: #df9e3e;
+}
 
 :root,
 [data-theme='default'] {
+  --noise: url('/png/noise_128.png');
   --color-bg: #181828;
   --color-menu: #123;
   --color-accent: #235;
@@ -12,14 +28,21 @@
   --color-scroll-thumb: #235;
   --color-high-contrast: #5566aa;
   --color-select: #337ab7;
-  --color-orange: #f90;
 
   --color-text: #fff;
   --color-text-muted: rgba(255, 255, 255, 0.7);
   --color-text-misc: lightgray;
+
+  --color-message-bg: rgba(0, 0, 0, 0.3);
+  --shadow-message: 0 0 4px black inset;
+  --color-message-hover: rgba(255, 255, 255, 0.05);
+
+  --icon-filter: invert(63%) sepia(61%) saturate(457%) hue-rotate(191deg) brightness(95%) contrast(90%);
+  --icon-invert: none;
 }
 
 [data-theme='legacy'] {
+  --noise: none;
   --color-bg: #000;
   --color-menu: #171b22;
   --color-accent: #22242f;
@@ -29,13 +52,39 @@
   --color-scroll-thumb: #1f2530;
   --color-high-contrast: #a6afbf;
   --color-select: #686d78;
+
+  --color-text: #fff;
+  --color-text-muted: rgba(255, 255, 255, 0.7);
+  --color-text-misc: lightgray;
+
+  --color-message-bg: rgba(0, 0, 0, 0.3);
+  --shadow-message: 0 0 4px black inset;
+  --color-message-hover: rgba(255, 255, 255, 0.05);
+
+  --icon-filter: invert(67%) sepia(10%) saturate(1119%) hue-rotate(182deg) brightness(94%) contrast(87%);
+  --icon-invert: none;
 }
 
-:root {
-  --font-sans: Arial, sans-serif;
-  --radius: 4px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
+[data-theme='light'] {
+  --noise: none;
+  --color-bg: #242424;
+  --color-menu: #fdfdfd;
+  --color-accent: #d2d2d2;
+  --color-button: #dbdbdb;
+  --color-button-accent: #868686;
+  --color-scrollbar: #b9b9b9;
+  --color-scroll-thumb: #fff;
+  --color-high-contrast: #333;
+  --color-select: #fff;
+
+  --color-text: black;
+  --color-text-muted: rgba(34, 22, 22, 0.97);
+  --color-text-misc: #393939;
+
+  --color-message-bg: rgba(0, 0, 0, 0.05);
+  --shadow-message: 0 0 1px rgba(0, 0, 0, 0.15) inset;
+  --color-message-hover: rgba(0, 0, 0, 0.05);
+
+  --icon-filter: invert(40%);
+  --icon-invert: invert(90%);
 }

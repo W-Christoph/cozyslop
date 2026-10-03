@@ -29,8 +29,9 @@ x-room: &room
     # A keyframe every 2 s: new viewers wait for one before the picture
     # appears (neko's on-demand keyframe did not take effect in testing).
     NEKO_CAPTURE_VIDEO_CODEC: h264
-    # Must list the pipeline ids below; neko crashes on connect otherwise.
-    NEKO_CAPTURE_VIDEO_IDS: medium,high,low
+    # Must list the pipeline ids below (space separated: neko does not split
+    # on commas); neko crashes or finds no stream otherwise.
+    NEKO_CAPTURE_VIDEO_IDS: medium high low # space separated; the first is the default
     # Draw the host's mouse pointer into the stream so everyone sees it.
     NEKO_CAPTURE_VIDEO_SHOW_POINTER: "true"
     NEKO_CAPTURE_VIDEO_PIPELINES: >-

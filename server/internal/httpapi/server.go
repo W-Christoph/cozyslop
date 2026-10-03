@@ -84,6 +84,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/admin/rooms/{room}/settings", s.adminGetRoomSettings)
 	mux.HandleFunc("PUT /api/admin/rooms/{room}/settings", s.adminSaveRoomSettings)
+	mux.HandleFunc("GET /api/admin/rooms/{room}/screens", s.adminRoomScreens)
 
 	mux.HandleFunc("POST /api/admin/rooms/{room}/bans", s.adminBan)
 	mux.HandleFunc("GET /api/admin/bans", s.adminListBans)

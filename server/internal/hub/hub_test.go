@@ -276,7 +276,7 @@ func TestStartup(t *testing.T) {
 }
 
 func TestJoinWelcomeAndTabs(t *testing.T) {
-	set := store.RoomSettings{Name: "main", Access: "public", RemoteOwnership: true, CenterRemote: true, DefaultRemote: true}
+	set := store.RoomSettings{Name: "main", Access: "public", RemoteOwnership: true, CenterRemote: true, DefaultRemote: true, Quality: "medium"}
 	f := newFixture(t, set)
 	id := f.user("alice")
 	f.permission(id, store.Permission{Image: true, Upload: true})

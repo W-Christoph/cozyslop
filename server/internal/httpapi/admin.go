@@ -9,6 +9,7 @@ import (
 
 	"cozycast/internal/auth"
 	"cozycast/internal/hub"
+	"cozycast/internal/neko"
 	"cozycast/internal/store"
 )
 
@@ -282,13 +283,16 @@ func (s *Server) adminSaveRoomSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Access          string `json:"access"`
-		Hidden          bool   `json:"hidden"`
-		RemoteOwnership bool   `json:"remoteOwnership"`
-		CenterRemote    bool   `json:"centerRemote"`
-		DefaultRemote   bool   `json:"defaultRemote"`
-		DefaultImage    bool   `json:"defaultImage"`
-		DefaultUpload   bool   `json:"defaultUpload"`
+		Name            string  `json:"name"` // ignored; the path decides
+		Access          string  `json:"access"`
+		Hidden          bool    `json:"hidden"`
+		RemoteOwnership bool    `json:"remoteOwnership"`
+		CenterRemote    bool    `json:"centerRemote"`
+		DefaultRemote   bool    `json:"defaultRemote"`
+		DefaultImage    bool    `json:"defaultImage"`
+		DefaultUpload   bool    `json:"defaultUpload"`
+		Screen          *string `json:"screen"`  // omitted = unchanged
+		Quality         *string `json:"quality"` // omitted = unchanged
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -297,15 +301,79 @@ func (s *Server) adminSaveRoomSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Access must be public, account, verified or invite.")
 		return
 	}
+	current, err := s.store.RoomSettings(r.Context(), room)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
 	set := store.RoomSettings{Name: room, Access: req.Access, Hidden: req.Hidden,
 		RemoteOwnership: req.RemoteOwnership, CenterRemote: req.CenterRemote,
-		DefaultRemote: req.DefaultRemote, DefaultImage: req.DefaultImage, DefaultUpload: req.DefaultUpload}
+		DefaultRemote: req.DefaultRemote, DefaultImage: req.DefaultImage, DefaultUpload: req.DefaultUpload,
+		Screen: current.Screen, Quality: current.Quality}
+	if req.Quality != nil {
+		if !store.ValidQuality(*req.Quality) {
+			writeError(w, http.StatusBadRequest, "Quality must be high, medium or low.")
+			return
+		}
+		set.Quality = *req.Quality
+	}
+	if req.Screen != nil && *req.Screen != current.Screen {
+		if *req.Screen != "" && !s.screenSupported(w, r, room, *req.Screen) {
+			return
+		}
+		set.Screen = *req.Screen
+	}
 	if err := s.store.SaveRoomSettings(r.Context(), set); err != nil {
 		s.internalError(w, r, err)
 		return
 	}
 	s.hub.RoomSettingsChanged(r.Context(), room)
 	writeJSON(w, http.StatusOK, set)
+}
+
+// adminRoomScreens lists the desktop resolutions the room supports.
+func (s *Server) adminRoomScreens(w http.ResponseWriter, r *http.Request) {
+	if s.requireAdmin(w, r) == nil {
+		return
+	}
+	rm := s.hub.Room(r.PathValue("room"))
+	if rm == nil {
+		writeError(w, http.StatusNotFound, "Unknown room.")
+		return
+	}
+	list, err := rm.Neko().ScreenConfigurations(r.Context())
+	if err != nil {
+		s.log.Warn("list neko screens", "room", rm.Name, "err", err)
+		writeError(w, http.StatusServiceUnavailable, "The room's desktop is not reachable right now.")
+		return
+	}
+	screens := make([]string, 0, len(list))
+	for _, size := range list {
+		screens = append(screens, size.String())
+	}
+	writeJSON(w, http.StatusOK, screens)
+}
+
+// screenSupported checks a requested resolution against the room's desktop,
+// answering the request itself if it is not supported.
+func (s *Server) screenSupported(w http.ResponseWriter, r *http.Request, room, screen string) bool {
+	if _, err := neko.ParseScreen(screen); err != nil {
+		writeError(w, http.StatusBadRequest, "Screen must look like 1280x720@30.")
+		return false
+	}
+	list, err := s.hub.Room(room).Neko().ScreenConfigurations(r.Context())
+	if err != nil {
+		s.log.Warn("list neko screens", "room", room, "err", err)
+		writeError(w, http.StatusServiceUnavailable, "The room's desktop is not reachable right now.")
+		return false
+	}
+	for _, size := range list {
+		if size.String() == screen {
+			return true
+		}
+	}
+	writeError(w, http.StatusBadRequest, "The room's desktop does not support that resolution.")
+	return false
 }
 
 func (s *Server) adminBan(w http.ResponseWriter, r *http.Request) {

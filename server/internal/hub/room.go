@@ -91,7 +91,7 @@ func newRoom(h *Hub, name string, nc *neko.Client) *Room {
 		ready:    make(chan struct{}),
 		chatUser: ratelimit.New(10, 500*time.Millisecond),
 		chatAnon: ratelimit.New(5, time.Second),
-		settings: store.RoomSettings{Name: name, Access: "public"},
+		settings: store.RoomSettings{Name: name, Access: "public", Quality: "medium"},
 		members:  make(map[string]*member),
 		clients:  make(map[string]*Client),
 	}
@@ -148,9 +148,24 @@ func (r *Room) prepareNeko(ctx context.Context) error {
 		}
 	}
 	r.mu.Lock()
-	ownership := r.settings.RemoteOwnership
+	set := r.settings
 	r.mu.Unlock()
-	return r.neko.SetImplicitHosting(ctx, !ownership)
+	if err := r.applyScreen(ctx, set.Screen); err != nil {
+		return err
+	}
+	return r.neko.SetImplicitHosting(ctx, !set.RemoteOwnership)
+}
+
+// applyScreen sets the desktop resolution; "" keeps the container default.
+func (r *Room) applyScreen(ctx context.Context, screen string) error {
+	if screen == "" {
+		return nil
+	}
+	size, err := neko.ParseScreen(screen)
+	if err != nil {
+		return err
+	}
+	return r.neko.SetScreen(ctx, size)
 }
 
 // ---- joining and leaving --------------------------------------------------
@@ -369,6 +384,7 @@ func (r *Room) reloadSettings(ctx context.Context) {
 
 	r.mu.Lock()
 	ownershipChanged := s.RemoteOwnership != r.settings.RemoteOwnership
+	screenChanged := s.Screen != r.settings.Screen
 	r.settings = s
 	r.broadcastLocked(settingsMsg{Type: "room_settings", Settings: s}, nil)
 	var resync []*Client
@@ -389,6 +405,11 @@ func (r *Room) reloadSettings(ctx context.Context) {
 	if ownershipChanged {
 		if err := r.neko.SetImplicitHosting(ctx, !s.RemoteOwnership); err != nil {
 			r.log.Warn("set neko implicit hosting", "err", err)
+		}
+	}
+	if screenChanged {
+		if err := r.applyScreen(ctx, s.Screen); err != nil {
+			r.log.Warn("set neko screen", "screen", s.Screen, "err", err)
 		}
 	}
 	r.syncNeko(ctx, resync)

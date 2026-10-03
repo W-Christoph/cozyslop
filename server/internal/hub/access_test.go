@@ -277,7 +277,7 @@ func TestRoomSettingsChanged(t *testing.T) {
 	_ = guest
 	f.r.SendNekoToken(f.ctx, c)
 	a.wait(t, "neko")
-	set := store.RoomSettings{Name: f.r.Name, Access: "public", Hidden: true, CenterRemote: true, RemoteOwnership: true, DefaultRemote: true, DefaultImage: true, DefaultUpload: true}
+	set := store.RoomSettings{Name: f.r.Name, Access: "public", Hidden: true, CenterRemote: true, RemoteOwnership: true, DefaultRemote: true, DefaultImage: true, DefaultUpload: true, Quality: "medium"}
 	requireOK(t, f.s.SaveRoomSettings(f.ctx, set))
 	f.h.RoomSettingsChanged(f.ctx, f.r.Name)
 	for _, rec := range []*recording{a, b} {

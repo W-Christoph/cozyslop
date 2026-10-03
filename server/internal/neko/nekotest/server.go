@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -35,6 +36,7 @@ type Server struct {
 	apiToken          string
 	mu                sync.Mutex
 	healthy, implicit bool
+	screen            neko.ScreenSize
 	host              string
 	members           map[string]member
 	tokens            map[string]string
@@ -75,7 +77,14 @@ func (s *Server) Members() []string {
 	sort.Strings(ids)
 	return ids
 }
-func (s *Server) ImplicitHosting() bool   { s.mu.Lock(); defer s.mu.Unlock(); return s.implicit }
+func (s *Server) ImplicitHosting() bool { s.mu.Lock(); defer s.mu.Unlock(); return s.implicit }
+
+// Screen is the last screen size set through the API (zero if never).
+func (s *Server) Screen() neko.ScreenSize { s.mu.Lock(); defer s.mu.Unlock(); return s.screen }
+
+// Screens are the resolutions the fake desktop supports.
+var Screens = []neko.ScreenSize{{Width: 1920, Height: 1080, Rate: 30}, {Width: 1280, Height: 720, Rate: 30}, {Width: 800, Height: 600, Rate: 30}}
+
 func (s *Server) SetHealthy(healthy bool) { s.mu.Lock(); defer s.mu.Unlock(); s.healthy = healthy }
 func (s *Server) Calls() []Call {
 	s.mu.Lock()
@@ -234,6 +243,18 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		if decode(w, r, &in) {
 			s.implicit = in.Implicit
 		}
+	case r.URL.Path == "/api/room/screen" && r.Method == http.MethodPost:
+		var in neko.ScreenSize
+		if decode(w, r, &in) {
+			if !slices.Contains(Screens, in) {
+				http.Error(w, "invalid screen configuration", http.StatusUnprocessableEntity)
+				return
+			}
+			s.screen = in
+		}
+	case r.URL.Path == "/api/room/screen/configurations" && r.Method == http.MethodGet:
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(Screens)
 	case r.URL.Path == "/api/room/control/reset" && r.Method == http.MethodPost:
 		s.setHostLocked("")
 	default:

@@ -149,3 +149,33 @@ func randomPassword() string {
 	}
 	return base64.RawURLEncoding.EncodeToString(b)
 }
+
+// ScreenSize is a desktop resolution and refresh rate.
+type ScreenSize struct {
+	Width  int `json:"width"`
+	Height int `json:"height"`
+	Rate   int `json:"rate"`
+}
+
+func (s ScreenSize) String() string { return fmt.Sprintf("%dx%d@%d", s.Width, s.Height, s.Rate) }
+
+// ParseScreen reads "1280x720@30".
+func ParseScreen(str string) (ScreenSize, error) {
+	var s ScreenSize
+	if _, err := fmt.Sscanf(str, "%dx%d@%d", &s.Width, &s.Height, &s.Rate); err != nil || s.String() != str {
+		return ScreenSize{}, fmt.Errorf("neko: invalid screen %q", str)
+	}
+	return s, nil
+}
+
+// SetScreen changes the desktop resolution and frame rate.
+func (c *Client) SetScreen(ctx context.Context, s ScreenSize) error {
+	return c.do(ctx, http.MethodPost, "/api/room/screen", s, nil, true)
+}
+
+// ScreenConfigurations lists the resolutions the desktop supports.
+func (c *Client) ScreenConfigurations(ctx context.Context) ([]ScreenSize, error) {
+	var list []ScreenSize
+	err := c.do(ctx, http.MethodGet, "/api/room/screen/configurations", nil, &list, true)
+	return list, err
+}

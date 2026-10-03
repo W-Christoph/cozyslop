@@ -243,10 +243,33 @@ func TestAdminRoomSettings(t *testing.T) {
 		req["access"] = access
 		a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 400, nil)
 	}
+	// The path decides the room; a name in the body (clients send back the
+	// object they received) is ignored.
 	req["access"] = "public"
 	req["name"] = "other"
-	a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 400, nil)
+	a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 200, &saved)
+	if saved.Name != "default" {
+		t.Fatalf("name from body used: %+v", saved)
+	}
 	delete(req, "name")
+	// Stream settings: omitted keeps the stored value, invalid quality is
+	// rejected, and a screen needs the room's desktop to confirm it (the test
+	// neko is unreachable, so any change is refused with 503).
+	req["quality"] = "high"
+	a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 200, &saved)
+	delete(req, "quality")
+	a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 200, &saved)
+	if saved.Quality != "high" || saved.Screen != "" {
+		t.Fatalf("stream settings not kept: %+v", saved)
+	}
+	req["quality"] = "ultra"
+	a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 400, nil)
+	delete(req, "quality")
+	req["screen"] = "1920x1080@30"
+	a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 503, nil)
+	req["screen"] = "big"
+	a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 400, nil)
+	delete(req, "screen")
 	for _, method := range []string{"GET", "PUT"} {
 		a.error(admin, method, "/api/admin/rooms/missing/settings", req, 404, "Unknown room.")
 	}

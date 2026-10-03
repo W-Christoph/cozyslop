@@ -3,6 +3,7 @@
 // they never talk to the sockets directly.
 
 import { batch, computed, signal } from '@preact/signals'
+import { parseStream } from '../components/room/admin/streamOptions'
 import { NekoClient, type NekoStatus } from '../neko/client'
 import type { ChatMessage, KickReason, Rights, RoomSettings, ServerMessage, User } from './protocol'
 import { RoomSocket } from './socket'
@@ -284,9 +285,11 @@ export class RoomStore {
       case 'room_settings': {
         const stream = this.settings.value?.stream
         this.settings.value = msg.settings
-        // Follow the room's stream choice without reconnecting.
+        // Follow the room's stream choice without reconnecting. A bigger
+        // stream size needs a new media connection ("" = the full-size default).
         if (msg.settings.stream !== stream && msg.settings.stream && this.neko.status !== 'disconnected') {
-          this.neko.setVideo(msg.settings.stream)
+          const scale = (id: string | undefined) => parseStream(id ?? '')?.scale ?? 100
+          this.neko.setVideo(msg.settings.stream, { renew: scale(msg.settings.stream) > scale(stream) })
         }
         break
       }

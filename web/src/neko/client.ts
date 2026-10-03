@@ -51,6 +51,8 @@ export class NekoClient extends Emitter<NekoEvents> {
   private ws?: WebSocket
   private path = ''
   private token = ''
+  private audioOnly = false
+  private video = ''
   private peer?: RTCPeerConnection
   private channel?: RTCDataChannel
   private pendingCandidates: RTCIceCandidateInit[] = []
@@ -69,6 +71,8 @@ export class NekoClient extends Emitter<NekoEvents> {
     this.setStatus('connecting')
     this.path = path
     this.token = token
+    this.audioOnly = audioOnly
+    this.video = video
 
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const ws = new WebSocket(`${proto}//${location.host}${path}/api/ws?token=${encodeURIComponent(token)}`)
@@ -79,8 +83,7 @@ export class NekoClient extends Emitter<NekoEvents> {
       this.staleTimer = window.setInterval(() => {
         if (Date.now() - this.lastMessage > STALE_TIMEOUT_MS) this.fail('connection timed out')
       }, 5_000)
-      const selector = video ? { type: 'exact', id: video } : undefined
-      this.send('signal/request', { video: { disabled: audioOnly, selector }, audio: {} })
+      this.requestPeer()
     }
     ws.onmessage = (e) => {
       this.lastMessage = Date.now()
@@ -137,9 +140,13 @@ export class NekoClient extends Emitter<NekoEvents> {
     this.sendInput(OP_KEY_UP, 4, (v) => v.setUint32(3, keysym))
   }
 
-  // Switch the running stream to another capture pipeline.
-  setVideo(id: string) {
-    this.send('signal/video', { selector: { type: 'exact', id } })
+  // Switch the running stream to another capture pipeline. renew starts a
+  // new peer connection for it; needed when the new stream's frames are
+  // bigger (see renewPeer).
+  setVideo(id: string, { renew = false } = {}) {
+    this.video = id
+    if (renew && this.peer && !this.audioOnly) this.renewPeer()
+    else this.send('signal/video', { selector: { type: 'exact', id } })
   }
 
   paste(text: string) {
@@ -194,9 +201,12 @@ export class NekoClient extends Emitter<NekoEvents> {
       case 'control/host':
         this.updateHost(payload)
         break
-      case 'screen/updated':
+      case 'screen/updated': {
+        const before = this.screen
         this.updateScreen(payload)
+        if (this.screen.width > before.width || this.screen.height > before.height) this.renewPeer()
         break
+      }
       case 'session/profile':
         if (payload.id === this.sessionId) this.updateProfile(payload)
         break
@@ -204,6 +214,34 @@ export class NekoClient extends Emitter<NekoEvents> {
         if (typeof payload?.text === 'string') this.emit('clipboard', payload.text)
         break
     }
+  }
+
+  // neko answers with signal/provide; asking again on the same session
+  // replaces the peer connection.
+  private requestPeer() {
+    const selector = this.video ? { type: 'exact', id: this.video } : undefined
+    this.send('signal/request', { video: { disabled: this.audioOnly, selector }, audio: {} })
+  }
+
+  // Swap the media connection for a new one; the WebSocket session, and with
+  // it the remote, stays. Done whenever the frame size grows mid-stream:
+  // Chrome's hardware H.264 decoder then shows garbage (the picture tiled
+  // and squashed) until it is replaced, and a new peer gets a new decoder.
+  private renewPeer() {
+    if (!this.peer || this.audioOnly) return
+    this.closePeer()
+    this.requestPeer()
+  }
+
+  private closePeer() {
+    if (this.peer) {
+      this.peer.onicecandidate = this.peer.onconnectionstatechange = null
+      this.peer.ontrack = this.peer.ondatachannel = null
+      this.peer.close()
+      this.peer = undefined
+    }
+    this.channel = undefined
+    this.pendingCandidates = []
   }
 
   private async createPeer({ sdp, iceservers }: Signal) {
@@ -302,14 +340,7 @@ export class NekoClient extends Emitter<NekoEvents> {
       this.ws.close()
       this.ws = undefined
     }
-    if (this.peer) {
-      this.peer.onicecandidate = this.peer.onconnectionstatechange = null
-      this.peer.ontrack = this.peer.ondatachannel = null
-      this.peer.close()
-      this.peer = undefined
-    }
-    this.channel = undefined
-    this.pendingCandidates = []
+    this.closePeer()
     this.sessionId = ''
     this.hostId = undefined
   }

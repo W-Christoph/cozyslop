@@ -18,7 +18,7 @@ export function RestartButton() {
     <Button onClick={() => setConfirm(true)}>Restart</Button>
     {store.error.value && <p role="alert">{store.error.value}</p>}
     {confirm && <Modal compact title="Restart room?" onClose={close}>
-      <p>The desktop restarts for everyone. Open tabs and pages in the room's browser will be lost.</p>
+      <p>The desktop restarts for everyone. The browser reopens its tabs afterwards, but whatever is playing stops and unsaved input in pages is lost.</p>
       <p>Trusted users can restart once per hour per room. Admins can restart at any time.</p>
       <div class={styles.actions}>
         <Button onClick={close}>Cancel</Button>

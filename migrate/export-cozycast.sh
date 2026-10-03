@@ -61,14 +61,56 @@ if [ -d "$checkout/data/cozycast-server/avatar" ]; then
 else
     echo "Avatar directory missing; exporting database only." >&2
 fi
+# The old room desktop's home folder (shared by all workers): the user's
+# files and folders, and the Firefox profile (logins, bookmarks, open tabs).
+# Hidden config folders stay behind: they belong to the old desktop setup
+# and reference the old user. So do caches and worker runtime files.
+home="$checkout/data/cozycast-worker/cozycast"
+home_files=0
+profile_name=""
+if [ -d "$home" ]; then
+    mkdir "$tmp/home"
+    find "$home" -mindepth 1 -maxdepth 1 ! -name '.*' ! -name '*.pid' ! -name '*.log' ! -name 'worker.restart' \
+        -exec cp -R {} "$tmp/home/" \;
+    home_files=$(find "$tmp/home" -type f | wc -l | tr -d ' ')
+
+    # The default Firefox profile: the install default if there is one,
+    # otherwise the profile marked Default=1, otherwise the first one.
+    ini="$home/.mozilla/firefox/profiles.ini"
+    if [ -f "$ini" ]; then
+        profile_name=$(awk -F= '
+            /^\[/ { install = ($0 ~ /^\[Install/); path = ""; next }
+            install && $1 == "Default" { print $2; found = 1; exit }
+            $1 == "Path" { path = $2; if (first == "") first = $2 }
+            $1 == "Default" && $2 == "1" && path != "" { marked = path }
+            END { if (!found) print (marked != "" ? marked : first) }' "$ini")
+    fi
+    if [ -n "$profile_name" ] && [ -d "$home/.mozilla/firefox/$profile_name" ]; then
+        mkdir "$tmp/firefox-profile"
+        tar -C "$home/.mozilla/firefox/$profile_name" \
+            --exclude=cache2 --exclude=startupCache --exclude=thumbnails --exclude=crashes \
+            --exclude=minidumps --exclude=datareporting --exclude=saved-telemetry-pings \
+            --exclude=lock --exclude=.parentlock --exclude='*.lock' \
+            -cf - . | tar -C "$tmp/firefox-profile" -xf -
+    else
+        profile_name=""
+    fi
+else
+    echo "Room desktop home folder missing; exporting accounts only." >&2
+fi
+
 # Create privately before replacing the destination (even if it exists with
 # broader permissions), and keep partial archives out of the working directory.
-if [ -d "$tmp/avatar" ]; then
-    tar -czf "$tmp/cozycast-export.tar.gz" -C "$tmp" export.json avatar
-else
-    tar -czf "$tmp/cozycast-export.tar.gz" -C "$tmp" export.json
-fi
+parts=(export.json)
+for part in avatar home firefox-profile; do
+    if [ -d "$tmp/$part" ]; then
+        parts+=("$part")
+    fi
+done
+tar -czf "$tmp/cozycast-export.tar.gz" -C "$tmp" "${parts[@]}"
 chmod 600 "$tmp/cozycast-export.tar.gz"
 mv -f "$tmp/cozycast-export.tar.gz" ./cozycast-export.tar.gz
 echo "Exported $counts, $avatars avatar files to cozycast-export.tar.gz."
+echo "Room desktop: $home_files files from the home folder${profile_name:+, Firefox profile $profile_name}."
+echo "Archive size: $(du -h cozycast-export.tar.gz | cut -f1)."
 echo "This file contains password hashes. Transfer it securely and delete it from both machines after importing."

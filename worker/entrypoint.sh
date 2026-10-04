@@ -17,6 +17,10 @@
 #    the remote can read neko's token; this way it is the token of this
 #    room only, and the secret itself never reaches the desktop.
 # 3. A one-time import of the old CozyCast room desktop (import-home.sh).
+# 4. The desktop's user was "neko" once, with /home/neko as its home. A
+#    desktop from then has that path in some of its settings (the panel's
+#    folder menu, the places of the desktop icons); they are pointed at the
+#    home folder's place now.
 set -eu
 
 stream_pipelines() {
@@ -76,5 +80,14 @@ if [ -n "${COZYCAST_NEKO_SECRET:-}" ]; then
 fi
 
 /usr/local/bin/cozycast-import-home
+
+home=/home/$USER
+if [ -d "$home/.config" ]; then
+    grep -rIl '/home/neko' "$home/.config" 2>/dev/null | while IFS= read -r file; do
+        # sed -i writes a new file: give it back to the desktop's user.
+        sed -i "s|/home/neko|$home|g" "$file"
+        chown "$USER:$USER" "$file"
+    done
+fi
 
 exec "$@"

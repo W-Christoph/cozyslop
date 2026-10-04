@@ -9,7 +9,7 @@
 set -eu
 
 archive=${COZYCAST_IMPORT_HOME:-}
-home=/home/neko
+home=/home/$USER
 marker="$home/.cozycast-imported"
 profile="$home/.mozilla/firefox/profile.default"
 
@@ -63,7 +63,7 @@ import_home() {
         mv "$new" "$profile"
         echo "import-home: imported the Firefox profile"
     fi
-    chown -R neko:neko "$home"
+    chown -R "$USER:$USER" "$home"
     echo "import-home: imported $files files into $home"
 }
 
@@ -77,7 +77,7 @@ if [ -n "$archive" ] && [ -f "$archive" ] && [ ! -e "$marker" ]; then
     case $status in
         0)
             date -u > "$marker"
-            chown neko:neko "$marker"
+            chown "$USER:$USER" "$marker"
             ;;
         3) ;;
         *) echo "import-home: import failed; starting without it (it is tried again on the next start)" >&2 ;;

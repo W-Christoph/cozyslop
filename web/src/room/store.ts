@@ -211,6 +211,9 @@ export class RoomStore {
       })
       if (this.uploadController !== controller) return
       set('done', 1, `Uploaded ${what} to Downloads.`)
+      // neko lists a file when it appears, before its content is there: ask
+      // again so the list shows its size.
+      this.neko.requestFiles()
     } catch (e) {
       if (this.uploadController !== controller) return
       set('error', 0, e instanceof Error ? e.message : 'Upload failed.')

@@ -24,7 +24,7 @@ x-room: &room
     NEKO_SESSION_INACTIVE_CURSORS: "false"
     NEKO_CHAT_ENABLED: "false"
     NEKO_FILETRANSFER_ENABLED: "true"
-    NEKO_FILETRANSFER_DIR: /home/neko/Downloads
+    NEKO_FILETRANSFER_DIR: /home/cozycast/Downloads
     NEKO_FILETRANSFER_USER_UPLOAD: "true"
     NEKO_FILETRANSFER_USER_DOWNLOAD: "true"
     # Uploads go through file transfer, which checks the upload right;
@@ -107,7 +107,7 @@ services:
       # the Firefox profile. A named volume takes its ownership from the
       # image, so the desktop's non-root user can write to it (a bind-mounted
       # host folder would be created as root).
-      - room-default-home:/home/neko
+      - room-default-home:/home/cozycast
       - ./import:/import:ro
 
   # A second room: uncomment, then add "second=http://room-second:8080" to
@@ -126,7 +126,7 @@ services:
   #     - "52001:52001/udp"
   #     - "52001:52001/tcp"
   #   volumes:
-  #     - room-second-home:/home/neko
+  #     - room-second-home:/home/cozycast
   # (and add room-second-home under volumes: and room-second under networks:
   # at the bottom)
 

@@ -7,6 +7,16 @@ FROM ghcr.io/m1k1o/neko/firefox:${NEKO_VERSION} AS firefox
 
 FROM ghcr.io/m1k1o/neko/xfce:${NEKO_VERSION}
 
+# The desktop's user is "cozycast", as in the old CozyCast, not neko's
+# "neko": the name shows in the panel, the terminal prompt and the file
+# manager. neko's supervisord configuration runs everything as USER, with
+# /home/USER as its home. It also gives its control socket to a group named
+# "neko", so a group of that name stays.
+ENV USER=cozycast
+RUN usermod -l cozycast -d /home/cozycast -m neko && \
+    groupmod -n cozycast neko && \
+    groupadd neko && usermod -aG neko cozycast
+
 RUN set -eux; \
     sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources; \
     apt-get update; \
@@ -33,10 +43,10 @@ COPY --chmod=0644 xfce/xfwm4.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4
 # Reuse neko's Firefox build instead of downloading it again. Both images share
 # the same base, so the runtime libraries already match.
 COPY --from=firefox /usr/lib/firefox /usr/lib/firefox
-COPY --from=firefox --chown=neko:neko /home/neko/.mozilla /home/neko/.mozilla
+COPY --from=firefox --chown=cozycast:cozycast /home/neko/.mozilla /home/cozycast/.mozilla
 # Downloads is a volume; creating it here gives fresh volumes the right owner.
 RUN ln -s /usr/lib/firefox/firefox /usr/bin/firefox && \
-    install -d -o neko -g neko /home/neko/Downloads
+    install -d -o cozycast -g cozycast /home/cozycast/Downloads
 
 # Explicit modes: Firefox runs as neko and must be able to read these,
 # whatever permissions the files have in the checkout.

@@ -123,14 +123,21 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
       const { x, y } = toScreen(e)
       neko.move(x, y)
       neko.buttonDown(e.button + 1)
+      window.addEventListener('mouseup', onUp, true)
     }
     const onUp = (e: MouseEvent) => {
-      if (!hostRef.current) return
-      e.preventDefault()
-      const { x, y } = toScreen(e)
-      neko.move(x, y)
-      neko.buttonUp(e.button + 1)
+      if (hostRef.current) {
+        e.preventDefault()
+        const { x, y } = toScreen(e)
+        neko.move(x, y)
+        neko.buttonUp(e.button + 1)
+      }
+      if (e.buttons === 0) stopReleaseListener()
     }
+    const stopReleaseListener = () => window.removeEventListener('mouseup', onUp, true)
+    const onBlur = () => { neko.releaseButtons(); stopReleaseListener() }
+    const offHost = neko.on('host', () => { if (!neko.isHost) stopReleaseListener() })
+    const offStatus = neko.on('status', (status) => { if (status === 'disconnected') stopReleaseListener() })
 
     let wheelX = 0
     let wheelY = 0
@@ -154,13 +161,16 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
 
     el.addEventListener('mousemove', onMove)
     el.addEventListener('mousedown', onDown)
-    el.addEventListener('mouseup', onUp)
+    window.addEventListener('blur', onBlur)
     el.addEventListener('wheel', onWheel, { passive: false })
     el.addEventListener('contextmenu', onContextMenu)
     return () => {
       el.removeEventListener('mousemove', onMove)
       el.removeEventListener('mousedown', onDown)
-      el.removeEventListener('mouseup', onUp)
+      onBlur()
+      offHost()
+      offStatus()
+      window.removeEventListener('blur', onBlur)
       el.removeEventListener('wheel', onWheel)
       el.removeEventListener('contextmenu', onContextMenu)
     }

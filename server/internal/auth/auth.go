@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -26,6 +27,13 @@ const (
 )
 
 var ErrInvalidCredentials = errors.New("invalid username or password")
+
+func ValidatePassword(password string) error {
+	if utf8.RuneCountInString(password) < 8 || len(password) > 72 {
+		return errors.New("Passwords must be at least 8 characters and at most 72 bytes.")
+	}
+	return nil
+}
 
 // Identity is who is making a request: an account, or an anonymous browser.
 type Identity struct {
@@ -100,7 +108,7 @@ func (a *Service) Login(w http.ResponseWriter, r *http.Request, username, passwo
 	if err != nil {
 		return nil, err
 	}
-	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) != nil || u.Disabled {
+	if !CheckPassword(u, password) || u.Disabled {
 		return nil, ErrInvalidCredentials
 	}
 	return u, a.StartSession(w, r, u)
@@ -108,7 +116,7 @@ func (a *Service) Login(w http.ResponseWriter, r *http.Request, username, passwo
 
 // CheckPassword reports whether password is the user's current password.
 func CheckPassword(u *store.User, password string) bool {
-	return bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) == nil
+	return len(password) <= 72 && bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) == nil
 }
 
 func (a *Service) StartSession(w http.ResponseWriter, r *http.Request, u *store.User) error {

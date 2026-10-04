@@ -3,8 +3,10 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -45,6 +47,11 @@ type Server struct {
 
 	adminMu sync.Mutex // enabled-admin count checks and updates
 
+	socketMu    sync.Mutex // serializes handler registration with shutdown
+	socketWG    sync.WaitGroup
+	socketCtx   context.Context
+	stopSockets context.CancelFunc
+
 	loginLimit    *ratelimit.Limiter // per IP: login attempts
 	registerLimit *ratelimit.Limiter // per IP: account creations
 }
@@ -53,6 +60,7 @@ func New(d Deps) *Server {
 	if d.MaxUploadMB <= 0 {
 		d.MaxUploadMB = 10
 	}
+	socketCtx, stopSockets := context.WithCancel(context.Background())
 	return &Server{
 		store:          d.Store,
 		auth:           d.Auth,
@@ -64,6 +72,8 @@ func New(d Deps) *Server {
 		maxUploadBytes: d.MaxUploadMB << 20,
 		loginLimit:     ratelimit.New(10, 30*time.Second),
 		registerLimit:  ratelimit.New(3, 10*time.Minute),
+		socketCtx:      socketCtx,
+		stopSockets:    stopSockets,
 	}
 }
 
@@ -233,6 +243,10 @@ func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 		} else {
 			writeError(w, http.StatusBadRequest, "Invalid request.")
 		}
+		return false
+	}
+	if err := dec.Decode(new(any)); err != io.EOF {
+		writeError(w, http.StatusBadRequest, "Invalid request.")
 		return false
 	}
 	return true

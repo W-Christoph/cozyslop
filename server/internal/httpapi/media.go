@@ -335,6 +335,8 @@ func (s *Server) mediaPostError(w http.ResponseWriter, r *http.Request, err erro
 		writeError(w, http.StatusForbidden, "Join the room first.")
 	case errors.Is(err, hub.ErrNotAllowed):
 		writeError(w, http.StatusForbidden, "You are not allowed to post images.")
+	case errors.Is(err, hub.ErrRateLimited):
+		writeError(w, http.StatusTooManyRequests, "You are sending messages too fast.")
 	default:
 		s.internalError(w, r, err)
 	}

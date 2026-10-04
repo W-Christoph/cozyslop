@@ -69,6 +69,8 @@ func (r *Room) Handle(ctx context.Context, c *Client, msg ClientMsg) {
 	case err == nil:
 	case errors.As(err, &userErr):
 		c.send(errorMsg{Type: "error", Message: userErr.msg})
+	case errors.Is(err, ErrRateLimited):
+		c.send(errorMsg{Type: "error", Message: "You are sending messages too fast."})
 	case errors.Is(err, ErrNotAllowed):
 		c.send(errorMsg{Type: "error", Message: "You are not allowed to do that."})
 	default:
@@ -126,7 +128,8 @@ func (r *Room) sendChat(ctx context.Context, c *Client, body string) error {
 	return r.post(ctx, c.m.key, "text", body, "")
 }
 
-// CanPostMedia checks presence and image rights before an upload is read.
+// CanPostMedia checks presence, image rights and the chat rate limit before
+// an upload is read, consuming one chat token.
 // PostMedia checks them again once the upload is ready.
 func (r *Room) CanPostMedia(key string) error {
 	r.mu.Lock()
@@ -138,12 +141,12 @@ func (r *Room) CanPostMedia(key string) error {
 	if !m.rights.Image {
 		return ErrNotAllowed
 	}
-	return nil
+	return r.chatRateLocked(m)
 }
 
 // PostMedia adds an uploaded image or video to the chat on behalf of the
 // person with the given identity key. They must be in the room with the
-// image right.
+// image right. Call CanPostMedia before reading the upload.
 func (r *Room) PostMedia(ctx context.Context, key, typ, file string) error {
 	r.mu.Lock()
 	m := r.members[key]
@@ -166,12 +169,10 @@ func (r *Room) post(ctx context.Context, key, typ, body, media string) error {
 		return ErrNotPresent
 	}
 
-	limiter := r.chatUser
-	if m.user == nil {
-		limiter = r.chatAnon
-	}
-	if !limiter.Allow(m.key) {
-		return &userError{"You are sending messages too fast."}
+	if typ == "text" {
+		if err := r.chatRateLocked(m); err != nil {
+			return err
+		}
 	}
 
 	u := r.userLocked(m)
@@ -194,6 +195,17 @@ func (r *Room) post(ctx context.Context, key, typ, body, media string) error {
 		return err
 	}
 	r.broadcastLocked(chatMsg{Type: "chat", Message: r.toChat([]store.ChatMessage{*msg})[0]}, nil)
+	return nil
+}
+
+func (r *Room) chatRateLocked(m *member) error {
+	limiter := r.chatUser
+	if m.user == nil {
+		limiter = r.chatAnon
+	}
+	if !limiter.Allow(m.key) {
+		return ErrRateLimited
+	}
 	return nil
 }
 

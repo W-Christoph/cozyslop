@@ -5,7 +5,50 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"cozycast/internal/store"
+	"golang.org/x/crypto/bcrypt"
 )
+
+func TestValidatePassword(t *testing.T) {
+	for _, tt := range []struct {
+		password string
+		valid    bool
+	}{
+		{"", false}, {"1234567", false}, {"12345678", true},
+		{strings.Repeat("a", 72), true}, {strings.Repeat("a", 73), false},
+		{strings.Repeat("é", 7), false}, {strings.Repeat("é", 36), true},
+		{strings.Repeat("é", 37), false}, {strings.Repeat("🙂", 18), true},
+		{strings.Repeat("🙂", 19), false},
+	} {
+		if err := ValidatePassword(tt.password); (err == nil) != tt.valid {
+			t.Fatalf("password %q: %v, valid=%v", tt.password, err, tt.valid)
+		}
+	}
+}
+
+func TestCheckPasswordBcryptBoundary(t *testing.T) {
+	password := strings.Repeat("a", 72)
+	hash, err := HashPassword(password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := &store.User{PasswordHash: hash}
+	if !CheckPassword(user, password) || CheckPassword(user, password+"a") {
+		t.Fatal("bcrypt byte limit was not enforced")
+	}
+	// Imported bcrypt hashes must still verify directly, without pre-hashing.
+	imported, err := bcrypt.GenerateFromPassword([]byte("imported password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, prefix := range []string{"$2a$", "$2b$", "$2y$"} {
+		user.PasswordHash = prefix + string(imported[4:])
+		if !CheckPassword(user, "imported password") {
+			t.Fatalf("imported %s hash no longer verifies", prefix)
+		}
+	}
+}
 
 func TestAnonIDIsNotTheCookie(t *testing.T) {
 	a := &Service{}

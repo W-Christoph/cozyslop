@@ -377,6 +377,48 @@ func TestChatMediaAccepted(t *testing.T) {
 	}
 }
 
+func TestChatMediaRateLimitBeforeBody(t *testing.T) {
+	a := newMediaAPITest(t, 0)
+	a.user("root", true)
+	c := a.login("root")
+	_, key := a.join(c)
+	a.upload(c, "/api/rooms/default/media", "file", "one.mp4", testVideo("mp4"), 204, "")
+	// A completed upload consumes one token; it must not be charged twice.
+	for i := 0; i < 9; i++ {
+		if err := a.hub.Room("default").CanPostMedia(key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reading := make(chan struct{}, 1)
+	req, err := http.NewRequest("POST", a.srv.URL+"/api/rooms/default/media", strings.NewReader("invalid upload"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Expect", "100-continue")
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+		Got100Continue: func() { reading <- struct{}{} },
+	}))
+	res, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var failure struct{ Error string }
+	if err := json.NewDecoder(res.Body).Decode(&failure); err != nil || res.StatusCode != 429 || failure.Error != "You are sending messages too fast." {
+		t.Fatalf("rate limit: %d %+v %v", res.StatusCode, failure, err)
+	}
+	select {
+	case <-reading:
+		t.Fatal("rate-limited upload read its body")
+	default:
+	}
+	a.files("chat", 1)
+	history, err := a.st.ChatHistory(context.Background(), "default")
+	if err != nil || len(history) != 1 {
+		t.Fatalf("rate-limited upload posted: %v %v", history, err)
+	}
+}
+
 func TestChatMediaRejectsInvalidAndOversized(t *testing.T) {
 	a := newMediaAPITest(t, 1)
 	a.user("root", true)

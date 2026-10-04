@@ -11,6 +11,23 @@ import (
 	"github.com/coder/websocket/wsjson"
 )
 
+func TestShutdownRejectsRoomUpgrades(t *testing.T) {
+	s := New(Deps{})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	s.roomSocket(w, httptest.NewRequest("GET", "/api/rooms/default/ws", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("upgrade during shutdown: %d %s", w.Code, w.Body)
+	}
+	if err := s.Shutdown(ctx); err != nil {
+		t.Fatalf("repeated shutdown: %v", err)
+	}
+}
+
 // socketPair runs fill against a server-side socket before its write loop
 // starts, and returns the browser's end.
 func socketPair(t *testing.T, fill func(*socket)) (*websocket.Conn, context.Context) {

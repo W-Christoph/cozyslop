@@ -58,6 +58,7 @@ export class NekoClient extends Emitter<NekoEvents> {
   private pendingCandidates: RTCIceCandidateInit[] = []
   private lastMessage = 0
   private staleTimer?: number
+  private heldButtons = new Set<number>()
 
   get isHost() {
     return this.sessionId !== '' && this.hostId === this.sessionId
@@ -105,6 +106,7 @@ export class NekoClient extends Emitter<NekoEvents> {
   }
 
   releaseControl() {
+    this.releaseButtons()
     this.send('control/release')
   }
 
@@ -125,11 +127,17 @@ export class NekoClient extends Emitter<NekoEvents> {
 
   // button: 1 = left, 2 = middle, 3 = right (X11 numbering)
   buttonDown(button: number) {
+    this.heldButtons.add(button)
     this.sendInput(OP_BTN_DOWN, 4, (v) => v.setUint32(3, button))
   }
 
   buttonUp(button: number) {
+    if (!this.heldButtons.delete(button)) return
     this.sendInput(OP_BTN_UP, 4, (v) => v.setUint32(3, button))
+  }
+
+  releaseButtons() {
+    this.heldButtons.forEach((button) => this.buttonUp(button))
   }
 
   keyDown(keysym: number) {
@@ -289,6 +297,7 @@ export class NekoClient extends Emitter<NekoEvents> {
   }
 
   private updateHost(host: { has_host: boolean; host_id?: string } | undefined) {
+    if (this.isHost && (!host?.has_host || host.host_id !== this.sessionId)) this.releaseButtons()
     this.hostId = host?.has_host ? host.host_id : undefined
     this.emit('host', this.hostId)
   }
@@ -334,6 +343,7 @@ export class NekoClient extends Emitter<NekoEvents> {
   }
 
   private teardown() {
+    this.releaseButtons()
     window.clearInterval(this.staleTimer)
     if (this.ws) {
       this.ws.onopen = this.ws.onmessage = this.ws.onclose = null

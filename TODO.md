@@ -29,7 +29,6 @@ checks on the real server.
 
 Sessions
 - [ ] Logout / password reset does not close room sockets already connected.
-- [ ] Passwords over 72 bytes pass validation, then fail with a 500 (bcrypt).
 - [ ] The session cookie's 30-day lifetime does not slide with the database
       expiry.
 
@@ -49,39 +48,48 @@ Frontend
 - [ ] The chat draft is cleared before the server accepts the message.
 - [ ] The desktop does not reconnect after a neko outage unless a restart
       was announced.
-- [ ] A mouse button stays held if released outside the desktop.
 - [ ] Remote control traps keyboard focus (no way to Tab out).
 - [ ] Mobile keyboard: single capital letters arrive lowercase.
 - [ ] An unknown room shows endless loading.
-- [ ] A deleted image or video stays open in the preview modal.
 - [ ] `me` is not cleared when the session expires or another tab logs out.
 - [ ] Desktop uploads cannot be cancelled and have no timeout.
-- [ ] A cancelled avatar crop can still replace the avatar.
-- [ ] Admins cannot change their own verified flag in the UI.
-- [ ] Vite dev server does not proxy `/media`.
 
 Housekeeping
-- [ ] Expired anonymous bans are never deleted (`DeleteExpiredAnonBans` is
-      unused).
 - [ ] Orphaned media files (crash between rename and insert, failed unlink)
       are never reconciled.
-- [ ] An open tab keeps chat beyond the one-hour / 1000-message retention.
 - [ ] Deleting or replacing an imported avatar removes a file other imported
       accounts may share.
 - [ ] Legacy avatar import cannot resume after a crash.
-- [ ] JSON bodies: trailing data after the first object is accepted.
-- [ ] Media rate limit runs after the upload was decoded, and returns 500.
-- [ ] Shutdown does not close room sockets before the database.
 - [ ] Clearing the screen setting does not restore the container default.
 - [ ] The neko observer's WebSocket has no handshake timeout or liveness
       check.
 - [ ] `X-Forwarded-For` is trusted as-is with `COZYCAST_TRUST_PROXY`
       (off by default).
 - [ ] Account ids can be reused after deleting the newest account.
-- [ ] `docs/architecture.md` says a restart loses open tabs; Firefox
-      restores them.
 
-## 3. Done on 2026-10-03
+## 3. Done on 2026-10-04
+
+- [x] Stream settings offer only 16:9 resolutions.
+- [x] Passwords over 72 bytes are refused (400) wherever a password is set,
+      including the initial admin password; at login they are simply wrong.
+- [x] Expired anonymous bans are deleted with the hourly session sweep.
+- [x] JSON bodies with data after the first value are refused.
+- [x] The chat rate limit is checked before a media upload is read, and
+      answers 429.
+- [x] Shutdown closes the room sockets and waits for them before the
+      database closes.
+- [x] A mouse button released outside the desktop is released on the
+      desktop too; held buttons are released on blur and when the remote is
+      lost.
+- [x] The media preview closes when its message is deleted.
+- [x] A cancelled avatar crop is discarded.
+- [x] Admins can change their own verified flag.
+- [x] Vite dev server proxies `/media`.
+- [x] `docs/architecture.md`: Firefox restores its tabs after a restart.
+- Decided: an open tab keeps the chat it has, beyond the one-hour /
+  1000-message retention.
+
+## 4. Done on 2026-10-03
 
 - [x] Anonymous impersonation: the public `a:<id>` was the `cozy_anon`
       cookie; it is now a hash of it.

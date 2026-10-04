@@ -238,8 +238,8 @@ func TestPostMediaAndRemoval(t *testing.T) {
 	requireEqual(t, errors.Is(f.r.PostMedia(f.ctx, "missing", "image", "none"), ErrNotPresent), true)
 	requireEqual(t, errors.Is(f.r.CanPostMedia("a:guest"), ErrNotAllowed), true)
 	requireEqual(t, errors.Is(f.r.PostMedia(f.ctx, "a:guest", "image", "none"), ErrNotAllowed), true)
-	requireOK(t, f.r.CanPostMedia(alice.Key()))
 	for _, typ := range []string{"image", "video"} {
+		requireOK(t, f.r.CanPostMedia(alice.Key()))
 		file := typ + ".png"
 		path := filepath.Join(f.h.mediaDir, file)
 		requireOK(t, os.WriteFile(path, []byte("media"), 0600))
@@ -271,6 +271,20 @@ func TestPostMediaAndRemoval(t *testing.T) {
 	requireEqual(t, errors.Is(f.r.CanPostMedia(alice.Key()), ErrNotAllowed), true)
 	requireEqual(t, errors.Is(f.r.PostMedia(f.ctx, alice.Key(), "image", "later.png"), ErrNotAllowed), true)
 	requireEqual(t, a.wait(t, "rights").(rightsMsg).Rights, rights.Rights{})
+}
+
+func TestMediaSharesChatRateLimit(t *testing.T) {
+	f := newFixture(t, store.RoomSettings{DefaultImage: true})
+	id := f.user("alice")
+	f.r.chatUser = ratelimit.New(2, time.Hour)
+	c, rec := f.join(id)
+	requireOK(t, f.r.CanPostMedia(id.Key()))
+	requireOK(t, f.r.PostMedia(f.ctx, id.Key(), "image", "one.png"))
+	f.r.Handle(f.ctx, c, ClientMsg{Type: "chat_send", Body: "second token"})
+	requireEqual(t, rec.count("chat"), 2)
+	requireEqual(t, errors.Is(f.r.CanPostMedia(id.Key()), ErrRateLimited), true)
+	f.r.Handle(f.ctx, c, ClientMsg{Type: "chat_send", Body: "over limit"})
+	expectError(t, rec, "You are sending messages too fast.")
 }
 
 func TestConcurrentChatAndJoinOrdering(t *testing.T) {

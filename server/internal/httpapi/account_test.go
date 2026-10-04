@@ -23,6 +23,7 @@ import (
 )
 
 const testPassword = "password123"
+const passwordError = "Passwords must be at least 8 characters and at most 72 bytes."
 
 type apiTest struct {
 	t   *testing.T
@@ -195,6 +196,23 @@ func TestAccountLoginLogout(t *testing.T) {
 	}
 }
 
+func TestPasswordByteBoundary(t *testing.T) {
+	a := newAPITest(t)
+	if err := a.st.SaveSettings(context.Background(), store.Settings{Registration: "open"}); err != nil {
+		t.Fatal(err)
+	}
+	for i, password := range []string{strings.Repeat("a", 72), strings.Repeat("é", 36)} {
+		username := []string{"alice", "bob"}[i]
+		a.call(a.client(), "POST", "/api/auth/register", map[string]string{"username": username, "password": password}, 201, nil)
+		c := a.client()
+		a.call(c, "POST", "/api/auth/login", map[string]string{"username": username, "password": password}, 200, nil)
+		for _, name := range []string{username, "missing"} {
+			a.error(c, "POST", "/api/auth/login", map[string]string{"username": name, "password": password + "a"}, 401, "Wrong username or password.")
+		}
+		a.error(c, "POST", "/api/me/password", map[string]string{"current": password + "a", "new": testPassword}, 403, "Your current password is wrong.")
+	}
+}
+
 func TestAccountProfile(t *testing.T) {
 	a := newAPITest(t)
 	u := a.user("alice", false)
@@ -230,6 +248,9 @@ func TestAccountChangePassword(t *testing.T) {
 	current, other := a.login("alice"), a.login("alice")
 	a.error(current, "POST", "/api/me/password", map[string]string{"current": "wrong", "new": "newpassword"}, 403, "Your current password is wrong.")
 	a.call(current, "POST", "/api/me/password", map[string]string{"current": testPassword, "new": "short"}, 400, nil)
+	for _, password := range []string{strings.Repeat("a", 73), strings.Repeat("é", 37)} {
+		a.error(current, "POST", "/api/me/password", map[string]string{"current": testPassword, "new": password}, 400, passwordError)
+	}
 	a.call(current, "POST", "/api/me/password", map[string]string{"current": testPassword, "new": "newpassword"}, 204, nil)
 	a.me(current, "alice")
 	a.me(other, "")
@@ -299,8 +320,8 @@ func TestRegistrationValidationAndRateLimit(t *testing.T) {
 	for _, username := range []string{"a", "a--b", "-alice", "longusername1"} {
 		a.call(c, "POST", "/api/auth/register", map[string]string{"username": username, "password": testPassword}, 400, nil)
 	}
-	for _, password := range []string{"short", strings.Repeat("a", 101)} {
-		a.error(c, "POST", "/api/auth/register", map[string]string{"username": "alice", "password": password}, 400, "Passwords are 8-100 characters.")
+	for _, password := range []string{"short", strings.Repeat("a", 73), strings.Repeat("é", 37), strings.Repeat("a", 101)} {
+		a.error(c, "POST", "/api/auth/register", map[string]string{"username": "alice", "password": password}, 400, passwordError)
 	}
 	for _, username := range []string{"alice", "bob", "carol"} {
 		a.call(a.client(), "POST", "/api/auth/register", map[string]string{"username": username, "password": testPassword}, 201, nil)

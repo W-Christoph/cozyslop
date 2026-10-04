@@ -15,7 +15,8 @@ export function AvatarChooser({
 }) {
   const input = useRef<HTMLInputElement>(null),
     image = useRef<HTMLImageElement>(null),
-    cropper = useRef<Cropper | null>(null)
+    cropper = useRef<Cropper | null>(null),
+    pendingCrop = useRef<HTMLCanvasElement | null>(null)
   const [source, setSource] = useState(''),
     [error, setError] = useState(''),
     [ready, setReady] = useState(false)
@@ -29,11 +30,16 @@ export function AvatarChooser({
       ready: () => setReady(true),
     })
     return () => {
+      pendingCrop.current = null
       cropper.current?.destroy()
       cropper.current = null
       URL.revokeObjectURL(source)
     }
   }, [source])
+  function close() {
+    pendingCrop.current = null
+    setSource('')
+  }
   function select(file?: File) {
     setError('')
     if (!file) return
@@ -41,6 +47,7 @@ export function AvatarChooser({
       setError('Please select a PNG, JPEG or WebP image.')
       return
     }
+    pendingCrop.current = null
     setSource(URL.createObjectURL(file))
   }
   function crop() {
@@ -50,13 +57,16 @@ export function AvatarChooser({
         setError('Could not crop this image.')
         return
       }
+      pendingCrop.current = canvas
       canvas.toBlob((blob) => {
+        if (pendingCrop.current !== canvas) return
+        pendingCrop.current = null
         if (!blob) {
           setError('Could not crop this image.')
           return
         }
         onCrop(blob)
-        setSource('')
+        close()
       }, 'image/png')
     } catch {
       setError('Could not crop this image. Please choose another image.')
@@ -85,7 +95,7 @@ export function AvatarChooser({
         }}
       />
       {source && (
-        <Modal title="Crop avatar" onClose={() => setSource('')}>
+        <Modal title="Crop avatar" onClose={close}>
           <div class={styles.cropper}>
             <img
               ref={image}
@@ -102,7 +112,7 @@ export function AvatarChooser({
             <Button accent disabled={!ready} onClick={crop}>
               Crop
             </Button>
-            <Button onClick={() => setSource('')}>Close</Button>
+            <Button onClick={close}>Close</Button>
           </div>
           {error && <p role="alert">{error}</p>}
         </Modal>

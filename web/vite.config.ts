@@ -20,6 +20,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': { target: server, ws: true },
+      '/media': { target: server },
       '/neko': { target: server, ws: true },
     },
   },

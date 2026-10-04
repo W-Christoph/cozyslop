@@ -24,8 +24,9 @@ import (
 )
 
 var (
-	ErrNotPresent = errors.New("hub: user is not in the room")
-	ErrNotAllowed = errors.New("hub: not allowed")
+	ErrNotPresent  = errors.New("hub: user is not in the room")
+	ErrNotAllowed  = errors.New("hub: not allowed")
+	ErrRateLimited = errors.New("hub: sending too fast")
 )
 
 // DeniedError is returned by Join when the identity may not enter.

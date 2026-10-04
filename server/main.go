@@ -76,7 +76,7 @@ func run() error {
 	if err := ensureAdmin(ctx, db, cfg.InitAdminPass); err != nil {
 		return err
 	}
-	go sweepSessions(ctx, db)
+	go sweepExpired(ctx, db)
 
 	var dc *docker.Client
 	var project string
@@ -127,7 +127,7 @@ func run() error {
 		web = os.DirFS(cfg.WebDir)
 	}
 
-	handler := httpapi.New(httpapi.Deps{
+	api := httpapi.New(httpapi.Deps{
 		Store:       db,
 		Auth:        auth.New(db, cfg.TrustProxy),
 		Hub:         h,
@@ -135,7 +135,8 @@ func run() error {
 		MediaDir:    mediaDir,
 		MaxUploadMB: cfg.MaxUploadMB,
 		SourceURL:   cfg.SourceURL,
-	}).Handler()
+	})
+	handler := api.Handler()
 
 	var servers []*http.Server
 	errc := make(chan error, 2)
@@ -168,20 +169,26 @@ func run() error {
 		serve(newServer(cfg.Listen, m.HTTPHandler(nil)), false)
 	}
 
+	var serveErr error
 	select {
-	case err := <-errc:
-		return err
+	case serveErr = <-errc:
+		stop()
 	case <-ctx.Done():
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	return errors.Join(serveErr, shutdown(shutdownCtx, servers, api))
+}
+
+func shutdown(ctx context.Context, servers []*http.Server, api *httpapi.Server) error {
+	var err error
 	for _, srv := range servers {
-		if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return err
+		if e := srv.Shutdown(ctx); e != nil && !errors.Is(e, http.ErrServerClosed) {
+			err = errors.Join(err, e, srv.Close())
 		}
 	}
-	return nil
+	return errors.Join(err, api.Shutdown(ctx))
 }
 
 func newServer(addr string, h http.Handler) *http.Server {
@@ -208,6 +215,9 @@ func ensureAdmin(ctx context.Context, db *store.Store, password string) error {
 	if !errors.Is(err, store.ErrNotFound) {
 		return err
 	}
+	if err := auth.ValidatePassword(password); err != nil {
+		return err
+	}
 	hash, err := auth.HashPassword(password)
 	if err != nil {
 		return err
@@ -216,17 +226,24 @@ func ensureAdmin(ctx context.Context, db *store.Store, password string) error {
 	return db.CreateUser(ctx, &store.User{Username: "admin", PasswordHash: hash, Nickname: "admin", Admin: true, Verified: true})
 }
 
-func sweepSessions(ctx context.Context, db *store.Store) {
+func sweepExpired(ctx context.Context, db *store.Store) {
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()
 	for {
-		if err := db.DeleteExpiredSessions(ctx); err != nil && ctx.Err() == nil {
-			slog.Warn("delete expired sessions", "err", err)
-		}
+		deleteExpired(ctx, db)
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
 		}
+	}
+}
+
+func deleteExpired(ctx context.Context, db *store.Store) {
+	if err := db.DeleteExpiredSessions(ctx); err != nil && ctx.Err() == nil {
+		slog.Warn("delete expired sessions", "err", err)
+	}
+	if err := db.DeleteExpiredAnonBans(ctx); err != nil && ctx.Err() == nil {
+		slog.Warn("delete expired anonymous bans", "err", err)
 	}
 }

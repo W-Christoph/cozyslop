@@ -3,7 +3,6 @@ import type { ChatMessage } from '../../room/protocol'
 import { preferences } from '../../app/state'
 import { useRoomStore } from '../room/RoomContext'
 import { MessageGroup } from './MessageGroup'
-import type { Media } from './InlineMedia'
 import { groupMessages, messageTime } from './parseMessage'
 import type { TemporaryLine } from './useChatEvents'
 import styles from './MessageList.module.css'
@@ -13,7 +12,7 @@ export function MessageList({ lines, editing, onEdit, onEndEdit, onMedia }: {
   editing: number | null
   onEdit: (id: number) => void
   onEndEdit: () => void
-  onMedia: (media: Media) => void
+  onMedia: (id: number) => void
 }) {
   const store = useRoomStore()
   const chat = store.chat.value

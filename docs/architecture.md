@@ -150,7 +150,8 @@ cooldown. It is held in memory and resets when the server restarts. The
 server broadcasts `restarting` with the requester's nickname before issuing
 the restart asynchronously; Docker failures are logged. Browsers reconnect
 their desktop streams and obtain fresh neko tokens. The desktop restarts for
-everyone and open browser tabs/pages are lost.
+everyone; Firefox restores the previous tabs from its saved session after
+both clean shutdowns and crashes, without a recovery prompt.
 
 The socket mount grants the server control over Docker on the host, even
 though this feature only invokes room container restarts. This is a security

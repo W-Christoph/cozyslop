@@ -68,7 +68,7 @@ export function RegisterPage() {
               autoComplete="new-password"
               required
               minLength={8}
-              maxLength={100}
+              maxLength={72}
               value={password}
               onInput={(e) => setPassword(e.currentTarget.value)}
             />
@@ -79,7 +79,7 @@ export function RegisterPage() {
               type="password"
               autoComplete="new-password"
               required
-              maxLength={100}
+              maxLength={72}
               value={confirmation}
               onInput={(e) => setConfirmation(e.currentTarget.value)}
             />

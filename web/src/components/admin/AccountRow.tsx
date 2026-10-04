@@ -44,7 +44,7 @@ export function AccountRow({
       <td class={styles.center}>
         <Button
           accent={user.verified}
-          disabled={busy || self}
+          disabled={busy}
           onClick={() => onUpdate(user.username, { verified: !user.verified })}
         >
           {user.verified ? 'verified' : 'Not verified'}

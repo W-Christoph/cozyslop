@@ -162,7 +162,9 @@ func TestAdminPasswordReset(t *testing.T) {
 	a.user("root", true)
 	a.user("alice", false)
 	admin, user, other := a.login("root"), a.login("alice"), a.login("alice")
-	a.error(admin, "POST", "/api/admin/users/alice/password", map[string]string{"password": "short"}, 400, "Passwords are 8-100 characters.")
+	for _, password := range []string{"short", strings.Repeat("a", 73), strings.Repeat("é", 37)} {
+		a.error(admin, "POST", "/api/admin/users/alice/password", map[string]string{"password": password}, 400, passwordError)
+	}
 	a.call(admin, "POST", "/api/admin/users/alice/password", map[string]string{"password": "newpassword"}, 204, nil)
 	a.me(user, "")
 	a.me(other, "")

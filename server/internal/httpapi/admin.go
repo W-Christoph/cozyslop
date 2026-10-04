@@ -150,8 +150,8 @@ func (s *Server) adminSetPassword(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if !validPassword(req.Password) {
-		writeError(w, http.StatusBadRequest, "Passwords are 8-100 characters.")
+	if err := auth.ValidatePassword(req.Password); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	hash, err := auth.HashPassword(req.Password)

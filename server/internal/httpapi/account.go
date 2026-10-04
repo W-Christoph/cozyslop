@@ -21,11 +21,6 @@ func validUsername(s string) bool {
 	return len(s) >= 2 && len(s) <= 12 && usernameRe.MatchString(s)
 }
 
-func validPassword(s string) bool {
-	n := utf8.RuneCountInString(s)
-	return n >= 8 && n <= 100
-}
-
 func validNickname(s string) bool {
 	n := utf8.RuneCountInString(s)
 	return n >= 1 && n <= 12 && nicknameRe.MatchString(s)
@@ -130,8 +125,8 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 			"Usernames are 2-12 letters or digits, optionally separated by single '-', '_' or '.'.")
 		return
 	}
-	if !validPassword(req.Password) {
-		writeError(w, http.StatusBadRequest, "Passwords are 8-100 characters.")
+	if err := auth.ValidatePassword(req.Password); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -234,8 +229,8 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "Your current password is wrong.")
 		return
 	}
-	if !validPassword(req.New) {
-		writeError(w, http.StatusBadRequest, "Passwords are 8-100 characters.")
+	if err := auth.ValidatePassword(req.New); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	hash, err := auth.HashPassword(req.New)

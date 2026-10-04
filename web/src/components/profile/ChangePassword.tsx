@@ -45,7 +45,7 @@ export function ChangePassword() {
           required
           type="password"
           autoComplete="current-password"
-          maxLength={100}
+          maxLength={72}
           value={current}
           onInput={(e) => setCurrent(e.currentTarget.value)}
         />
@@ -57,7 +57,7 @@ export function ChangePassword() {
           type="password"
           autoComplete="new-password"
           minLength={8}
-          maxLength={100}
+          maxLength={72}
           value={password}
           onInput={(e) => setPassword(e.currentTarget.value)}
         />
@@ -68,7 +68,7 @@ export function ChangePassword() {
           required
           type="password"
           autoComplete="new-password"
-          maxLength={100}
+          maxLength={72}
           value={confirmation}
           onInput={(e) => setConfirmation(e.currentTarget.value)}
         />

@@ -1,7 +1,7 @@
 import type { ChatMessage } from '../../room/protocol'
 import { useLayoutEffect, useRef } from 'preact/hooks'
 import { useRoomStore } from '../room/RoomContext'
-import { InlineMedia, type Media } from './InlineMedia'
+import { InlineMedia } from './InlineMedia'
 import { MessageEditor } from './MessageEditor'
 import { MessageText } from './MessageText'
 import { messageTime } from './parseMessage'
@@ -12,7 +12,7 @@ export function MessageGroup({ messages, editing, onEdit, onEndEdit, onMedia, on
   editing: number | null
   onEdit: (id: number) => void
   onEndEdit: () => void
-  onMedia: (media: Media) => void
+  onMedia: (id: number) => void
   onLoad: () => void
 }) {
   const store = useRoomStore()
@@ -46,7 +46,7 @@ export function MessageGroup({ messages, editing, onEdit, onEndEdit, onMedia, on
         {own && message.type === 'text' && message.id > 0 && <button type="button" class={`${styles.deleteButton} ${styles.editButton}`} aria-label="Edit message" onClick={() => onEdit(message.id)}><img src="/svg/edit.svg" alt="" /></button>}
         {index > 0 && <div class={styles.hoverTime}>{messageTime(message.time)}</div>}
         {message.type === 'image' || message.type === 'video'
-          ? <InlineMedia media={{ type: message.type, url: message.mediaUrl ?? '' }} onOpen={onMedia} onLoad={onLoad} />
+          ? <InlineMedia media={{ type: message.type, url: message.mediaUrl ?? '' }} onOpen={() => onMedia(message.id)} onLoad={onLoad} />
           : message.type === 'whisper' ? <div class={styles.whisper}>{message.body}</div> : <MessageText body={message.body} />}
         {message.edited && <span class={styles.edited}> (edited)</span>}
       </div>)}

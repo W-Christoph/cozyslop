@@ -25,7 +25,43 @@ const (
 	statusOverflow = websocket.StatusTryAgainLater
 )
 
+// Shutdown closes room sockets and waits for their handlers, including Leave.
+// HTTP listeners must be shut down first: http.Server does not wait for
+// hijacked connections.
+func (s *Server) Shutdown(ctx context.Context) error {
+	s.socketMu.Lock()
+	s.stopSockets()
+	s.socketMu.Unlock()
+	done := make(chan struct{})
+	go func() {
+		s.socketWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (s *Server) roomSocket(w http.ResponseWriter, r *http.Request) {
+	s.socketMu.Lock()
+	if s.socketCtx.Err() != nil {
+		s.socketMu.Unlock()
+		writeError(w, http.StatusServiceUnavailable, "Server is shutting down.")
+		return
+	}
+	s.socketWG.Add(1)
+	s.socketMu.Unlock()
+	defer s.socketWG.Done()
+
+	ctx, cancel := context.WithCancel(r.Context())
+	stop := context.AfterFunc(s.socketCtx, cancel)
+	defer stop()
+	defer cancel()
+	r = r.WithContext(ctx)
+
 	rm := s.hub.Room(r.PathValue("room"))
 	if rm == nil {
 		http.NotFound(w, r)
@@ -43,10 +79,9 @@ func (s *Server) roomSocket(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+	defer conn.CloseNow()
 	conn.SetReadLimit(64 << 10)
 
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
 	sock := newSocket(conn)
 	go sock.writeLoop(ctx, cancel)
 

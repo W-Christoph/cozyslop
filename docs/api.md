@@ -172,6 +172,9 @@ schema applies to proxied requests or responses.
 
 The room WebSocket carries presence, chat, typing, activity, mute status,
 rights, room settings, remote ownership, moderation and per-tab neko tokens.
+`welcome.windowTitle` is the title of the window in front on the room's
+desktop (`""` if unknown); `{"type":"window_title","title":"…"}` follows when
+it changes (see `docs/architecture.md`).
 `welcome.restart` is a boolean indicating whether container control is enabled.
 Clients send `{"type":"restart"}` to restart the room's desktop; admins are
 always allowed and trusted users are allowed once per hour per room. The

@@ -35,6 +35,9 @@ type RoomConfig struct {
 	// Restart restarts the room's container; nil when the operator has not
 	// enabled container control.
 	Restart func(ctx context.Context) error
+	// TitleURL answers with the title of the window in front on the room's
+	// desktop (worker/window-title.py); "" if the room has no such helper.
+	TitleURL string
 }
 
 func New(s *store.Store, mediaDir string, rooms []RoomConfig) *Hub {
@@ -43,6 +46,7 @@ func New(s *store.Store, mediaDir string, rooms []RoomConfig) *Hub {
 		r := newRoom(h, rc.Name, rc.Neko)
 		r.restart = rc.Restart
 		r.defaultScreen = rc.DefaultScreen
+		r.titleURL = rc.TitleURL
 		h.rooms[rc.Name] = r
 	}
 	return h

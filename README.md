@@ -13,7 +13,8 @@ come. The app still calls itself CozyCast.
 - **Shared remote desktop**: one XFCE desktop with Firefox (uBlock Origin)
   and VLC per room, streamed to every viewer. Whoever holds the remote
   controls mouse and keyboard; copy and paste work both ways between the
-  room and your own clipboard.
+  room and your own clipboard. The browser tab shows the title of the
+  window in front on the desktop.
 - **Accounts and chat**: registration (open or invite only), profiles with
   avatars and name colours, chat with images, videos and edits. Chat clears
   itself after an hour, at most 1,000 messages are kept.

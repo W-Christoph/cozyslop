@@ -35,5 +35,7 @@ COPY --chmod=0644 supervisord.conf /etc/neko/supervisord/cozycast.conf
 # folder on first start, then runs neko.
 COPY --chmod=0755 import-home.sh /usr/local/bin/cozycast-import-home
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/cozycast-entrypoint
+# Reports the title of the window in front to the CozyCast server.
+COPY --chmod=0755 window-title.py /usr/local/bin/cozycast-window-title
 ENTRYPOINT ["/usr/local/bin/cozycast-entrypoint"]
 CMD ["/usr/bin/supervisord", "-c", "/etc/neko/supervisord.conf"]

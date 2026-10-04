@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -134,7 +135,7 @@ func run(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		room := hub.RoomConfig{Name: rc.Name, Neko: nc, DefaultScreen: cfg.DefaultScreen}
+		room := hub.RoomConfig{Name: rc.Name, Neko: nc, DefaultScreen: cfg.DefaultScreen, TitleURL: titleURL(nc)}
 		if dc != nil {
 			u, err := url.Parse(rc.NekoURL)
 			if err != nil {
@@ -213,6 +214,13 @@ func run(args []string, out io.Writer) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return errors.Join(serveErr, shutdown(shutdownCtx, servers, api))
+}
+
+// titleURL is where the room's container says which window is in front on
+// its desktop: worker/window-title.py, next to neko. A neko without that
+// helper just never answers there.
+func titleURL(nc *neko.Client) string {
+	return "http://" + net.JoinHostPort(nc.BaseURL().Hostname(), "8081") + "/title"
 }
 
 func shutdown(ctx context.Context, servers []*http.Server, api *httpapi.Server) error {

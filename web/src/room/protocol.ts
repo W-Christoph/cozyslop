@@ -65,6 +65,7 @@ export type ServerMessage =
       history: ChatMessage[] // oldest first; replaces what we had
       remote: string | null
       restart: boolean
+      windowTitle: string // of the window in front on the desktop; "" if unknown
     }
   | { type: 'neko'; token: string; path: string }
   | { type: 'neko_unavailable'; message: string }
@@ -77,6 +78,7 @@ export type ServerMessage =
   | { type: 'rights'; rights: Rights }
   | { type: 'room_settings'; settings: RoomSettings }
   | { type: 'remote'; holder: string | null }
+  | { type: 'window_title'; title: string }
   | { type: 'restarting'; by: string }
   | { type: 'kicked'; reason: KickReason; bannedUntil?: number | null }
   | { type: 'error'; message: string }

@@ -29,7 +29,9 @@ export function useRoomPresence() {
     }
     document.addEventListener('visibilitychange', visibility)
     visibility() // a room opened in a background tab
-    const stopTitle = effect(() => { pageTitle.value = store.settings.value?.name ?? store.room })
+    // The tab is named after the window in front on the desktop, like the
+    // old CozyCast; after the room while that is not known.
+    const stopTitle = effect(() => { pageTitle.value = store.windowTitle.value || (store.settings.value?.name ?? store.room) })
     const stopActivity = effect(() => {
       // Resend after welcome/reconnect, when presence defaults are replaced.
       if (store.server.value === 'connected' && store.selfKey.value) store.setActive(active)

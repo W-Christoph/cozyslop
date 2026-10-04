@@ -49,6 +49,13 @@ type welcomeMsg struct {
 	History  []ChatMessage      `json:"history"` // oldest first; replaces what the browser had
 	Remote   *string            `json:"remote"`  // identity key of the remote holder
 	Restart  bool               `json:"restart"` // the room can be restarted (admins, trusted)
+	// Title of the window in front on the desktop; "" if unknown.
+	WindowTitle string `json:"windowTitle"`
+}
+
+type windowTitleMsg struct {
+	Type  string `json:"type"` // "window_title"
+	Title string `json:"title"`
 }
 
 type nekoMsg struct {

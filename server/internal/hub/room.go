@@ -7,14 +7,19 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"log/slog"
 	"math"
+	"net/http"
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"cozycast/internal/auth"
 	"cozycast/internal/neko"
@@ -59,6 +64,9 @@ type Room struct {
 
 	lastRestart time.Time // for the trusted-user cooldown
 	streams     []string  // capture pipelines neko offers, the default first
+
+	titleURL string // set before run
+	title    string // of the window in front on the desktop
 }
 
 // member is one person in the room, with all their tabs.
@@ -144,6 +152,9 @@ func (r *Room) run(ctx context.Context) {
 	close(r.ready)
 	r.log.Info("neko ready")
 	go r.watchMembers(ctx)
+	if r.titleURL != "" {
+		go r.watchTitle(ctx)
+	}
 	r.neko.WatchHost(ctx, func(init neko.Init) {
 		r.mu.Lock()
 		stream := r.streamLocked()
@@ -155,6 +166,81 @@ func (r *Room) run(ctx context.Context) {
 		r.mu.Unlock()
 		r.reapplyNekoSettings(ctx)
 	}, r.setHost)
+}
+
+// titleInterval is how often the desktop is asked which window is in front.
+const (
+	titleInterval = 2 * time.Second
+	maxTitleRunes = 200
+)
+
+var titleClient = &http.Client{Timeout: titleInterval}
+
+// watchTitle keeps the room's viewers told which window is in front on the
+// desktop; their browser tab is named after it.
+func (r *Room) watchTitle(ctx context.Context) {
+	t := time.NewTicker(titleInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			r.checkTitle(ctx)
+		}
+	}
+}
+
+// checkTitle asks the desktop for its window title, if anyone is there to
+// see it, and broadcasts a change. A desktop that does not answer (it is
+// restarting, or has no helper) has no title.
+func (r *Room) checkTitle(ctx context.Context) {
+	r.mu.Lock()
+	watched := len(r.clients) > 0
+	r.mu.Unlock()
+	if !watched {
+		return
+	}
+	title := fetchTitle(ctx, r.titleURL)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if title != r.title {
+		r.title = title
+		r.broadcastLocked(windowTitleMsg{Type: "window_title", Title: title}, nil)
+	}
+}
+
+func fetchTitle(ctx context.Context, url string) string {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return ""
+	}
+	res, err := titleClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return ""
+	}
+	body, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
+	return cleanTitle(string(body))
+}
+
+// cleanTitle makes a window title fit to show: it is whatever the person
+// holding the remote named a window. One line of printable text, not long.
+func cleanTitle(s string) string {
+	s = strings.Map(func(c rune) rune {
+		if unicode.IsControl(c) || c == utf8.RuneError {
+			return ' '
+		}
+		return c
+	}, strings.ToValidUTF8(s, ""))
+	s = strings.Join(strings.Fields(s), " ")
+	if utf8.RuneCountInString(s) > maxTitleRunes {
+		s = strings.TrimSpace(string([]rune(s)[:maxTitleRunes-1])) + "…"
+	}
+	return s
 }
 
 // memberCheckInterval is how often neko's members are compared with the
@@ -367,6 +453,8 @@ func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
 		History:  r.toChat(history),
 		Remote:   r.holderLocked(),
 		Restart:  r.restart != nil,
+
+		WindowTitle: r.title,
 	})
 	var resync []*Client
 	if isNew {

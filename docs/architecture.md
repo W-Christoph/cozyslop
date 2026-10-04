@@ -220,6 +220,22 @@ Enable the commented lines in `compose.yaml` only when this access is wanted;
 the non-root server also needs the socket's group via `DOCKER_GID` (see
 `.env.example`). Leaving the option off keeps container control entirely off.
 
+## Window title
+
+The browser tab is named after the window in front on the room's desktop,
+as in CozyCast. The room image runs a small helper next to neko
+(`worker/window-title.py`, port 8081) that answers `GET /title` with
+`xdotool getactivewindow getwindowname`. While someone is in the room, the
+server asks every two seconds and sends changes to the room
+(`welcome.windowTitle`, then `window_title`). The port is not published:
+only the server, on the room's network, and the desktop itself reach it.
+
+The helper runs as `nobody`, not as the desktop's user, so whoever holds
+the remote cannot stop or replace it. They do choose the title, by naming a
+window or opening a page; the server cuts it to one line of 200 characters
+and browsers show it as text. A neko without the helper has no title, and
+the tab shows the room's name.
+
 ## Changes from CozyCast
 
 - Sessions expire and can be revoked; logout works.

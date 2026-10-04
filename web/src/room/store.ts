@@ -48,6 +48,7 @@ export class RoomStore {
   readonly chat = signal<readonly ChatMessage[]>([])
   readonly typing = signal<ReadonlySet<string>>(new Set()) // identity keys
   readonly remoteHolder = signal<string | null>(null) // identity key
+  readonly windowTitle = signal('') // of the window in front on the desktop
   readonly restartAvailable = signal(false)
   readonly restarting = signal<string | null>(null) // nickname
 
@@ -288,6 +289,7 @@ export class RoomStore {
           this.users.value = new Map(msg.users.map((u) => [u.key, u]))
           this.chat.value = msg.history
           this.remoteHolder.value = msg.remote
+          this.windowTitle.value = msg.windowTitle ?? ''
           this.restartAvailable.value = msg.restart
           this.error.value = null
         })
@@ -346,6 +348,9 @@ export class RoomStore {
       }
       case 'remote':
         this.remoteHolder.value = msg.holder
+        break
+      case 'window_title':
+        this.windowTitle.value = msg.title
         break
       case 'restarting':
         this.restarting.value = msg.by

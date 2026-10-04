@@ -43,7 +43,13 @@ export function RoomPage() {
   if (store.kicked.value) return <KickedScreen />
   return (
     <div ref={page} class={`${styles.page} ${fullscreen ? styles.fullscreen : ''} ${fullscreen && idle && !personalSettings ? styles.idle : ''}`}
-      onMouseMove={wake} onTouchStart={wake} onKeyDown={wake}>
+      onMouseMove={wake} onTouchStart={wake} onKeyDown={wake}
+      // Icons, avatars and the stream are not things to drag around. The
+      // sidebar keeps its text and pictures draggable.
+      onDragStart={(e) => {
+        const from = e.target instanceof Element ? e.target : (e.target as Node | null)?.parentElement
+        if (!from?.closest('aside')) e.preventDefault()
+      }}>
       {!userlistHidden && left && <UserStrip left fullscreen={fullscreen} onHover={setHover} />}
       <div class={styles.videoWrapper}>
         <VideoArea />

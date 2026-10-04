@@ -1,4 +1,4 @@
-.strip { display: flex; gap: 5px; overflow: auto; background: var(--color-menu) var(--noise); scrollbar-width: thin; flex-shrink: 0; }
+.strip { -webkit-user-select: none; user-select: none; display: flex; gap: 5px; overflow: auto; background: var(--color-menu) var(--noise); scrollbar-width: thin; flex-shrink: 0; }
 .user { display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 0 5px; flex-shrink: 0; }
 .avatar { border-radius: 50%; }
 .name { white-space: nowrap; max-width: 8em; overflow: hidden; text-overflow: ellipsis; }

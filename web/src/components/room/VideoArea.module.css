@@ -25,7 +25,9 @@
   background: var(--color-border);
   gap: var(--space-3);
 }
-.play:hover { background: var(--color-border); }
+/* Only the button's picture reacts to the pointer. The whole stream must not
+   change colour: this has to outweigh the general button:hover:not(:disabled). */
+.play:hover:not(:disabled) { background: var(--color-border); }
 .play img { height: 128px; transition: height 0.3s; }
 .play:hover img {
   height: 140px;

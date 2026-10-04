@@ -19,9 +19,6 @@ checks on the real server.
 - [ ] Restart a room while people watch (`docker compose restart
       room-default`): the desktop comes back by itself, and in a room without
       remote ownership the remote can be taken over again.
-- [ ] Check what neko's `filetransfer/update` message contains for a viewer
-      without the upload right. It is sent to every viewer on connect; if
-      it lists the desktop's Downloads, filter it in the proxy.
 
 ## 2. Open: worth fixing, not blocking
 

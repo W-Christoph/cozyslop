@@ -35,9 +35,10 @@ export function RoomPage() {
   const left = fullscreen || preferences.value.userlistOnLeft
   const admin = store.rights.value.admin
   useRoomPresence()
+  const files = store.rights.value.upload
   useEffect(() => {
-    if (!admin && sidebar === 'SETTINGS') setSidebar('NOTHING')
-  }, [admin, sidebar])
+    if ((!admin && sidebar === 'SETTINGS') || (!files && sidebar === 'FILES')) setSidebar('NOTHING')
+  }, [admin, files, sidebar])
   useEffect(() => { setHover(null) }, [fullscreen, left, userlistHidden, idle])
   if (store.kicked.value) return <KickedScreen />
   return (

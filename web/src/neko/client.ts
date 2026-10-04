@@ -12,6 +12,13 @@ export interface ScreenSize {
   rate: number
 }
 
+// An entry of the desktop's Downloads folder (neko's file transfer).
+export interface DesktopFile {
+  name: string
+  type: 'file' | 'dir'
+  size: number
+}
+
 export interface NekoEvents {
   status: (status: NekoStatus) => void
   // Fired when the connection ends without disconnect() being called.
@@ -23,6 +30,9 @@ export interface NekoEvents {
   canHost: (canHost: boolean) => void
   // The desktop's clipboard changed; neko only tells the host.
   clipboard: (text: string) => void
+  // The Downloads folder's content, on connect and whenever it changes. Our
+  // server passes it on only with the upload right.
+  files: (files: DesktopFile[]) => void
 }
 
 // Binary input opcodes (neko server/internal/webrtc/payload).
@@ -107,8 +117,13 @@ export class NekoClient extends Emitter<NekoEvents> {
     this.send('control/request')
   }
 
-  releaseControl() {
+  // Give up control, leaving the pointer at a position if one is given. That
+  // move goes over the WebSocket like the release, so neko handles them in
+  // this order. Input on the data channel is a connection of its own: a move
+  // sent there can arrive after the release, and no longer counts.
+  releaseControl(at?: { x: number; y: number }) {
     this.releaseButtons()
+    if (at) this.send('control/move', at)
     this.send('control/release')
   }
 
@@ -161,6 +176,17 @@ export class NekoClient extends Emitter<NekoEvents> {
 
   paste(text: string) {
     this.send('control/paste', { text })
+  }
+
+  // Ask for the Downloads folder's content again; it arrives as 'files'.
+  requestFiles() {
+    this.send('filetransfer/update')
+  }
+
+  // Where to download a file of the Downloads folder from. The address holds
+  // this connection's token: it stops working when the connection ends.
+  fileUrl(name: string) {
+    return `${this.path}/api/filetransfer?token=${encodeURIComponent(this.token)}&filename=${encodeURIComponent(name)}`
   }
 
   // Upload files into the desktop's Downloads folder (neko's file transfer;
@@ -240,6 +266,12 @@ export class NekoClient extends Emitter<NekoEvents> {
       case 'clipboard/updated':
         if (typeof payload?.text === 'string') this.emit('clipboard', payload.text)
         break
+      case 'filetransfer/update': {
+        const files: unknown[] = Array.isArray(payload?.files) ? payload.files : []
+        this.emit('files', files.flatMap((f: any) => typeof f?.name === 'string' && (f.type === 'file' || f.type === 'dir')
+          ? [{ name: f.name, type: f.type, size: Number(f.size) || 0 }] : []))
+        break
+      }
     }
   }
 

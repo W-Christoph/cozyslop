@@ -241,6 +241,22 @@ test('desktop releases outside the overlay, including chorded mouse buttons', (t
   assert.equal(sent.filter(([op]) => op === 6).length, 2)
 })
 
+test('the desktop file list keeps well-formed entries, and download addresses are escaped', async () => {
+  const neko = new NekoClient()
+  const lists = []
+  neko.on('files', (files) => lists.push(files))
+  await neko.onMessage('filetransfer/update', { enabled: true, files: [
+    { name: 'movie.mkv', type: 'file', size: 3000000 }, { name: 'folder', type: 'dir' },
+    { name: 'no size', type: 'file' }, { name: 5, type: 'file' }, { name: 'link', type: 'symlink' }, null,
+  ] })
+  await neko.onMessage('filetransfer/update', { enabled: false })
+  assert.deepEqual(lists, [[
+    { name: 'movie.mkv', type: 'file', size: 3000000 }, { name: 'folder', type: 'dir', size: 0 }, { name: 'no size', type: 'file', size: 0 },
+  ], []])
+  Object.assign(neko, { path: '/neko/default', token: 'a+b/c' })
+  assert.equal(neko.fileUrl('my file&x=1.txt'), '/neko/default/api/filetransfer?token=a%2Bb%2Fc&filename=my%20file%26x%3D1.txt')
+})
+
 test('a wheel notch is one scroll step whatever its delta; small deltas add up', (t) => {
   const { overlay, neko } = desktop(t)
   globals(t, { WheelEvent: { DOM_DELTA_PIXEL: 0 } })

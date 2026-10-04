@@ -5,7 +5,7 @@
 import { batch, computed, signal } from '@preact/signals'
 import { refreshMe } from '../app/state'
 import { parseStream } from '../components/room/admin/streamOptions'
-import { NekoClient, type NekoStatus } from '../neko/client'
+import { NekoClient, type DesktopFile, type NekoStatus } from '../neko/client'
 import type { ChatMessage, KickReason, Rights, RoomSettings, ServerMessage, User } from './protocol'
 import { RoomSocket } from './socket'
 
@@ -57,6 +57,8 @@ export class RoomStore {
   // local playback: paused = no stream at all; audioOnly = sound without video
   readonly paused = signal(false)
   readonly desktopUpload = signal<DesktopUpload>({ state: 'idle', progress: 0, message: '' })
+  // The desktop's Downloads folder; empty without the upload right.
+  readonly desktopFiles = signal<readonly DesktopFile[]>([])
   readonly audioOnly = signal(false)
 
   readonly selfKey = computed(() => this.self.value?.key ?? null)
@@ -101,6 +103,7 @@ export class RoomStore {
       }),
       neko.on('stream', (s) => (this.stream.value = s)),
       neko.on('host', () => (this.isHost.value = neko.isHost)),
+      neko.on('files', (files) => (this.desktopFiles.value = this.rights.value.upload ? files : [])),
       neko.on('closed', () => {
         if (this.paused.value) return
         // The token may be stale (neko restarted, session removed): ask for
@@ -157,11 +160,9 @@ export class RoomStore {
   // Release the remote. With center (or the room's "always center" setting)
   // the pointer is moved to the middle of the screen first.
   dropRemote(center = false) {
-    if (center || this.settings.value?.centerRemote) {
-      const { width, height } = this.neko.screen
-      this.neko.move(Math.round(width / 2), Math.round(height / 2))
-    }
-    this.neko.releaseControl()
+    const { width, height } = this.neko.screen
+    const middle = { x: Math.round(width / 2), y: Math.round(height / 2) }
+    this.neko.releaseControl(center || this.settings.value?.centerRemote ? middle : undefined)
   }
 
   // Stop receiving the stream entirely (the room stays joined).
@@ -239,9 +240,25 @@ export class RoomStore {
     }, 5_000)
   }
 
+  // List the desktop's Downloads folder again.
+  refreshDesktopFiles() {
+    this.neko.requestFiles()
+  }
+
+  desktopFileUrl(name: string) {
+    return this.neko.fileUrl(name)
+  }
+
   private setRights(rights: Rights) {
+    const had = this.rights.value.upload
     this.rights.value = rights
-    if (!rights.upload) this.cancelDesktopUpload()
+    if (!rights.upload) {
+      this.cancelDesktopUpload()
+      this.desktopFiles.value = []
+    } else if (!had) {
+      // The list only came with the connection if the right was there then.
+      this.neko.requestFiles()
+    }
   }
 
   private retryNekoToken() {

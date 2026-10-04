@@ -1,6 +1,7 @@
 package neko
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/url"
 )
@@ -83,6 +84,18 @@ func PinStream(data []byte, stream string) (out []byte, ok bool) {
 	}
 	out, _ = json.Marshal(msg)
 	return out, true
+}
+
+// IsFileList reports whether a neko WebSocket message is the file transfer
+// plugin's "filetransfer/update": from neko, the list of the files in the
+// desktop's Downloads folder; from a browser, the request for it. neko sends
+// the list to every session, also to those file transfer is disabled for.
+func IsFileList(data []byte) bool {
+	if !bytes.Contains(data, []byte("filetransfer/update")) {
+		return false
+	}
+	var msg socketMessage
+	return json.Unmarshal(data, &msg) == nil && msg.Event == "filetransfer/update"
 }
 
 // SelectStream is the message that moves a session to another capture

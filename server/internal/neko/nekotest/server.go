@@ -42,6 +42,7 @@ type Server struct {
 	tokens            map[string]string
 	observers         map[*observer]bool
 	received          map[string][]string // by member id: what its sockets sent
+	sockets           map[string][]*websocket.Conn
 	nextToken         uint64
 	calls             []Call
 	changed           chan struct{}
@@ -49,7 +50,7 @@ type Server struct {
 
 func New(t testing.TB, apiToken string) *Server {
 	t.Helper()
-	s := &Server{apiToken: apiToken, healthy: true, members: make(map[string]member), tokens: make(map[string]string), observers: make(map[*observer]bool), received: make(map[string][]string), changed: make(chan struct{})}
+	s := &Server{apiToken: apiToken, healthy: true, members: make(map[string]member), tokens: make(map[string]string), observers: make(map[*observer]bool), received: make(map[string][]string), sockets: make(map[string][]*websocket.Conn), changed: make(chan struct{})}
 	s.http = httptest.NewServer(http.HandlerFunc(s.serveHTTP))
 	t.Cleanup(func() { s.Restart(); s.http.Close() })
 	return s
@@ -162,6 +163,10 @@ func (s *Server) serveMember(w http.ResponseWriter, r *http.Request, id string) 
 	if conn.Write(r.Context(), websocket.MessageText, init) != nil {
 		return
 	}
+	s.mu.Lock()
+	s.sockets[id] = append(s.sockets[id], conn)
+	s.signalLocked()
+	s.mu.Unlock()
 	for {
 		_, data, err := conn.Read(r.Context())
 		if err != nil {
@@ -171,6 +176,28 @@ func (s *Server) serveMember(w http.ResponseWriter, r *http.Request, id string) 
 		s.received[id] = append(s.received[id], string(data))
 		s.signalLocked()
 		s.mu.Unlock()
+	}
+}
+
+// SendMember sends a message to the member's sockets, as neko would.
+func (s *Server) SendMember(ctx context.Context, id string, message string) error {
+	for {
+		s.mu.Lock()
+		sockets, changed := slices.Clone(s.sockets[id]), s.changed
+		s.mu.Unlock()
+		if len(sockets) > 0 {
+			for _, conn := range sockets {
+				if err := conn.Write(ctx, websocket.MessageText, []byte(message)); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-changed:
+		}
 	}
 }
 

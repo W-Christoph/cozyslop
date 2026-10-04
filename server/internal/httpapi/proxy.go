@@ -3,8 +3,10 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"mime"
 	"net/http"
 	"net/http/httputil"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,19 +19,40 @@ import (
 // nekoRequestAllowed lists the neko endpoints browsers may reach. Everything else
 // (member management, room settings, neko's own UI) stays private, even
 // though neko would also reject non-admin sessions on its own.
-// Uploads go through the file transfer plugin, which neko gates by the
-// member's upload right; neko's drop/dialog uploads only check remote
-// control, so they are not exposed. The same plugin serves the desktop's
-// Downloads folder on GET, to anyone with the upload right: only POST (an
-// upload) is let through.
+// Files go through the file transfer plugin, which neko gates by the
+// member's upload right: POST uploads into the desktop's Downloads folder,
+// GET downloads a file from it (see asDownload). Its DELETE is not exposed.
+// neko's drop/dialog uploads only check remote control, so they are not
+// exposed either.
 func nekoRequestAllowed(method, p string) bool {
 	switch {
 	case p == "api/ws":
 		return method == http.MethodGet
 	case p == "api/filetransfer":
-		return method == http.MethodPost
+		return method == http.MethodPost || method == http.MethodGet
 	}
 	return false
+}
+
+// asDownload makes the browser save a file from the room's desktop, never
+// show it. The file arrives from this site's address: an HTML or SVG file
+// displayed as a page would run its scripts with the visitor's login.
+func asDownload(name string) func(*http.Response) error {
+	return func(res *http.Response) error {
+		h := res.Header
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Content-Security-Policy", "sandbox")
+		h.Set("Cache-Control", "private, no-store")
+		if res.StatusCode == http.StatusOK || res.StatusCode == http.StatusPartialContent {
+			disposition := mime.FormatMediaType("attachment", map[string]string{"filename": name})
+			if disposition == "" {
+				disposition = "attachment"
+			}
+			h.Set("Content-Disposition", disposition)
+			h.Set("Content-Type", "application/octet-stream")
+		}
+		return nil
+	}
 }
 
 func (s *Server) nekoProxy(w http.ResponseWriter, r *http.Request) {
@@ -45,8 +68,14 @@ func (s *Server) nekoProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	// neko takes the token of any of its members; only the ones the hub
 	// handed out are let through (see hub.Room.NekoTokenIssued).
-	if !rm.NekoTokenIssued(r.URL.Query().Get("token")) {
+	token := r.URL.Query().Get("token")
+	if !rm.NekoTokenIssued(token) {
 		writeError(w, http.StatusForbidden, "Your connection to the room's desktop has expired.")
+		return
+	}
+	download := r.Method == http.MethodGet
+	if download && !rm.NekoFilesAllowed(token) {
+		writeError(w, http.StatusForbidden, "You are not allowed to download files from the room.")
 		return
 	}
 
@@ -62,6 +91,10 @@ func (s *Server) nekoProxy(w http.ResponseWriter, r *http.Request) {
 			// cannot ride on someone else's session.
 			pr.Out.Header.Del("Origin")
 		},
+	}
+	if download {
+		// neko serves the file of this name in the Downloads folder itself.
+		proxy.ModifyResponse = asDownload(filepath.Base(filepath.Clean(r.URL.Query().Get("filename"))))
 	}
 	proxy.ServeHTTP(w, r)
 }
@@ -79,7 +112,8 @@ const (
 // pipeline someone watches is one more encoder running. A room has one
 // stream, so the messages that choose one are rewritten on the way (see
 // neko.PinStream), and the hub moves the connection along when the room's
-// stream changes.
+// stream changes. neko also sends every session the list of the files in
+// the desktop's Downloads folder; only tabs with the upload right get it.
 func (s *Server) nekoSocket(w http.ResponseWriter, r *http.Request, rm *hub.Room) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -127,7 +161,7 @@ func (s *Server) nekoSocket(w http.ResponseWriter, r *http.Request, rm *hub.Room
 	go func() {
 		for {
 			typ, data, err := up.Read(ctx)
-			if err == nil {
+			if err == nil && (!neko.IsFileList(data) || rm.NekoFilesAllowed(token)) {
 				err = write(down, typ, data)
 			}
 			if err != nil {
@@ -142,6 +176,9 @@ func (s *Server) nekoSocket(w http.ResponseWriter, r *http.Request, rm *hub.Room
 			if err != nil {
 				ended <- err
 				return
+			}
+			if neko.IsFileList(data) && !rm.NekoFilesAllowed(token) {
+				continue
 			}
 			// neko reads text and binary frames alike.
 			if data, ok := neko.PinStream(data, rm.Stream()); ok {

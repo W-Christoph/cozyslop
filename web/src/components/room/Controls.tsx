@@ -1,5 +1,4 @@
 import { preferences, updatePreferences } from '../../app/state'
-import { DesktopUploadButton } from './DesktopUpload'
 import { IconButton } from './IconButton'
 import { useRoomStore } from './RoomContext'
 import type { SidebarTab } from './Sidebar'
@@ -57,7 +56,8 @@ export function Controls({ fullscreen, userlistHidden, sidebar, onToggleUsers, o
           }} />
       </div>
       {!(fullscreen && host) && <div class={styles.group}>
-        <DesktopUploadButton />
+        {store.rights.value.upload && <IconButton icon="imageupload" label="Files of the desktop" active={sidebar === 'FILES'}
+          aria-pressed={sidebar === 'FILES'} onClick={() => toggleSidebar('FILES')} />}
         {store.rights.value.admin && <IconButton icon="settings" label="Room settings" active={sidebar === 'SETTINGS'}
           aria-pressed={sidebar === 'SETTINGS'} onClick={() => toggleSidebar('SETTINGS')} />}
         <IconButton icon="users" label="Users sidebar" active={sidebar === 'USERS'} aria-pressed={sidebar === 'USERS'} onClick={() => toggleSidebar('USERS')} />

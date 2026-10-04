@@ -4,6 +4,9 @@ import { pageTitle, preferences } from '../../app/state'
 import { useRoomStore } from './RoomContext'
 import { unreadFavicon } from './unreadFavicon'
 
+// A tab hidden for this long counts as away, as in the old CozyCast.
+const AWAY_AFTER_MS = 5 * 60 * 1000
+
 export function useRoomPresence() {
   const store = useRoomStore()
   useEffect(() => {
@@ -11,15 +14,25 @@ export function useRoomPresence() {
     let unread = 0
     let previous: readonly number[] = []
     let initialized = false
+    let active = true
+    let awayTimer: number | undefined
     const visibility = () => {
-      store.setActive(!document.hidden)
-      if (!document.hidden) { unread = 0; favicon.setCount(0) }
+      if (!document.hidden) {
+        window.clearTimeout(awayTimer)
+        awayTimer = undefined
+        unread = 0
+        favicon.setCount(0)
+        if (!active) { active = true; store.setActive(true) }
+      } else if (awayTimer === undefined) {
+        awayTimer = window.setTimeout(() => { awayTimer = undefined; active = false; store.setActive(false) }, AWAY_AFTER_MS)
+      }
     }
     document.addEventListener('visibilitychange', visibility)
+    visibility() // a room opened in a background tab
     const stopTitle = effect(() => { pageTitle.value = store.settings.value?.name ?? store.room })
     const stopActivity = effect(() => {
       // Resend after welcome/reconnect, when presence defaults are replaced.
-      if (store.server.value === 'connected' && store.selfKey.value) store.setActive(!document.hidden)
+      if (store.server.value === 'connected' && store.selfKey.value) store.setActive(active)
     })
     // What the server was last told; null after a welcome/reconnect, which
     // replaces presence with its defaults.
@@ -52,6 +65,7 @@ export function useRoomPresence() {
     return () => {
       stopTitle(); stopActivity(); stopMuted(); stopChat()
       document.removeEventListener('visibilitychange', visibility)
+      window.clearTimeout(awayTimer)
       favicon.dispose()
       pageTitle.value = null
     }

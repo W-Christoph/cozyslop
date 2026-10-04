@@ -710,6 +710,16 @@ func (r *Room) NekoTokenIssued(token string) bool {
 	return r.tokens[token] != nil
 }
 
+// NekoFilesAllowed reports whether the tab that token was issued to may use
+// the desktop's files: upload into its Downloads folder, see what is in it
+// and download from it. That is the upload right.
+func (r *Room) NekoFilesAllowed(token string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c := r.tokens[token]
+	return c != nil && c.m.rights.Upload
+}
+
 // AttachNeko registers a proxied neko connection opened with token, so the
 // hub can keep it on the room's stream and close it when the tab leaves.
 // ok is false if NekoTokenIssued is.

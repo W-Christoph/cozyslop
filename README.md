@@ -20,9 +20,9 @@ come. The app still calls itself CozyCast.
 - **Room permissions**: public, account, verified or invite-only rooms;
   per-user remote, chat image and desktop upload rights; invites with use
   limits; kicks and bans (anonymous viewers by cookie and IP).
-- **Uploads into the room**: drag files onto the stream or use the upload
-  button; they land in the desktop's Downloads folder (needs the upload
-  right).
+- **Files**: drag files onto the stream or use the Files tab; they land in
+  the desktop's Downloads folder. The tab also lists that folder and
+  downloads from it (needs the upload right).
 - **Stream settings per room**: resolution, frame rate, bitrate, stream size
   and encoder speed, changed live from the room settings (see
   [Stream settings](#stream-settings)).
@@ -203,8 +203,8 @@ the internet, and the old stack on the same machine for comparison.
 
 ## Ideas
 
-Unused neko features (per-viewer quality, downloads from the room, RTMP
-broadcast, hardware encoding, ...) and deferred networking work (TURN relay,
+Unused neko features (per-viewer quality, RTMP broadcast, hardware
+encoding, ...) and deferred networking work (TURN relay,
 hosting at home, LAN isolation) are collected in [docs/ideas.md](docs/ideas.md).
 
 ## License

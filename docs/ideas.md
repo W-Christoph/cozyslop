@@ -43,7 +43,8 @@ CozyCast does not use; none of them needs a patched neko.
 - **Hosting at home.** Running CozyCast on a home PC exposes the home IP,
   needs port forwarding (HTTPS plus the media port) and an upload of
   viewers × bitrate. The plan is a VPS with a media relay in front of a
-  home box, connected by WireGuard: see [home-hosting.md](home-hosting.md).
+  home box, connected by WireGuard, with all of the rooms' traffic going
+  through the VPS: see [home-hosting.md](home-hosting.md).
 - **Isolate the room from the LAN.** The room's browser can reach whatever
   the host's network can, including a home LAN and router. Put room
   containers on their own Docker network with egress rules that block

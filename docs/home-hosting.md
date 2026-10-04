@@ -1,8 +1,10 @@
 # Home hosting with a relay (planned)
 
 A planned feature; nothing here is built yet. It lets someone run the rooms
-on a small PC at home without exposing their home network or IP address, and
-without their upload speed limiting the number of viewers.
+on a small box at home that provides only the computing. All traffic goes
+through a VPS: viewers, and the websites the room opens, see the VPS's
+address, as if the rooms ran there. The home network and IP address stay
+hidden, and the home upload speed does not limit the number of viewers.
 
 Today one machine does everything, and neko sends every viewer their own
 copy of the stream. At home that means port forwarding, a visible home IP,
@@ -14,10 +16,11 @@ Two machines. The VPS is the only thing the internet sees; the home box does
 the computing and only dials out.
 
 ```
-viewers ──HTTPS + WebRTC──▶ hub (VPS)  ◀══ WireGuard, home dials out ══ node (home box)
-                            Go server                                   Docker
-                            media relay                                 neko room containers
-                            SQLite, Let's Encrypt                       hardware encoding
+viewers  ──HTTPS + WebRTC──▶ hub (VPS)  ◀══ WireGuard, home dials out ══ node (home box)
+websites ◀─room's browsing── Go server                                   Docker
+                             media relay                                 neko room containers
+                             NAT for the rooms                           video encoding
+                             SQLite, Let's Encrypt
 ```
 
 - **hub**: the existing Go server (accounts, chat, permissions, UI, HTTPS,
@@ -26,10 +29,12 @@ viewers ──HTTPS + WebRTC──▶ hub (VPS)  ◀══ WireGuard, home dials
   no port forwarding; works behind carrier NAT.
 - **tunnel**: WireGuard. The node connects to the hub. The server reaches
   each room's neko API through it (rooms are already URLs in
-  `COZYCAST_ROOMS`), and the relay pulls media through it.
+  `COZYCAST_ROOMS`), and the relay pulls media through it. It is also the
+  room containers' only route to the internet: the hub does the NAT.
 
-The home line then carries one stream per watched room, whatever the number
-of viewers. Viewers only ever see the hub's address.
+The home line then carries one stream per watched room up, whatever the
+number of viewers, and what the room's browser downloads. Viewers and
+websites only ever see the hub's address.
 
 Single-machine deployments stay as they are: the relay is an option
 (`COZYCAST_RELAY` or similar), and without it browsers talk to neko directly
@@ -99,38 +104,57 @@ not take over the home box. Creating rooms from the admin page
 
 - The node's firewall lets the tunnel reach only the room containers' neko
   port and media port.
-- Room containers may not reach private address ranges: the room's browser
-  must not open the home router or other devices (`ideas.md`, "Isolate the
-  room from the LAN"). Needed before anyone else gets the remote.
-- The room's browser still browses from the home connection, so websites
-  see the home IP; viewers do not. Routing that through the hub is possible
-  but streaming sites treat datacenter addresses worse.
+- The tunnel is the room containers' only route out, DNS included. The
+  room's browser cannot open the home router or other devices (`ideas.md`,
+  "Isolate the room from the LAN"), and with the tunnel down the room has
+  no network: it never falls back to the home connection. Needed before
+  anyone else gets the remote.
+- Websites see the hub's address, never the home IP. The costs: streaming
+  sites treat datacenter addresses worse (blocks, sign-in prompts), and
+  abuse complaints about what a room opens go to the VPS account.
 - The neko admin token crosses the tunnel, never the open internet.
 - Client IPs for bans and rate limits are unaffected: browsers connect to
   the hub directly.
 
 ## Hardware (node)
 
-- **Recommended: Intel N100/N150 mini PC**, 8–16 GB RAM, SSD. Quick Sync is
-  supported by neko's published Intel (VA-API) image. Stock kernel, x86
-  Firefox with DRM (Widevine).
-- **Raspberry Pi 5**: no hardware H.264 encoder, and neko has no image for
-  its GPU. CPU only.
-- **Orange Pi 5** (RK3588S): eight cores, so software x264 for one 720p room
-  probably works. Its hardware encoder needs Rockchip's vendor kernel and a
-  custom image with Rockchip's GStreamer plugin. No official Widevine on ARM
-  Linux, so DRM sites likely do not play. Only if one is already there.
+The target is an **Orange Pi 5** (RK3588S, eight cores), because one is
+already there.
+
+- It was too weak to run the original CozyCast (the owner's experience).
+  Whether it carries one neko room is the first thing to measure.
+- Software x264 for one 720p room probably works; not measured. The
+  pipelines in `worker/entrypoint.sh` are x264 only today.
+- Hardware encoding: the chip can encode in hardware, VP8 included, in
+  theory. The drivers used to be poor: ffmpeg found the hardware decoder
+  but not the encoder. Their state today is unknown. neko encodes with
+  GStreamer, so what counts is a working GStreamer encoder; that is
+  expected to need Rockchip's vendor kernel and a custom image with
+  Rockchip's GStreamer plugin. Not verified. A VP8 path also needs VP8
+  pipelines in the worker, which sets H.264 today.
+- No official Widevine on ARM Linux, so DRM sites likely do not play.
+- Not verified: that `worker/Dockerfile` builds on ARM.
 - Hardware encoding moves the encoder off the CPU. Firefox in the room still
   decodes and draws on the CPU.
-- Not measured: how many rooms such a box carries. The benchmark script in
+- Not measured: how many rooms the box carries. The benchmark script in
   `ideas.md` comes first.
-- Not verified: that `worker/Dockerfile` builds on ARM.
+
+If the Orange Pi 5 turns out too weak:
+
+- **Intel N100/N150 mini PC**, 8–16 GB RAM, SSD. Quick Sync is supported by
+  neko's published Intel (VA-API) image. Stock kernel, x86 Firefox with DRM
+  (Widevine).
+- Not a **Raspberry Pi 5**: no hardware H.264 encoder, and neko has no image
+  for its GPU. CPU only.
 
 ## VPS (hub)
 
 Needs: 1–2 vCPUs, a public IPv4 address, unrestricted UDP, and a large
 traffic allowance. One viewer at 2.5 Mbit/s is about 1.1 GB per hour; 10
-viewers for four hours a day are about 1.4 TB a month. Pick the datacenter
+viewers for four hours a day are about 1.4 TB a month. What the room's
+browser downloads passes through the hub as well, in from the website and
+out to the node: a 5 Mbit/s source for four hours a day adds about 0.5 TB a
+month, counting both directions. Pick the datacenter
 closest to the node: everything goes node → hub → viewer, and the remote
 holder feels the detour.
 
@@ -153,38 +177,48 @@ own page before ordering.
 
 | Item | Cost |
 |---|---|
-| Mini PC | ~€150–250 once (not checked against current prices) |
+| Orange Pi 5 | already there |
+| Mini PC, only if the Orange Pi 5 is too weak | ~€150–250 once (not checked against current prices) |
 | VPS | ~€6 a month |
 | Domain, for automatic HTTPS | ~€10–15 a year |
 | Power, ~10 W | ~€2–3 a month |
 
 For comparison: a 4-core VPS at roughly €8–15 a month runs everything in
-software with no home box. The home box pays off with several rooms, higher
-quality, or sites that block datacenter addresses.
+software with no home box. The home box pays off with several rooms or
+higher quality. It does not help with sites that block datacenter
+addresses: the room browses from the VPS either way.
 
 ## Build order
 
 Each step works on its own.
 
-1. **Split deployment.** `compose.hub.yaml` and `compose.node.yaml`, a
+1. **Measure the Orange Pi 5.** Build the room image on ARM, run one room
+   with a video playing and software x264, note CPU use per stream setting.
+   Decides the hardware before anything else is built. Done when there is a
+   stream setting the box plays smoothly, or it is ruled out.
+2. **Split deployment.** `compose.hub.yaml` and `compose.node.yaml`, a
    WireGuard setup guide, `COZYCAST_ROOMS` pointing at tunnel addresses.
    Media still goes viewer → hub → node by port forwarding on the hub, so
    upload is still viewers × bitrate. Done when a room at home plays for a
    viewer who sees only the hub's address.
-2. **LAN isolation** on the node. Done when the room's browser cannot open
-   the router.
-3. **Input over the WebSocket.** Useful by itself as a fallback when the data
+3. **Tunnel-only networking** on the node: the room containers' default
+   route is the tunnel, the hub does the NAT. Done when a website opened in
+   the room sees the hub's address, the room's browser cannot open the
+   router, and the room has no network with the tunnel down.
+4. **Input over the WebSocket.** Useful by itself as a fallback when the data
    channel fails. Done when the remote works with the data channel disabled.
-4. **The relay.** The main work, roughly a week. Cannot be tested in the
+5. **The relay.** The main work, roughly a week. Cannot be tested in the
    development sandbox (no UDP); needs a real hub and node. Done when home
    upload stays at one stream with several viewers, a new viewer gets a
    picture within a second, and a viewer with packet loss does not disturb
    the others.
-5. **Intel hardware encoding.** A worker variant on neko's Intel image,
-   `/dev/dri` passed into the container, VA-API pipelines in
-   `worker/entrypoint.sh`. Done when a watched room uses the GPU encoder and
-   CPU use drops.
-6. **Node agent** and room creation from the admin page.
+6. **Hardware encoding**, only if step 1 shows software encoding is too
+   slow. On the Orange Pi 5: vendor kernel, a worker variant with
+   Rockchip's GStreamer plugin, H.264 or VP8 pipelines in
+   `worker/entrypoint.sh`. On an Intel mini PC: a worker variant on neko's
+   Intel image, `/dev/dri` passed into the container, VA-API pipelines.
+   Done when a watched room uses the hardware encoder and CPU use drops.
+7. **Node agent** and room creation from the admin page.
 
 ## Alternatives considered
 

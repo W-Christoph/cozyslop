@@ -17,9 +17,15 @@ export function ChatInput({ inputRef, onEdit }: { inputRef: RefObject<HTMLTextAr
   const anonymous = store.self.value?.anonymous ?? !me.value
   useLayoutEffect(() => {
     const ta = inputRef.current
-    if (!ta) return
+    const box = ta?.parentElement
+    if (!ta || !box) return
+    // Measuring collapses the textarea for a moment. Hold its box open
+    // meanwhile: if the message list above grew and shrank again, Firefox
+    // would leave it scrolled up by the textarea's height.
+    box.style.height = getComputedStyle(box).height
     ta.style.height = '0px'
     ta.style.height = `${Math.min(18 * 5, ta.scrollHeight)}px`
+    box.style.height = ''
   }, [text, inputRef])
   useEffect(() => {
     if (!connected || !error) { setNotice(''); return }

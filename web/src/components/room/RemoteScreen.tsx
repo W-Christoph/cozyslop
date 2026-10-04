@@ -21,6 +21,8 @@ const KEYSYM_SHIFT_V = 0x56
 const MOUSE_MOVE_THROTTLE_MS = 10
 // Browsers report wheel deltas in pixels; one X11 scroll step is roughly this.
 const WHEEL_STEP_PX = 53
+// A pause this long starts a new scroll gesture.
+const WHEEL_GESTURE_MS = 250
 
 export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Props) {
   const store = useRoomStore()
@@ -141,17 +143,26 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
 
     let wheelX = 0
     let wheelY = 0
+    let wheelTime = 0
+    // At most one scroll step per wheel event, as the old CozyCast did: a
+    // notch of a mouse wheel is one step, whatever delta the browser reports
+    // for it (100 pixels, or three lines). Small deltas (touchpads) add up to
+    // a step; the first event of a gesture scrolls at once.
     const onWheel = (e: WheelEvent) => {
       if (!hostRef.current) return
       e.preventDefault()
+      const first = e.timeStamp - wheelTime > WHEEL_GESTURE_MS
+      wheelTime = e.timeStamp
+      if (first) { wheelX = 0; wheelY = 0 }
       const lineScale = e.deltaMode === WheelEvent.DOM_DELTA_PIXEL ? 1 : WHEEL_STEP_PX
       wheelX += e.deltaX * lineScale
       wheelY += e.deltaY * lineScale
-      const dx = Math.trunc(wheelX / WHEEL_STEP_PX)
-      const dy = Math.trunc(wheelY / WHEEL_STEP_PX)
+      const step = (delta: number) => (first || Math.abs(delta) >= WHEEL_STEP_PX ? Math.sign(delta) : 0)
+      const dx = step(wheelX)
+      const dy = step(wheelY)
+      if (dx !== 0) wheelX = 0
+      if (dy !== 0) wheelY = 0
       if (dx === 0 && dy === 0) return
-      wheelX -= dx * WHEEL_STEP_PX
-      wheelY -= dy * WHEEL_STEP_PX
       // neko maps positive deltas to scroll up/left; browsers use down/right.
       neko.scroll(-dx, -dy, e.ctrlKey)
     }

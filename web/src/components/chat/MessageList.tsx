@@ -63,6 +63,7 @@ export function MessageList({ lines, editing, onEdit, onEndEdit, onMedia }: {
     onWheel={() => { userScrollUntil.current = Date.now() + 1000 }}
     onPointerDown={() => { userScrollUntil.current = Date.now() + 60_000 }}
     onPointerUp={() => { userScrollUntil.current = Date.now() + 1000 }}
+    onPointerCancel={() => { userScrollUntil.current = Date.now() + 1000 }}
     onTouchMove={() => { userScrollUntil.current = Date.now() + 1000 }}
     onKeyDown={(e) => { if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key)) userScrollUntil.current = Date.now() + 1000 }}
     onScroll={(e) => {

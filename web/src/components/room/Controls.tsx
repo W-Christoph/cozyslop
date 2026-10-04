@@ -48,8 +48,13 @@ export function Controls({ fullscreen, userlistHidden, sidebar, onToggleUsers, o
         <IconButton icon="fullscreen_button" label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} active={fullscreen} onClick={onFullscreen} />
         <IconButton icon={muted || volume === 0 ? 'sound-mute' : 'sound-max'} label={muted ? 'Unmute' : 'Mute'} active={muted}
           onClick={() => updatePreferences({ muted: !muted })} />
-        <input aria-label="Volume" class={styles.volume} type="range" min="0" max="100" value={volume}
-          onInput={(e) => updatePreferences({ volume: Number(e.currentTarget.value) })} />
+        <input aria-label="Volume" class={styles.volume} type="range" min="0" max="100" value={muted ? 0 : volume}
+          onInput={(e) => {
+            // Down to zero mutes and keeps the volume to come back to; moving
+            // the slider up again unmutes.
+            const value = Number(e.currentTarget.value)
+            updatePreferences(value === 0 ? { muted: true } : { volume: value, muted: false })
+          }} />
       </div>
       {!(fullscreen && host) && <div class={styles.group}>
         <DesktopUploadButton />

@@ -4,7 +4,7 @@
 .home { display: flex; align-items: center; justify-content: center; min-width: 2em; width: 2.25em; height: 2em; background: var(--color-button); border-radius: 0.2em; }
 .home:hover { background: var(--color-button-accent); }
 .home img { height: 25px; width: 25px; filter: var(--icon-invert); }
-.volume { appearance: none; min-width: 2em; width: 6em; max-width: 100px; height: 5px; margin: auto; background: var(--color-scrollbar); opacity: 0.7; }
+.volume { appearance: none; min-width: 4em; width: 100px; height: 5px; margin: auto; background: var(--color-scrollbar); opacity: 0.7; }
 .volume:focus { outline-offset: 0.7em; }
 .volume::-webkit-slider-thumb { appearance: none; width: 20px; height: 20px; background: var(--color-scroll-thumb); border: 1px solid var(--color-high-contrast); border-radius: 50%; cursor: pointer; }
 .volume::-moz-range-thumb { width: 20px; height: 20px; background: var(--color-scroll-thumb); border: 1px solid var(--color-high-contrast); border-radius: 50%; cursor: pointer; }

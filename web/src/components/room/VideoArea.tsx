@@ -18,6 +18,7 @@ export function VideoArea() {
   const paused = store.paused.value
   const restarting = store.restarting.value
   const loading = restarting !== null || store.server.value !== 'connected' || store.video.value !== 'connected'
+  const status = paused ? 'Paused' : store.server.value !== 'connected' ? 'Connecting to server…' : store.video.value !== 'connected' ? 'Connecting to desktop…' : ''
   const play = () => {
     if (store.paused.value) {
       store.resume()
@@ -32,7 +33,7 @@ export function VideoArea() {
       <main class={styles.screen} aria-label="Room screen" {...drop}>
         <DesktopUploadStatus />
         <RemoteScreen mobile={mobile} pointer={pointer} video={video} onPlaybackBlocked={onPlaybackBlocked} />
-        <span class={styles.status} role="status">{paused ? 'Paused' : store.server.value !== 'connected' ? 'Connecting to server…' : store.video.value === 'connected' ? 'Live' : 'Connecting to desktop…'}</span>
+        {status && <span class={styles.status} role="status">{status}</span>}
         {paused || blocked ? (
           <button class={styles.play} aria-label={blocked ? 'Play stream' : 'Resume stream'} onClick={play}>
             <img src="/svg/initial_play_button.svg" alt="" />

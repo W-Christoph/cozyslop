@@ -224,7 +224,7 @@ function desktop(t) {
     Object.assign(e, { button, buttons, clientX: 50, clientY: 50 })
     target.dispatchEvent(e)
   }
-  return { f, neko, sent, window, listeners, down: (button, buttons) => mouse(overlay, 'mousedown', button, buttons), up: (button, buttons) => mouse(window, 'mouseup', button, buttons) }
+  return { f, neko, sent, window, listeners, overlay, down: (button, buttons) => mouse(overlay, 'mousedown', button, buttons), up: (button, buttons) => mouse(window, 'mouseup', button, buttons) }
 }
 
 test('desktop releases outside the overlay, including chorded mouse buttons', (t) => {
@@ -239,6 +239,30 @@ test('desktop releases outside the overlay, including chorded mouse buttons', (t
   assert.equal(listeners.has('mouseup'), false)
   up(0, 0)
   assert.equal(sent.filter(([op]) => op === 6).length, 2)
+})
+
+test('a wheel notch is one scroll step whatever its delta; small deltas add up', (t) => {
+  const { overlay, neko } = desktop(t)
+  globals(t, { WheelEvent: { DOM_DELTA_PIXEL: 0 } })
+  const steps = []
+  neko.scroll = (x, y) => steps.push([x + 0, y + 0])
+  const wheel = (time, deltaY, deltaMode = 0, deltaX = 0) => {
+    const e = new Event('wheel', { cancelable: true })
+    Object.defineProperty(e, 'timeStamp', { value: time })
+    Object.assign(e, { deltaX, deltaY, deltaMode, ctrlKey: false })
+    overlay.dispatchEvent(e)
+    assert.equal(e.defaultPrevented, true)
+  }
+  // A mouse wheel: 100 or more pixels a notch in Chrome, three lines in Firefox.
+  wheel(1000, 100); wheel(1050, 125); wheel(1100, 300)
+  wheel(2000, 3, 1); wheel(2050, -3, 1)
+  assert.deepEqual(steps.splice(0), [[0, -1], [0, -1], [0, -1], [0, -1], [0, 1]])
+  // A touchpad: the first event scrolls at once, then one step per 53 pixels.
+  wheel(3000, 4); wheel(3016, 20); wheel(3032, 20); wheel(3048, 20); wheel(3064, 20)
+  assert.deepEqual(steps.splice(0), [[0, -1], [0, -1]])
+  // Sideways, and a new gesture forgets what the last one left over.
+  wheel(4000, 0, 0, -30); wheel(4016, 40); wheel(5000, 0, 0, 0)
+  assert.deepEqual(steps.splice(0), [[1, 0]])
 })
 
 for (const reason of ['blur', 'remote lost', 'disconnect', 'release remote', 'unmount']) {

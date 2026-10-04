@@ -1,3 +1,3 @@
+.backdrop { position: fixed; z-index: 100; inset: 0; display: flex; background: var(--color-backdrop); }
 .media { position: relative; margin: auto; }
 .media img, .media video { display: block; max-width: 80vw; max-height: 80vh; }
-.link { color: var(--color-text); margin-top: var(--space-2); }

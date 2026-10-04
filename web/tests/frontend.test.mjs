@@ -195,10 +195,31 @@ test('media clicks select the message ID and the modal reads its current URL', (
     const message = { id: 7, author: 'u:2', type, mediaUrl: '/media/chat/current', time: 0 }
     const node = f.render(MessageGroup, { messages: [message], editing: null, onMedia: (id) => opened.push(id) })
     named(node, 'InlineMedia').props.onOpen({ type, url: '/stale-url' })
-    const modal = MediaModal({ message, onClose() {} })
-    assert.equal(nodes(modal).find((n) => n.type === (type === 'image' ? 'img' : 'video')).props.src, message.mediaUrl)
   }
   assert.deepEqual(opened, [7, 7])
+})
+
+test('the media preview is the bare picture or video; a click outside the player closes it', (t) => {
+  const f = fixture(t)
+  globals(t, { document: new EventTarget() })
+  for (const type of ['image', 'video']) {
+    let closed = 0
+    const message = { id: 7, author: 'u:2', type, mediaUrl: '/media/chat/current', time: 0 }
+    const modal = f.render(MediaModal, { message, onClose: () => closed++ })
+    const media = nodes(modal).find((n) => n.type === (type === 'image' ? 'img' : 'video'))
+    assert.equal(media.props.src, message.mediaUrl)
+    // No frame: no title, close button or extra link around it.
+    assert.deepEqual(nodes(modal).map((n) => n.type), type === 'image' ? ['div', 'div', 'a', 'img'] : ['div', 'div', 'video'])
+    modal.props.onClick()
+    assert.equal(closed, 1)
+    if (type === 'video') {
+      let stopped = false
+      media.props.onClick({ stopPropagation() { stopped = true } })
+      assert.equal(stopped, true, 'the player\'s controls must not close the preview')
+    }
+    globalThis.document.dispatchEvent(Object.assign(new Event('keydown'), { key: 'Escape' }))
+    assert.equal(closed, 2)
+  }
 })
 
 function desktop(t) {

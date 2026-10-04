@@ -122,7 +122,7 @@ from both existing users and numeric account identity keys retained in chat.
 - `settings`: key/value. `message` (front page text), `registration`
   (`open` | `invite`).
 - `rooms`: name, access (`public` | `account` | `verified` | `invite`),
-  hidden, remote_ownership, center_remote, default_remote, default_image,
+  hidden, remote_ownership, default_remote, default_image,
   default_upload, screen (desktop size, e.g. `1280x720@30`, applied through
   neko's API), stream (which capture pipeline viewers watch, e.g.
   `b2500-s100-veryfast` = 2.5 Mbit/s at full size, x264 preset veryfast).
@@ -154,10 +154,15 @@ Per room, an identity's effective rights are computed in one place
 (`room.Rights`) and pushed everywhere they matter (the browser, neko's member
 profile, upload endpoints) whenever any input changes:
 
-- **remote**: trusted ∨ permission.remote ∨ room.default_remote ∨ temporary invite grant
+- **remote**: trusted ∨ permission.remote ∨ room.default_remote ∨ temporary invite grant ∨ given
 - **image** (chat images/videos): account ∧ (trusted ∨ permission.image ∨ room.default_image ∨ grant)
-- **upload** (files into the desktop): trusted ∨ permission.upload ∨ room.default_upload ∨ grant
+- **upload** (files into the desktop): trusted ∨ permission.upload ∨ room.default_upload ∨ grant ∨ given
 - **admin**: global account flag; admins are also trusted everywhere.
+
+"given" is what an admin gave one anonymous user in the room (remote,
+upload). There is no account to store it on: it lasts while that user is in
+the room, and is gone once their last tab leaves, which a page reload does
+too. Unlike an invite it lets nobody into a room.
 
 Admission to a room:
 

@@ -7,10 +7,13 @@ import "cozycast/internal/store"
 type Grant struct{ Remote, Image, Upload bool }
 
 type Input struct {
-	Room    store.RoomSettings
-	User    *store.User
-	Perm    store.Permission
-	Grant   *Grant
+	Room  store.RoomSettings
+	User  *store.User
+	Perm  store.Permission
+	Grant *Grant
+	// Given is what an admin gave an anonymous person for as long as they
+	// are in the room. Unlike Grant it lets nobody in.
+	Given   Grant
 	AnonBan *store.AnonBan
 	Now     int64
 }
@@ -72,8 +75,8 @@ func Compute(in Input) Rights {
 	return Rights{
 		Admin:   admin,
 		Trusted: trusted,
-		Remote:  trusted || in.Perm.Remote || in.Room.DefaultRemote || grant.Remote,
+		Remote:  trusted || in.Perm.Remote || in.Room.DefaultRemote || grant.Remote || in.Given.Remote,
 		Image:   in.User != nil && (trusted || in.Perm.Image || in.Room.DefaultImage || grant.Image),
-		Upload:  trusted || in.Perm.Upload || in.Room.DefaultUpload || grant.Upload,
+		Upload:  trusted || in.Perm.Upload || in.Room.DefaultUpload || grant.Upload || in.Given.Upload,
 	}
 }

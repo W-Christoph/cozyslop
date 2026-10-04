@@ -53,8 +53,8 @@ func (s *Store) ImportLegacy(ctx context.Context, data ImportData) (map[string]i
 		}
 		for _, r := range data.Rooms {
 			_, err := tx.ExecContext(ctx,
-				"INSERT INTO rooms ("+roomColumns+") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-				r.Name, r.Access, r.Hidden, r.RemoteOwnership, r.CenterRemote, r.DefaultRemote, r.DefaultImage, r.DefaultUpload,
+				"INSERT INTO rooms ("+roomColumns+") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				r.Name, r.Access, r.Hidden, r.RemoteOwnership, r.DefaultRemote, r.DefaultImage, r.DefaultUpload,
 				r.Screen, r.Stream)
 			if err != nil {
 				return fmt.Errorf("import room %q: %w", r.Name, err)

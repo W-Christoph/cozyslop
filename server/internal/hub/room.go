@@ -76,6 +76,7 @@ type member struct {
 	anonID   string
 	perm     store.Permission
 	grant    *rights.Grant // from a temporary access invite
+	given    rights.Grant  // by an admin to an anonymous person; gone when they leave
 	rights   rights.Rights
 	joinedAt int64 // unix ms
 	lastSeen int64 // unix ms; when the member was last active
@@ -514,7 +515,7 @@ func (r *Room) removeClientLocked(c *Client) {
 
 // recomputeLocked updates m.rights from its inputs and reports a change.
 func (r *Room) recomputeLocked(m *member) bool {
-	next := rights.Compute(rights.Input{Room: r.settings, User: m.user, Perm: m.perm, Grant: m.grant})
+	next := rights.Compute(rights.Input{Room: r.settings, User: m.user, Perm: m.perm, Grant: m.grant, Given: m.given})
 	if next == m.rights {
 		return false
 	}
@@ -582,6 +583,56 @@ func (r *Room) refreshUser(ctx context.Context, userID int64) {
 	}
 	r.mu.Unlock()
 	r.syncNeko(ctx, resync)
+}
+
+// AnonGrant is what an admin gave an anonymous person in this room.
+type AnonGrant struct {
+	Key    string `json:"key"` // identity key, "a:<anon id>"
+	Remote bool   `json:"remote"`
+	Upload bool   `json:"upload"`
+}
+
+// ErrNotAnonymous is returned for a grant to an account; accounts have
+// stored permissions.
+var ErrNotAnonymous = errors.New("hub: not an anonymous user")
+
+// GrantAnonymous gives the anonymous person with that identity key the
+// remote and upload rights, or takes them back, at once. What they were
+// given lasts while they are in the room: it is gone once their last tab
+// leaves, which a page reload does too.
+func (r *Room) GrantAnonymous(ctx context.Context, g AnonGrant) error {
+	if !strings.HasPrefix(g.Key, "a:") {
+		return ErrNotAnonymous
+	}
+	r.mu.Lock()
+	m := r.members[g.Key]
+	if m == nil {
+		r.mu.Unlock()
+		return ErrNotPresent
+	}
+	m.given = rights.Grant{Remote: g.Remote, Upload: g.Upload}
+	var resync []*Client
+	if r.recomputeLocked(m) {
+		resync = r.pushRightsLocked(m)
+	}
+	r.mu.Unlock()
+	r.syncNeko(ctx, resync)
+	return nil
+}
+
+// AnonGrants lists what admins gave the anonymous people in the room, by
+// identity key.
+func (r *Room) AnonGrants() []AnonGrant {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	list := []AnonGrant{}
+	for key, m := range r.members {
+		if m.given != (rights.Grant{}) {
+			list = append(list, AnonGrant{Key: key, Remote: m.given.Remote, Upload: m.given.Upload})
+		}
+	}
+	slices.SortFunc(list, func(a, b AnonGrant) int { return strings.Compare(a.Key, b.Key) })
+	return list
 }
 
 // reloadSettings applies changed room settings to everyone present.

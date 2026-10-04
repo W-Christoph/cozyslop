@@ -224,7 +224,7 @@ func TestImport(t *testing.T) {
 		if err != nil || r.Access != mode || r.DefaultUpload {
 			t.Fatalf("room mapping: %v %+v", err, r)
 		}
-		if mode == "public" && (!r.Hidden || !r.RemoteOwnership || !r.CenterRemote || !r.DefaultRemote || !r.DefaultImage) {
+		if mode == "public" && (!r.Hidden || !r.RemoteOwnership || !r.DefaultRemote || !r.DefaultImage) {
 			t.Fatalf("room settings missing: %+v", r)
 		}
 	}

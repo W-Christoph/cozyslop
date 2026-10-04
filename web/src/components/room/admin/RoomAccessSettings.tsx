@@ -13,7 +13,6 @@ const checkboxes = [
   ['defaultRemote', 'Default Remote Permission'],
   ['defaultUpload', 'Default Upload Permission'],
   ['remoteOwnership', 'Remote Ownership'],
-  ['centerRemote', 'Always Center Remote'],
 ] as const satisfies readonly (readonly [keyof RoomSettings, string])[]
 const fields = ['access', ...checkboxes.map(([key]) => key)] as const
 

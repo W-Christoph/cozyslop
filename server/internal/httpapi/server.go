@@ -104,6 +104,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/rooms/{room}/stream-options", s.adminStreamOptions)
 
 	mux.HandleFunc("POST /api/admin/rooms/{room}/bans", s.adminBan)
+	mux.HandleFunc("GET /api/admin/rooms/{room}/grants", s.adminListGrants)
+	mux.HandleFunc("PUT /api/admin/rooms/{room}/grants", s.adminGrant)
 	mux.HandleFunc("GET /api/admin/bans", s.adminListBans)
 	mux.HandleFunc("DELETE /api/admin/bans/{id}", s.adminDeleteBan)
 

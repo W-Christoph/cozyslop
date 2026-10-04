@@ -6,7 +6,7 @@ const base = process.env.CHAT_TEST_URL || 'http://127.0.0.1:5174'
 const self = { key: 'u:1', username: 'alice', nickname: 'A lice', nameColor: '#f90', avatarUrl: '', anonymous: false, admin: true, active: true, muted: false, joinedAt: 1, lastSeen: 1000 }
 const bob = { ...self, key: 'u:2', username: 'bob', nickname: 'Bob', nameColor: '#4aa', admin: false }
 const anon = { ...bob, key: 'a:abcd1234', username: '', nickname: 'Guest', anonymous: true }
-const settings = { name: 'Chat test', access: 'public', hidden: false, remoteOwnership: false, centerRemote: false, defaultRemote: true, defaultImage: true, defaultUpload: false, screen: '', quality: 'medium' }
+const settings = { name: 'Chat test', access: 'public', hidden: false, remoteOwnership: false, defaultRemote: true, defaultImage: true, defaultUpload: false, screen: '', quality: 'medium' }
 const msg = (id, author = bob, body = `message ${id}`, type = 'text') => ({ id, author: author.key, nickname: author.nickname, nameColor: author.nameColor, anonymous: author.anonymous, type, body, edited: false, time: Date.now() })
 const checks = [], errors = []
 

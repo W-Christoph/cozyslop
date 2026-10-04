@@ -98,6 +98,14 @@ export interface Permission {
   bannedUntil: number | null
 }
 
+// What an admin gave an anonymous user in a room (they have no account to
+// keep a permission on); lasts while they are in the room.
+export interface AnonGrant {
+  key: string // identity key, "a:<anon id>"
+  remote: boolean
+  upload: boolean
+}
+
 export interface InviteView {
   code: string
   room: string

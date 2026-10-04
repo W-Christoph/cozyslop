@@ -289,7 +289,6 @@ func (s *Server) adminSaveRoomSettings(w http.ResponseWriter, r *http.Request) {
 		Access          string  `json:"access"`
 		Hidden          bool    `json:"hidden"`
 		RemoteOwnership bool    `json:"remoteOwnership"`
-		CenterRemote    bool    `json:"centerRemote"`
 		DefaultRemote   bool    `json:"defaultRemote"`
 		DefaultImage    bool    `json:"defaultImage"`
 		DefaultUpload   bool    `json:"defaultUpload"`
@@ -309,8 +308,8 @@ func (s *Server) adminSaveRoomSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	set := store.RoomSettings{Name: room, Access: req.Access, Hidden: req.Hidden,
-		RemoteOwnership: req.RemoteOwnership, CenterRemote: req.CenterRemote,
-		DefaultRemote: req.DefaultRemote, DefaultImage: req.DefaultImage, DefaultUpload: req.DefaultUpload,
+		RemoteOwnership: req.RemoteOwnership,
+		DefaultRemote:   req.DefaultRemote, DefaultImage: req.DefaultImage, DefaultUpload: req.DefaultUpload,
 		Screen: current.Screen, Stream: current.Stream}
 	if req.Stream != nil && *req.Stream != current.Stream {
 		if *req.Stream != "" {
@@ -436,6 +435,46 @@ func (s *Server) adminBan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// adminListGrants and adminGrant handle what an admin gives an anonymous
+// person for as long as they are in a room: there is no account to save a
+// permission on.
+func (s *Server) adminListGrants(w http.ResponseWriter, r *http.Request) {
+	if s.requireAdmin(w, r) == nil {
+		return
+	}
+	rm := s.hub.Room(r.PathValue("room"))
+	if rm == nil {
+		writeError(w, http.StatusNotFound, "Unknown room.")
+		return
+	}
+	writeJSON(w, http.StatusOK, rm.AnonGrants())
+}
+
+func (s *Server) adminGrant(w http.ResponseWriter, r *http.Request) {
+	if s.requireAdmin(w, r) == nil {
+		return
+	}
+	rm := s.hub.Room(r.PathValue("room"))
+	if rm == nil {
+		writeError(w, http.StatusNotFound, "Unknown room.")
+		return
+	}
+	var req hub.AnonGrant
+	if !readJSON(w, r, &req) {
+		return
+	}
+	switch err := rm.GrantAnonymous(r.Context(), req); {
+	case errors.Is(err, hub.ErrNotAnonymous):
+		writeError(w, http.StatusBadRequest, "Only anonymous users get rights this way; accounts have permissions.")
+	case errors.Is(err, hub.ErrNotPresent):
+		writeError(w, http.StatusNotFound, "That user is not in the room.")
+	case err != nil:
+		s.internalError(w, r, err)
+	default:
+		writeJSON(w, http.StatusOK, req)
+	}
 }
 
 func (s *Server) adminListBans(w http.ResponseWriter, r *http.Request) {

@@ -1,14 +1,23 @@
-import { Modal } from '../Modal'
+import { useEffect } from 'preact/hooks'
 import type { ChatMessage } from '../../room/protocol'
 import styles from './MediaModal.module.css'
 
+// A chat picture or video, large, over the dimmed page and without a frame,
+// as in CozyCast. A click anywhere closes it; a click on a picture also
+// opens it in a new tab.
 export function MediaModal({ message, onClose }: { message: ChatMessage; onClose: () => void }) {
-  return <Modal title={message.type === 'image' ? 'Image' : 'Video'} onClose={onClose}>
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const image = message.type === 'image'
+  return <div class={styles.backdrop} role="dialog" aria-modal="true" aria-label={image ? 'Image' : 'Video'} onClick={onClose}>
     <div class={styles.media}>
-      {message.type === 'image'
+      {image
         ? <a href={message.mediaUrl} target="_blank" rel="noopener noreferrer"><img src={message.mediaUrl} alt="Chat image" /></a>
-        : <video src={message.mediaUrl} controls autoplay loop playsInline />}
+        // The player's own controls must not close the preview.
+        : <video src={message.mediaUrl} controls autoplay loop playsInline onClick={(e) => e.stopPropagation()} />}
     </div>
-    <a class={styles.link} href={message.mediaUrl} target="_blank" rel="noopener noreferrer">Open in new tab</a>
-  </Modal>
+  </div>
 }

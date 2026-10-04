@@ -151,9 +151,11 @@ func TestMigrateUserIDs(t *testing.T) {
 				wantSeq = 21
 			}
 			queries := []string{"PRAGMA table_info(users)", "PRAGMA index_list(users)"}
-			for _, table := range []string{"users", "sessions", "rooms", "room_permissions", "invites", "invite_redemptions", "chat_messages", "settings", "anon_bans"} {
+			for _, table := range []string{"users", "sessions", "room_permissions", "invites", "invite_redemptions", "chat_messages", "settings", "anon_bans"} {
 				queries = append(queries, "SELECT * FROM "+table+" ORDER BY 1, 2")
 			}
+			// A later migration drops a column of rooms; the others stay.
+			queries = append(queries, "SELECT "+roomColumns+" FROM rooms ORDER BY 1, 2")
 			for _, table := range []string{"sessions", "room_permissions", "invite_redemptions", "chat_messages"} {
 				queries = append(queries, "PRAGMA foreign_key_list("+table+")", "PRAGMA index_list("+table+")")
 			}
@@ -181,7 +183,7 @@ func TestMigrateUserIDs(t *testing.T) {
 			if err := s.db.QueryRow("SELECT seq FROM sqlite_sequence WHERE name = 'users'").Scan(&seq); err != nil || seq != wantSeq {
 				t.Fatalf("sequence: %d want %d, err=%v", seq, wantSeq, err)
 			}
-			if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 6 {
+			if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 7 {
 				t.Fatalf("version: %d err=%v", version, err)
 			}
 			if err := s.db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil || foreignKeys != 1 {

@@ -13,7 +13,7 @@ func TestRoomSettings(t *testing.T) {
 		t.Fatalf("defaults: %v %+v", err, got)
 	}
 	set := RoomSettings{Name: "main", Access: "invite", Hidden: true, RemoteOwnership: true,
-		CenterRemote: true, DefaultRemote: true, DefaultImage: true, DefaultUpload: true}
+		DefaultRemote: true, DefaultImage: true, DefaultUpload: true}
 	for _, want := range []RoomSettings{set, defaults} {
 		if err := s.SaveRoomSettings(ctx, want); err != nil {
 			t.Fatal(err)

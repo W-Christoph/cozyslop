@@ -68,7 +68,6 @@ type roomRow struct {
 	AccountOnly             bool   `json:"account_only"`
 	VerifiedOnly            bool   `json:"verified_only"`
 	InviteOnly              bool   `json:"invite_only"`
-	CenterRemote            bool   `json:"center_remote"`
 	DefaultRemotePermission bool   `json:"default_remote_permission"`
 	DefaultImagePermission  bool   `json:"default_image_permission"`
 	RemoteOwnership         bool   `json:"remote_ownership"`
@@ -303,7 +302,7 @@ func mapRows(old export, avatars map[string]bool, now time.Time, summary *Summar
 		}
 		data.Rooms = append(data.Rooms, store.RoomSettings{Name: row.Name, Access: access,
 			Hidden: row.HiddenToUnauthorized, RemoteOwnership: row.RemoteOwnership,
-			CenterRemote: row.CenterRemote, DefaultRemote: row.DefaultRemotePermission, DefaultImage: row.DefaultImagePermission})
+			DefaultRemote: row.DefaultRemotePermission, DefaultImage: row.DefaultImagePermission})
 	}
 	type permissionKey struct{ room, username string }
 	permissions := make(map[permissionKey]int)

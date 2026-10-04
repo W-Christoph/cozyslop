@@ -13,9 +13,22 @@ RUN set -eux; \
     # librsvg2-common lets GTK draw SVG icons. The desktop's icon theme is
     # SVG apart from a 16 pixel set; without it, file and toolbar icons are
     # those 16 pixels blown up.
-    apt-get install -y --no-install-recommends vlc libdbus-glib-1-2 librsvg2-common; \
+    apt-get install -y --no-install-recommends vlc libdbus-glib-1-2 librsvg2-common greybird-gtk-theme; \
     apt-get clean -y; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
+# A dark desktop, to match CozyCast and the room's Firefox: the Greybird-dark
+# theme for windows and their frames, with the installed Adwaita icons.
+# (XFCE's own defaults name a theme and an icon theme that are not installed,
+# Xfce and Tango.) Someone who picks another look in the desktop's settings
+# keeps it; a desktop that existed before keeps its window frames until
+# "Window Manager > Style" is changed there.
+RUN sed -i \
+    -e 's|\(name="ThemeName" type="string" value="\)[^"]*|\1Greybird-dark|' \
+    -e 's|\(name="IconThemeName" type="string" value="\)[^"]*|\1Adwaita|' \
+    /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml && \
+    grep -q 'value="Greybird-dark"' /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
+COPY --chmod=0644 xfce/xfwm4.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
 
 # Reuse neko's Firefox build instead of downloading it again. Both images share
 # the same base, so the runtime libraries already match.

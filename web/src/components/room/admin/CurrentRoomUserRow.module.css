@@ -19,3 +19,8 @@
 .actions {
   min-width: 8em;
 }
+
+.note {
+  font-size: 0.8em;
+  color: var(--color-text-misc);
+}

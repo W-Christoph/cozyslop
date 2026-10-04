@@ -158,12 +158,11 @@ export class RoomStore {
     this.neko.requestControl()
   }
 
-  // Release the remote. With center (or the room's "always center" setting)
-  // the pointer is moved to the middle of the screen first.
+  // Release the remote. With center the pointer is moved to the middle of
+  // the screen first.
   dropRemote(center = false) {
     const { width, height } = this.neko.screen
-    const middle = { x: Math.round(width / 2), y: Math.round(height / 2) }
-    this.neko.releaseControl(center || this.settings.value?.centerRemote ? middle : undefined)
+    this.neko.releaseControl(center ? { x: Math.round(width / 2), y: Math.round(height / 2) } : undefined)
   }
 
   // Stop receiving the stream entirely (the room stays joined).

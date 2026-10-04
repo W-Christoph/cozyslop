@@ -4,7 +4,7 @@ import type { RoomSettings } from '../../../room/protocol'
 import { useRoomStore } from '../RoomContext'
 
 // Each form edits only its own fields. Full replacements must retain the
-// latest values of every other setting, including screen and centerRemote.
+// latest values of every other setting, including screen.
 export function useRoomSettingsForm(fields: readonly (keyof RoomSettings)[]) {
   const store = useRoomStore()
   const settings = store.settings.value

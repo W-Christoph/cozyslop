@@ -16,7 +16,6 @@ export interface RoomSettings {
   access: Access
   hidden: boolean
   remoteOwnership: boolean
-  centerRemote: boolean
   defaultRemote: boolean
   defaultImage: boolean
   defaultUpload: boolean

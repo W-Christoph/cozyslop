@@ -102,8 +102,10 @@ func TestCompute(t *testing.T) {
 		{"trusted anonymous", Input{Perm: store.Permission{Trusted: true}}, Rights{Trusted: true, Remote: true, Upload: true}},
 		{"invited", Input{User: &store.User{}, Perm: store.Permission{Invited: true}}, Rights{}},
 		{"empty grant", Input{Grant: &Grant{}}, Rights{}},
+		{"given to an anonymous person", Input{Given: Grant{Remote: true, Image: true, Upload: true}}, Rights{Remote: true, Upload: true}},
+		{"given remote only", Input{Given: Grant{Remote: true}}, Rights{Remote: true}},
 		{"banned admin", Input{User: &store.User{Admin: true}, Perm: store.Permission{Banned: true}}, Rights{Admin: true, Trusted: true, Remote: true, Image: true, Upload: true}},
-		{"room behavior flags", Input{Room: store.RoomSettings{Hidden: true, RemoteOwnership: true, CenterRemote: true}}, Rights{}},
+		{"room behavior flags", Input{Room: store.RoomSettings{Hidden: true, RemoteOwnership: true}}, Rights{}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := Compute(tt.in); got != tt.want {

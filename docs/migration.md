@@ -109,8 +109,8 @@ three newest logins per account; older devices log in with their password.
 
 Migrated: accounts and bcrypt password hashes, nicknames, colours, admin
 and verified flags, disabled/locked/expired account status, valid referenced
-avatars, room access and permission defaults, remote ownership and pointer
-centering, per-user permissions, invitations, trust, active bans, valid
+avatars, room access and permission defaults, remote ownership,
+per-user permissions, invitations, trust, active bans, valid
 invite codes with their use counts and expiry, and logins (see above). Duplicate permission rows
 are merged; unlimited invites stay unlimited. Avatar copy failures are
 reported and those accounts use the default avatar. Desktop upload

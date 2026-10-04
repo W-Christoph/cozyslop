@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"cozycast/internal/hub"
 	"cozycast/internal/store"
 
 	"github.com/coder/websocket/wsjson"
@@ -225,9 +226,9 @@ func TestAdminRoomSettings(t *testing.T) {
 	if set.Name != "default" || set.Access != "public" {
 		t.Fatalf("defaults: %+v", set)
 	}
-	req := map[string]any{"access": "invite", "hidden": true, "remoteOwnership": false, "centerRemote": true, "defaultRemote": true, "defaultImage": true, "defaultUpload": true}
+	req := map[string]any{"access": "invite", "hidden": true, "remoteOwnership": false, "defaultRemote": true, "defaultImage": true, "defaultUpload": true}
 	a.call(admin, "PUT", "/api/admin/rooms/default/settings", req, 200, &set)
-	if set.Name != "default" || set.Access != "invite" || !set.Hidden || set.RemoteOwnership || !set.CenterRemote || !set.DefaultRemote || !set.DefaultImage || !set.DefaultUpload {
+	if set.Name != "default" || set.Access != "invite" || !set.Hidden || set.RemoteOwnership || !set.DefaultRemote || !set.DefaultImage || !set.DefaultUpload {
 		t.Fatalf("saved: %+v", set)
 	}
 	var saved store.RoomSettings
@@ -337,6 +338,49 @@ func TestAdminBans(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestAdminGrantsForAnonymousUsers(t *testing.T) {
+	a := newAPITest(t)
+	a.user("root", true)
+	a.user("alice", false)
+	admin, alice, guest := a.login("root"), a.login("alice"), a.client()
+	_, key := a.join(guest)
+	_, account := a.join(alice)
+	const path = "/api/admin/rooms/default/grants"
+
+	var list []hub.AnonGrant
+	a.call(admin, "GET", path, nil, 200, &list)
+	if len(list) != 0 {
+		t.Fatalf("grants before any: %+v", list)
+	}
+	var saved hub.AnonGrant
+	a.call(admin, "PUT", path, map[string]any{"key": key, "remote": true, "upload": false}, 200, &saved)
+	if saved != (hub.AnonGrant{Key: key, Remote: true}) {
+		t.Fatalf("saved %+v", saved)
+	}
+	a.call(admin, "GET", path, nil, 200, &list)
+	if len(list) != 1 || list[0] != saved {
+		t.Fatalf("grants: %+v", list)
+	}
+	a.call(admin, "PUT", path, map[string]any{"key": key, "remote": false, "upload": false}, 200, nil)
+	a.call(admin, "GET", path, nil, 200, &list)
+	if len(list) != 0 {
+		t.Fatalf("grants after taking it back: %+v", list)
+	}
+
+	a.error(admin, "PUT", path, map[string]any{"key": account, "remote": true}, 400, "Only anonymous users get rights this way; accounts have permissions.")
+	a.error(admin, "PUT", path, map[string]any{"key": "a:absent", "remote": true}, 404, "That user is not in the room.")
+	a.error(admin, "PUT", "/api/admin/rooms/missing/grants", map[string]any{"key": key, "remote": true}, 404, "Unknown room.")
+	a.error(admin, "GET", "/api/admin/rooms/missing/grants", nil, 404, "Unknown room.")
+	for c, status := range map[*http.Client]int{alice: 403, guest: 401} {
+		a.call(c, "PUT", path, map[string]any{"key": key, "remote": true}, status, nil)
+		a.call(c, "GET", path, nil, status, nil)
+	}
+	a.call(admin, "GET", path, nil, 200, &list)
+	if len(list) != 0 {
+		t.Fatalf("a non-admin granted rights: %+v", list)
 	}
 }
 

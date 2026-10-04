@@ -59,6 +59,17 @@ CozyCast does not use; none of them needs a patched neko.
 - A CPU benchmark script for real servers (one room, video playing, report
   CPU per stream setting), and measurements of fullscreen playback and
   several viewers over the internet.
+- **Create and manage rooms from the admin page.** Today a room is a
+  service in `compose.yaml`: adding or removing one means editing the file
+  and `COZYCAST_ROOMS`, and restarting the server. The server could create,
+  start, stop and delete room containers itself through Docker, as
+  [neko-rooms](https://github.com/m1k1o/neko-rooms) does (a reference for
+  container setup and port allocation; it has no accounts, chat or rights,
+  so it does not replace anything here). Each room needs its own media
+  port, network, home volume and neko token, which the server already
+  derives per room. The cost: the server then needs the Docker socket all
+  the time, which is control over the host (see the room restart notes
+  in `architecture.md`); today that mount is optional.
 
 ## Frontend
 

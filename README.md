@@ -207,6 +207,8 @@ the internet, and the old stack on the same machine for comparison.
 Unused neko features (per-viewer quality, RTMP broadcast, hardware
 encoding, ...) and deferred networking work (TURN relay,
 hosting at home, LAN isolation) are collected in [docs/ideas.md](docs/ideas.md).
+The planned home-hosting setup (a home box behind a VPS that relays the
+media) has its own document: [docs/home-hosting.md](docs/home-hosting.md).
 
 ## License
 

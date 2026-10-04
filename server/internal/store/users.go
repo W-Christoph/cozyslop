@@ -140,7 +140,10 @@ func (s *Store) ResetAdmin(ctx context.Context, hash string) (bool, error) {
 				return err
 			}
 		}
-		_, err = tx.ExecContext(ctx, "DELETE FROM sessions WHERE user_id = ?", id)
+		if _, err := tx.ExecContext(ctx, "DELETE FROM sessions WHERE user_id = ?", id); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, "DELETE FROM legacy_logins WHERE user_id = ?", id)
 		return err
 	})
 	return created, err

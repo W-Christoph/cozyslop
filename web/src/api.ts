@@ -39,7 +39,7 @@ async function request<T>(
 
   const data = await res.json().catch(() => null)
   if (!res.ok) {
-    if (res.status === 401 && path !== '/api/auth/login') onUnauthorized?.(path)
+    if (res.status === 401 && path !== '/api/auth/login' && path !== '/api/auth/legacy') onUnauthorized?.(path)
     throw new ApiError(
       res.status,
       data?.error ?? `Request failed (${res.status}).`,

@@ -5,6 +5,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,8 +23,8 @@ import (
 )
 
 type Summary struct {
-	Users, Rooms, Permissions, Invites, Avatars int
-	Skipped                                     []string
+	Users, Rooms, Permissions, Invites, Logins, Avatars int
+	Skipped                                             []string
 }
 
 var ErrNotEmpty = store.ErrImportNotEmpty
@@ -46,6 +47,7 @@ type export struct {
 	Rooms       []roomRow       `json:"room_persistence"`
 	Permissions []permissionRow `json:"room_permission"`
 	Invites     []inviteRow     `json:"room_invite"`
+	Logins      []loginRow      `json:"refresh_token"`
 }
 
 type userRow struct {
@@ -97,6 +99,13 @@ type inviteRow struct {
 	Temporary        bool       `json:"temporary"`
 }
 
+// loginRow is a refresh token of the old server. The export carries only its
+// SHA-256; older exports have none.
+type loginRow struct {
+	Username    string `json:"username"`
+	TokenSHA256 string `json:"token_sha256"`
+}
+
 // Import loads a cozycast-export.tar.gz into an empty store and copies
 // avatars into avatarDir. Database writes commit before avatar copies begin.
 func Import(ctx context.Context, st *store.Store, archivePath, avatarDir string) (Summary, error) {
@@ -129,6 +138,7 @@ func Import(ctx context.Context, st *store.Store, archivePath, avatarDir string)
 	summary.Rooms = len(data.Rooms)
 	summary.Permissions = len(data.Permissions)
 	summary.Invites = len(data.Invites)
+	summary.Logins = len(data.Logins)
 
 	// Multiple accounts may share one file. Copy it once and clear every
 	// referencing account if the copy fails, including on cancellation.
@@ -333,6 +343,18 @@ func mapRows(old export, avatars map[string]bool, now time.Time, summary *Summar
 			continue
 		}
 		data.Invites = append(data.Invites, i)
+	}
+	for _, row := range old.Logins {
+		username := strings.ToLower(row.Username)
+		hash, err := hex.DecodeString(row.TokenSHA256)
+		switch {
+		case !users[username]:
+			summary.Skipped = append(summary.Skipped, fmt.Sprintf("login of %q: unknown user", username))
+		case err != nil || len(hash) != 32:
+			summary.Skipped = append(summary.Skipped, fmt.Sprintf("login of %q: invalid token hash", username))
+		default:
+			data.Logins = append(data.Logins, store.LegacyLogin{Username: username, TokenHash: hash})
+		}
 	}
 	return data
 }

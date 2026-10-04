@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"image"
@@ -427,5 +429,55 @@ func TestImportPreservesLogin(t *testing.T) {
 				t.Fatalf("imported password no longer verifies: %v", err)
 			}
 		})
+	}
+}
+
+func TestImportLogins(t *testing.T) {
+	ctx := context.Background()
+	st := openStore(t)
+	sum := func(token string) string {
+		h := sha256.Sum256([]byte(token))
+		return hex.EncodeToString(h[:])
+	}
+	old := map[string]any{
+		"format": "cozycast-export", "version": 1,
+		"users": []map[string]any{
+			{"username": "Alice", "password": testHash, "enabled": true},
+			{"username": "invalid", "password": "plaintext", "enabled": true},
+		},
+		"refresh_token": []map[string]any{
+			{"username": "ALICE", "token_sha256": sum("phone")},
+			{"username": "alice", "token_sha256": strings.ToUpper(sum("laptop"))},
+			{"username": "alice", "token_sha256": "abc"},
+			{"username": "alice", "token_sha256": sum("short")[:62]},
+			{"username": "invalid", "token_sha256": sum("skipped user")},
+			{"username": "gone", "token_sha256": sum("deleted user")},
+		},
+	}
+	summary, err := Import(ctx, st, archive(t, jsonEntry(t, old)), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSkipped := []string{
+		"user \"invalid\": invalid bcrypt hash",
+		"login of \"alice\": invalid token hash",
+		"login of \"alice\": invalid token hash",
+		"login of \"invalid\": unknown user",
+		"login of \"gone\": unknown user",
+	}
+	if summary.Logins != 2 || !reflect.DeepEqual(summary.Skipped, wantSkipped) {
+		t.Fatalf("logins=%d skipped=%v", summary.Logins, summary.Skipped)
+	}
+	for _, token := range []string{"phone", "laptop"} {
+		h := sha256.Sum256([]byte(token))
+		if u, err := st.RedeemLegacyLogin(ctx, h[:]); err != nil || u.Username != "alice" {
+			t.Fatalf("%s: user=%+v err=%v", token, u, err)
+		}
+	}
+
+	// An export from before logins were carried over has none.
+	delete(old, "refresh_token")
+	if summary, err := Import(ctx, openStore(t), archive(t, jsonEntry(t, old)), t.TempDir()); err != nil || summary.Logins != 0 {
+		t.Fatalf("without logins: %+v err=%v", summary, err)
 	}
 }

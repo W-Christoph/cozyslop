@@ -17,6 +17,14 @@ type ImportData struct {
 	Rooms       []RoomSettings
 	Permissions []Permission
 	Invites     []Invite
+	Logins      []LegacyLogin
+}
+
+// LegacyLogin is one refresh token of the old server: whose it is, and its
+// SHA-256. The token itself never leaves the user's browser.
+type LegacyLogin struct {
+	Username  string
+	TokenHash []byte
 }
 
 func (s *Store) HasUsers(ctx context.Context) (bool, error) {
@@ -69,6 +77,18 @@ func (s *Store) ImportLegacy(ctx context.Context, data ImportData) (map[string]i
 				return fmt.Errorf("import invite: %w", err)
 			}
 		}
+		for _, l := range data.Logins {
+			id, ok := ids[strings.ToLower(l.Username)]
+			if !ok {
+				return fmt.Errorf("import login: unknown user %q", l.Username)
+			}
+			_, err := tx.ExecContext(ctx,
+				"INSERT OR IGNORE INTO legacy_logins (token_hash, user_id) VALUES (?, ?)",
+				l.TokenHash, id)
+			if err != nil {
+				return fmt.Errorf("import login of %q: %w", l.Username, err)
+			}
+		}
 		return nil
 	})
 	if err != nil {
@@ -83,4 +103,30 @@ func insertLegacyInvite(ctx context.Context, tx *sql.Tx, i Invite) error {
 		"INSERT INTO invites ("+inviteColumns+") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		i.Code, i.Room, i.Temporary, i.Name, i.Remote, i.Image, i.Upload, i.Uses, i.MaxUses, i.ExpiresAt, i.CreatedAt)
 	return err
+}
+
+// RedeemLegacyLogin returns the enabled user owning one of the given legacy
+// token hashes and deletes that login: it works once. Like the old server's
+// refresh tokens, an unused login does not expire.
+func (s *Store) RedeemLegacyLogin(ctx context.Context, tokenHashes ...[]byte) (*User, error) {
+	var u *User
+	err := s.tx(ctx, func(tx *sql.Tx) error {
+		for _, hash := range tokenHashes {
+			var id int64
+			err := tx.QueryRowContext(ctx,
+				`DELETE FROM legacy_logins WHERE token_hash = ?
+				 AND user_id IN (SELECT id FROM users WHERE disabled = 0) RETURNING user_id`,
+				hash).Scan(&id)
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			u, err = scanUser(tx.QueryRowContext(ctx, "SELECT "+userColumns+" FROM users WHERE id = ?", id))
+			return err
+		}
+		return ErrNotFound
+	})
+	return u, err
 }

@@ -27,8 +27,10 @@ import_home() {
         fi
     done
     if [ -z "$parts" ]; then
+        # No marker for this: an accounts-only archive may be followed by
+        # one with the desktop.
         echo "import-home: archive has no room desktop data"
-        return 0
+        return 3
     fi
     # Only the room parts of the archive; never restore owners or absolute paths.
     mkdir "$tmp/data"
@@ -72,10 +74,12 @@ if [ -n "$archive" ] && [ -f "$archive" ] && [ ! -e "$marker" ]; then
     (set -e; import_home)
     status=$?
     set -e
-    if [ "$status" -eq 0 ]; then
-        date -u > "$marker"
-        chown neko:neko "$marker"
-    else
-        echo "import-home: import failed; starting without it (it is tried again on the next start)" >&2
-    fi
+    case $status in
+        0)
+            date -u > "$marker"
+            chown neko:neko "$marker"
+            ;;
+        3) ;;
+        *) echo "import-home: import failed; starting without it (it is tried again on the next start)" >&2 ;;
+    esac
 fi

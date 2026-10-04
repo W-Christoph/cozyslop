@@ -121,6 +121,37 @@ func (a *Service) Login(w http.ResponseWriter, r *http.Request, username, passwo
 	return u, a.StartSession(w, r, u)
 }
 
+// LegacyLogin starts a session for a browser that was logged in to the old
+// CozyCast and still holds its refresh token. Each token works once.
+func (a *Service) LegacyLogin(w http.ResponseWriter, r *http.Request, token string) (*store.User, error) {
+	if token == "" || len(token) > 512 {
+		return nil, ErrInvalidCredentials
+	}
+	u, err := a.store.RedeemLegacyLogin(r.Context(), legacyTokenHashes(token)...)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, ErrInvalidCredentials
+	}
+	if err != nil {
+		return nil, err
+	}
+	return u, a.StartSession(w, r, u)
+}
+
+// legacyTokenHashes returns the hashes a refresh token of the old server may
+// be stored under. That server kept a random key and gave the browser the
+// key signed (a compact JWS with the key as payload), so the key's hash
+// comes first; the token as presented is the fallback. The signature is not
+// checked: knowing the key is what proves the login.
+func legacyTokenHashes(token string) [][]byte {
+	var hashes [][]byte
+	if parts := strings.Split(token, "."); len(parts) == 3 {
+		if key, err := base64.RawURLEncoding.DecodeString(parts[1]); err == nil && len(key) > 0 {
+			hashes = append(hashes, hashToken(string(key)))
+		}
+	}
+	return append(hashes, hashToken(token))
+}
+
 // CheckPassword reports whether password is the user's current password.
 func CheckPassword(u *store.User, password string) bool {
 	return len(password) <= 72 && bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) == nil

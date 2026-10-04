@@ -47,6 +47,7 @@ for account invites and `/access/<code>` for temporary room-access invites.
 |---|---|---|---|---|
 | `GET /api/settings` | Anyone | None | 200 global settings | 500 on storage failure |
 | `POST /api/auth/login` | Anyone | `{"username":"alice","password":"…"}` | 200 `{"user":<own account>}`; starts a session | 401 `"Wrong username or password."` (also for disabled accounts); 429 login rate limit |
+| `POST /api/auth/legacy` | Anyone | `{"token":"…"}`: the refresh token an old CozyCast left in the browser's `localStorage` (`docs/migration.md`) | 200 `{"user":<own account>}`; starts a session and spends the token | 401 `"That login is no longer valid."` (unknown, used, or a disabled account); 429 login rate limit |
 | `POST /api/auth/logout` | Anyone | None | 204; deletes the current session, closes its live room tabs and clears its cookie | 500 on storage failure |
 | `POST /api/auth/register` | Anyone | `{"username":"alice","password":"…","inviteCode":"…"}`; code optional in open mode | 201 `{"user":<own account>}`; creates account and starts a session; an account invite also grants its room permission atomically | 400 username/password validation or `"That invite is invalid or has expired."`; 403 `"Registration requires an invite."` when invite-only and no code; 409 `"That username is taken."`; 429 registration rate limit |
 | `GET /api/me` | Anyone | None | 200 `{"user":<own account>}` or `{"user":null}` | Invalid sessions become anonymous |

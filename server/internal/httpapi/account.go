@@ -103,6 +103,31 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"user": toMe(u)})
 }
 
+// legacyLogin trades a refresh token of the old CozyCast, still held by the
+// browser, for a session (see docs/migration.md).
+func (s *Server) legacyLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token string `json:"token"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if !s.loginLimit.Allow(s.auth.ClientIP(r)) {
+		writeError(w, http.StatusTooManyRequests, "Too many login attempts. Try again in a minute.")
+		return
+	}
+	u, err := s.auth.LegacyLogin(w, r, req.Token)
+	if errors.Is(err, auth.ErrInvalidCredentials) {
+		writeError(w, http.StatusUnauthorized, "That login is no longer valid.")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": toMe(u)})
+}
+
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	hash, err := s.auth.Logout(w, r)
 	if err != nil {

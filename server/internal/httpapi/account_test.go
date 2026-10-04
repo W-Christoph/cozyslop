@@ -3,6 +3,8 @@ package httpapi_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -194,6 +196,71 @@ func TestAccountLoginLogout(t *testing.T) {
 		}
 		a.call(c, method, path, map[string]any{}, 401, nil)
 	}
+}
+
+// oldRefreshToken is a refresh token as the old CozyCast handed it to
+// browsers: its stored key, signed as a compact JWS.
+func oldRefreshToken(key string) string {
+	enc := base64.RawURLEncoding.EncodeToString
+	return enc([]byte(`{"alg":"HS256"}`)) + "." + enc([]byte(key)) + "." + enc([]byte("signature"))
+}
+
+func TestLegacyLogin(t *testing.T) {
+	a := newAPITest(t)
+	hash := func(s string) []byte {
+		h := sha256.Sum256([]byte(s))
+		return h[:]
+	}
+	password, err := auth.HashPassword(testPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = a.st.ImportLegacy(context.Background(), store.ImportData{
+		Users: []store.User{
+			{Username: "alice", Nickname: "alice", PasswordHash: password},
+			{Username: "bob", Nickname: "bob", PasswordHash: password, Disabled: true},
+		},
+		Logins: []store.LegacyLogin{
+			{Username: "alice", TokenHash: hash("11111111-2222-3333-4444-555555555555")},
+			{Username: "alice", TokenHash: hash("stored as presented")},
+			{Username: "alice", TokenHash: hash("revoked by password change")},
+			{Username: "bob", TokenHash: hash("disabled account")},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const invalid = "That login is no longer valid."
+	post := func(c *http.Client, token string, status int) {
+		t.Helper()
+		if status == 200 {
+			a.call(c, "POST", "/api/auth/legacy", map[string]string{"token": token}, 200, nil)
+		} else {
+			a.error(c, "POST", "/api/auth/legacy", map[string]string{"token": token}, status, invalid)
+		}
+	}
+	c := a.client()
+	// Few enough attempts to stay under the login rate limit.
+	for _, token := range []string{"", oldRefreshToken("unknown"), strings.Repeat("a", 513), oldRefreshToken("disabled account")} {
+		post(c, token, 401)
+	}
+	a.me(c, "")
+
+	token := oldRefreshToken("11111111-2222-3333-4444-555555555555")
+	post(c, token, 200)
+	a.me(c, "alice")
+	// The old token is spent; the session it started is an ordinary one.
+	post(a.client(), token, 401)
+	a.call(c, "POST", "/api/auth/logout", nil, 204, nil)
+	a.me(c, "")
+
+	other := a.client()
+	post(other, "stored as presented", 200)
+	a.me(other, "alice")
+
+	// Changing the password ends the logins not yet used.
+	a.call(other, "POST", "/api/me/password", map[string]string{"current": testPassword, "new": testPassword + "2"}, 204, nil)
+	post(a.client(), oldRefreshToken("revoked by password change"), 401)
 }
 
 func TestPasswordByteBoundary(t *testing.T) {

@@ -101,7 +101,7 @@ func run(args []string, out io.Writer) error {
 			default:
 				slog.Info("legacy import complete", "users", summary.Users, "rooms", summary.Rooms,
 					"permissions", summary.Permissions, "invites", summary.Invites,
-					"avatars", summary.Avatars, "skipped", summary.Skipped)
+					"logins", summary.Logins, "avatars", summary.Avatars, "skipped", summary.Skipped)
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err

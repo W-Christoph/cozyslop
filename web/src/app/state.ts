@@ -93,10 +93,39 @@ export async function refreshMe() {
   try {
     const res = await api.get<{ user: Me | null }>('/api/me')
     if (version === meVersion) me.value = res.user
+    if (!res.user) await legacyLogin()
   } catch (e) {
     if (e instanceof ApiError && e.status === 401 && version === meVersion) me.value = null
   } finally {
     meLoaded.value = true
+  }
+}
+
+// A browser that was logged in to the old CozyCast still holds its refresh
+// token. The server trades it for a session, once (docs/migration.md). The
+// token is left in place: the old site still knows this browser if the
+// migration is rolled back. A token the server has answered for is not sent
+// again from this tab.
+const LEGACY_TOKEN_KEY = 'refreshToken'
+const LEGACY_TRIED_KEY = 'legacyLoginTried'
+let legacyTried = false
+
+async function legacyLogin() {
+  if (legacyTried) return
+  legacyTried = true
+  try {
+    const token = localStorage.getItem(LEGACY_TOKEN_KEY)
+    if (!token || sessionStorage.getItem(LEGACY_TRIED_KEY)) return
+    try {
+      const res = await api.post<{ user: Me }>('/api/auth/legacy', { token })
+      authChanged(res.user)
+    } catch (e) {
+      // Not answered, or rate limited: try again on the next page load.
+      if (!(e instanceof ApiError) || e.status !== 401) return
+    }
+    sessionStorage.setItem(LEGACY_TRIED_KEY, '1')
+  } catch {
+    // storage blocked: nothing to carry over
   }
 }
 

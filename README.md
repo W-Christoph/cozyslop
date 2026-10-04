@@ -30,8 +30,8 @@ come. The app still calls itself CozyCast.
   (open tabs, logins, extensions) live in a Docker volume and survive
   restarts and image updates.
 - **Automatic HTTPS** with Let's Encrypt when a domain is set.
-- **Migration** of accounts, avatars, permissions, invites and the room
-  desktop from an existing CozyCast instance ([guide](docs/migration.md)).
+- **Migration** of accounts, logins, avatars, permissions, invites and the
+  room desktop from an existing CozyCast instance ([guide](docs/migration.md)).
 
 ## Why a rewrite
 

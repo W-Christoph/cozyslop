@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -64,5 +65,62 @@ func TestImportLegacy(t *testing.T) {
 	}
 	if _, err := s.ImportLegacy(ctx, data); !errors.Is(err, ErrImportNotEmpty) {
 		t.Fatalf("second import: %v", err)
+	}
+}
+
+func TestLegacyLogins(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	hash := func(b byte) []byte { return bytes.Repeat([]byte{b}, 32) }
+	ids, err := s.ImportLegacy(ctx, ImportData{
+		Users: []User{
+			{Username: "alice", PasswordHash: "hash", Nickname: "alice"},
+			{Username: "bob", PasswordHash: "hash", Nickname: "bob", Disabled: true},
+			{Username: "carol", PasswordHash: "hash", Nickname: "carol"},
+		},
+		Logins: []LegacyLogin{
+			{Username: "Alice", TokenHash: hash(1)}, {Username: "alice", TokenHash: hash(2)},
+			{Username: "alice", TokenHash: hash(2)}, // the same token twice is one login
+			{Username: "bob", TokenHash: hash(3)}, {Username: "carol", TokenHash: hash(4)},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	redeem := func(want string, hashes ...[]byte) {
+		t.Helper()
+		u, err := s.RedeemLegacyLogin(ctx, hashes...)
+		if want == "" {
+			if !errors.Is(err, ErrNotFound) || u != nil {
+				t.Fatalf("redeem: user=%+v err=%v, want not found", u, err)
+			}
+		} else if err != nil || u.Username != want {
+			t.Fatalf("redeem: user=%+v err=%v, want %s", u, err, want)
+		}
+	}
+	redeem("", hash(9))
+	redeem("")
+	// A login works once; the user's other logins stay.
+	redeem("alice", hash(9), hash(1))
+	redeem("", hash(1))
+	// A disabled account cannot use its login, and keeps it for when it is enabled.
+	redeem("", hash(3))
+	if err := s.UpdateFlags(ctx, ids["bob"], false, false, false); err != nil {
+		t.Fatal(err)
+	}
+	redeem("bob", hash(3))
+	// Logging a user out everywhere ends the carried-over logins too.
+	if err := s.DeleteUserSessions(ctx, ids["alice"], nil); err != nil {
+		t.Fatal(err)
+	}
+	redeem("", hash(2))
+	redeem("carol", hash(4))
+	var count int
+	if err := s.db.QueryRowContext(ctx, "SELECT count(*) FROM legacy_logins").Scan(&count); err != nil || count != 0 {
+		t.Fatalf("left over: %d err=%v", count, err)
+	}
+
+	if _, err := openTest(t).ImportLegacy(ctx, ImportData{Logins: []LegacyLogin{{Username: "nobody", TokenHash: hash(1)}}}); err == nil {
+		t.Fatal("login of an unknown user imported")
 	}
 }

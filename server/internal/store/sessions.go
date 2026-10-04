@@ -65,10 +65,16 @@ func (s *Store) DeleteSession(ctx context.Context, tokenHash []byte) error {
 }
 
 // DeleteUserSessions logs a user out everywhere, optionally keeping one
-// session (the one changing its password).
+// session (the one changing its password). Logins carried over from the old
+// CozyCast go too.
 func (s *Store) DeleteUserSessions(ctx context.Context, userID int64, keep []byte) error {
-	_, err := s.db.ExecContext(ctx, "DELETE FROM sessions WHERE user_id = ? AND token_hash IS NOT ?", userID, keep)
-	return err
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM sessions WHERE user_id = ? AND token_hash IS NOT ?", userID, keep); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, "DELETE FROM legacy_logins WHERE user_id = ?", userID)
+		return err
+	})
 }
 
 func (s *Store) DeleteExpiredSessions(ctx context.Context) error {

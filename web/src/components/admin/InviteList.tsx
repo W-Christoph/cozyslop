@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'preact/hooks'
 import { api, type InviteView } from '../../api'
 import { Button } from '../Button'
+import { Badge } from '../ui/Badge'
+import { EmptyState, Spinner } from '../ui/EmptyState'
+import { Notice } from '../ui/Notice'
 import { AdminTable } from './AdminTable'
 import styles from './InviteList.module.css'
 
@@ -41,7 +44,7 @@ export function InviteList({ room }: { room?: string }) {
     try {
       await api.del(`/api/admin/invites/${encodeURIComponent(code)}`)
       setInvites((list) => list.filter((invite) => invite.code !== code))
-      setMessage('Invite deleted!')
+      setMessage('Invite deleted.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.')
     } finally {
@@ -53,65 +56,71 @@ export function InviteList({ room }: { room?: string }) {
     setMessage('')
     try {
       await navigator.clipboard.writeText(location.origin + path)
-      setMessage('Copied!')
+      setMessage('Link copied.')
     } catch {
       setError('Could not copy the link. Select it and copy it manually.')
     }
   }
+  const expires = (invite: InviteView) =>
+    invite.expiresAt === null ? 'Never expires' : `${invite.valid ? 'Expires' : 'Expired'} ${new Date(invite.expiresAt * 1000).toLocaleString()}`
   return (
     <>
-      {loading && <p role="status">Loading invites...</p>}
-      {error && <p role="alert">{error}</p>}
-      {message && <p role="status">{message}</p>}
-      <AdminTable
-        headings={[
-          'Room',
-          'Type',
-          'Expired',
-          'Uses',
-          'Remote Permission',
-          'Image Permission',
-          'Upload Permission',
-          'Link',
-          'Name',
-          'Action',
-        ]}
-      >
-        {invites.map((invite) => (
-          <tr key={invite.code}>
-            <td>{invite.room}</td>
-            <td>{invite.temporary ? 'Access' : 'Invite'}</td>
-            <td>{invite.valid ? 'Active' : 'Expired'}</td>
-            <td>
-              {invite.uses} / {invite.maxUses ?? '∞'}
-            </td>
-            <td>{invite.remote ? 'Remote Allowed' : 'No Remote'}</td>
-            <td>{invite.image ? 'Can Post Images' : 'No Images'}</td>
-            <td>{invite.upload ? 'Upload Allowed' : 'No Upload'}</td>
-            <td>
-              <a class={styles.link} href={invite.path}>
-                {location.origin + invite.path}
-              </a>{' '}
-              <Button onClick={() => copy(invite.path)}>Copy</Button>
-            </td>
-            <td>{invite.name}</td>
-            <td>
-              <Button
-                accent
-                disabled={busy}
-                onClick={() => remove(invite.code)}
-              >
-                Delete
-              </Button>
-            </td>
-          </tr>
-        ))}
-        {!loading && !error && invites.length === 0 && (
-          <tr>
-            <td colSpan={10}>No invites</td>
-          </tr>
-        )}
-      </AdminTable>
+      {loading && <Spinner label="Loading invites..." />}
+      {error && <Notice tone="error">{error}</Notice>}
+      {message && <Notice tone="success">{message}</Notice>}
+      {!loading && !error && invites.length === 0 && (
+        <EmptyState icon="ticket" title="No invites">
+          {room ? 'No invite or access link has been created for this room.' : 'No invite or access link exists.'}
+        </EmptyState>
+      )}
+      {invites.length > 0 && (
+        <AdminTable headings={[...(room ? [] : ['Room']), 'Link', 'Status', 'Uses', 'Grants', '']}>
+          {invites.map((invite) => (
+            <tr key={invite.code} class={invite.valid ? undefined : styles.expired}>
+              {!room && <td class={styles.room}>{invite.room}</td>}
+              <td>
+                <div class={styles.name}>
+                  {invite.name || <span class={styles.unnamed}>Unnamed</span>}
+                  <Badge icon={invite.temporary ? 'eye' : 'ticket'}>{invite.temporary ? 'Temporary' : 'Invite'}</Badge>
+                </div>
+                <a class={styles.link} href={invite.path}>
+                  {location.origin + invite.path}
+                </a>
+              </td>
+              <td>
+                <Badge tone={invite.valid ? 'success' : 'warning'} title={expires(invite)}>{invite.valid ? 'Active' : 'Expired'}</Badge>
+                <div class={styles.expires}>{expires(invite)}</div>
+              </td>
+              <td class={styles.uses} data-label="Uses">
+                {invite.uses} / {invite.maxUses ?? '∞'}
+              </td>
+              <td>
+                <div class={styles.grants}>
+                  {invite.remote && <Badge icon="mouse">Remote</Badge>}
+                  {invite.image && <Badge icon="image">Images</Badge>}
+                  {invite.upload && <Badge icon="upload">Upload</Badge>}
+                  {!invite.remote && !invite.image && !invite.upload && <span class={styles.none}>Room defaults</span>}
+                </div>
+              </td>
+              <td>
+                <div class={styles.actions}>
+                  <Button size="sm" variant="ghost" icon="copy" onClick={() => copy(invite.path)}>Copy link</Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon="trash"
+                    class={styles.delete}
+                    aria-label={`Delete the ${invite.temporary ? 'temporary link' : 'invite'} ${invite.name || invite.code}`}
+                    title="Delete"
+                    disabled={busy}
+                    onClick={() => remove(invite.code)}
+                  />
+                </div>
+              </td>
+            </tr>
+          ))}
+        </AdminTable>
+      )}
     </>
   )
 }

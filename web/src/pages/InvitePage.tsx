@@ -3,7 +3,7 @@ import { useLocation, useRoute } from 'preact-iso'
 import { api } from '../api'
 import { me, pendingInvite } from '../app/state'
 import { InfoScreen } from '../components/InfoScreen'
-import { Button } from '../components/Button'
+import { Button, ButtonLink } from '../components/Button'
 
 export function InvitePage() {
   const {
@@ -12,16 +12,16 @@ export function InvitePage() {
   const { route } = useLocation()
   const user = me.value
   const [state, setState] = useState({
-    message: 'checking invite',
-    submessage: 'please wait',
+    message: 'Checking invite',
+    submessage: 'Please wait',
     login: false,
     room: '',
   })
   useEffect(() => {
     let active = true
     setState({
-      message: 'checking invite',
-      submessage: 'please wait',
+      message: 'Checking invite',
+      submessage: 'Please wait',
       login: false,
       room: '',
     })
@@ -38,8 +38,8 @@ export function InvitePage() {
           if (active) {
             pendingInvite.clear()
             setState({
-              message: 'Success',
-              submessage: `You have been invited to ${invite.room}`,
+              message: "You're invited",
+              submessage: `You now have access to ${invite.room}.`,
               login: false,
               room: invite.room,
             })
@@ -56,7 +56,7 @@ export function InvitePage() {
       } catch (e) {
         if (active)
           setState({
-            message: 'Error',
+            message: 'Invite not usable',
             submessage:
               e instanceof Error ? e.message : 'Something went wrong.',
             login: false,
@@ -68,25 +68,35 @@ export function InvitePage() {
       active = false
     }
   }, [code, user?.username])
+  const checking = state.message === 'Checking invite'
   return (
-    <InfoScreen message={state.message} submessage={state.submessage}>
+    <InfoScreen
+      message={state.message}
+      submessage={state.submessage}
+      busy={checking}
+      icon={state.room ? 'check' : state.login ? 'ticket' : 'alert'}
+    >
       {state.login ? (
         <>
-          <Button accent onClick={() => route('/login')}>
-            Login
+          <Button accent size="lg" onClick={() => route('/login')}>
+            Log in
           </Button>
-          <Button accent onClick={() => route('/register')}>
-            Register
+          <Button size="lg" onClick={() => route('/register')}>
+            Sign up
           </Button>
         </>
       ) : (
         <>
           {state.room && (
-            <a href={`/room/${encodeURIComponent(state.room)}`}>{state.room}</a>
+            <ButtonLink accent size="lg" href={`/room/${encodeURIComponent(state.room)}`}>
+              Join {state.room}
+            </ButtonLink>
           )}
-          <Button accent onClick={() => route('/')}>
-            Home
-          </Button>
+          {!checking && (
+            <Button size="lg" onClick={() => route('/')}>
+              All rooms
+            </Button>
+          )}
         </>
       )}
     </InfoScreen>

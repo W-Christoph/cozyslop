@@ -1,11 +1,11 @@
 .notice {
-  max-width: 50em;
-  margin: 0 auto;
-  line-height: 1.5;
-  color: var(--color-text);
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
-
-.notice a {
-  color: var(--color-orange);
-  overflow-wrap: anywhere;
-}
+.notice p:first-child { margin-top: 0; color: var(--text); font-weight: 600; }
+.notice p:last-child { margin-bottom: 0; }
+.notice a { color: var(--accent-text); overflow-wrap: anywhere; }

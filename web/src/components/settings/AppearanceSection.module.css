@@ -1,0 +1,27 @@
+/* The theme's darkest colour around a little window in its other colours. */
+.preview { height: 84px; padding: 10px 10px 0; background: var(--bg-app); }
+.window { display: flex; height: 100%; border: 1px solid var(--border); border-bottom: 0; border-radius: 6px 6px 0 0; overflow: hidden; }
+.previewNav { flex: 0 0 30%; display: flex; flex-direction: column; gap: 4px; padding: 8px 6px; background: var(--bg-sidebar); border-right: 1px solid var(--border); }
+.previewNav span { height: 5px; border-radius: 3px; background: var(--border-strong); }
+.previewNav span:first-child { background: var(--text-muted); width: 70%; }
+.previewMain { flex: 1; display: flex; flex-direction: column; gap: 5px; padding: 8px; background: var(--bg-surface); }
+.previewTitle { width: 55%; height: 7px; border-radius: 4px; background: var(--text); }
+.previewLine { width: 85%; height: 5px; border-radius: 3px; background: var(--text-muted); opacity: 0.6; }
+.previewButton { width: 40%; height: 12px; margin-top: auto; margin-bottom: 8px; border-radius: 4px; background: var(--accent); }
+
+.accents { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.accent {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.accent:hover { background: var(--accent); transform: scale(1.1); }
+.chosen { box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--accent); }
+.accent:focus-visible { outline: 2px solid var(--text); outline-offset: 5px; }
+.accentName { margin-left: var(--space-2); font-size: 0.9rem; color: var(--text-secondary); }

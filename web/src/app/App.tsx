@@ -1,4 +1,4 @@
-import { useEffect } from 'preact/hooks'
+import { useEffect, useRef } from 'preact/hooks'
 import { LocationProvider, Route, Router, useLocation } from 'preact-iso'
 import { Header } from '../components/Header'
 import { InfoScreen } from '../components/InfoScreen'
@@ -9,11 +9,11 @@ import { InvitePage } from '../pages/InvitePage'
 import { LoginPage } from '../pages/LoginPage'
 import { LicensePage } from '../pages/LicensePage'
 import { NotFoundPage } from '../pages/NotFoundPage'
-import { ProfilePage } from '../pages/ProfilePage'
 import { RegisterPage } from '../pages/RegisterPage'
 import { RoomRoute } from '../pages/RoomPage'
-import { SettingsPage } from '../pages/SettingsPage'
-import { meLoaded, pageTitle, refreshMe, refreshServerSettings } from './state'
+import { SettingsDialog } from '../components/settings/SettingsDialog'
+import { meLoaded, pageTitle, refreshMe, refreshServerSettings, settingsOpen, type SettingsSection } from './state'
+import styles from './App.module.css'
 
 export function App() {
   useEffect(() => {
@@ -24,6 +24,7 @@ export function App() {
   if (!meLoaded.value) {
     return (
       <InfoScreen
+        busy
         message="Connecting to CozyCast..."
         submessage="If this takes too long please refresh"
       />
@@ -37,28 +38,47 @@ export function App() {
   )
 }
 
+const settingsRoutes: Record<string, SettingsSection | undefined> = { '/profile': 'account', '/settings': 'appearance' }
+
 function Shell() {
-  const { path } = useLocation()
+  const { path, route } = useLocation()
+  const previous = useRef(path)
   const inRoom = path.startsWith('/room/')
   useEffect(() => {
     if (!inRoom) pageTitle.value = null
   }, [inRoom])
+  // /profile and /settings open the settings window over the rooms page.
+  // Otherwise the window belongs to the page it was opened on.
+  useEffect(() => {
+    const opens = settingsRoutes[path]
+    if (opens) {
+      settingsOpen.value = opens
+      route('/', true)
+    } else if (!settingsRoutes[previous.current]) settingsOpen.value = null
+    previous.current = path
+  }, [path])
+  const routes = (
+    <Router>
+      <Route path="/" component={HomePage} />
+      <Route path="/room/:room" component={RoomRoute} />
+      <Route path="/invite/:code" component={InvitePage} />
+      <Route path="/access/:code" component={AccessPage} />
+      <Route path="/login" component={LoginPage} />
+      <Route path="/license" component={LicensePage} />
+      <Route path="/register" component={RegisterPage} />
+      <Route path="/profile" component={HomePage} />
+      <Route path="/settings" component={HomePage} />
+      <Route path="/admin/:tab?" component={AdminPage} />
+      <Route default component={NotFoundPage} />
+    </Router>
+  )
+  // The room fills the window and opens the settings itself.
+  if (inRoom) return routes
   return (
-    <>
-      {!inRoom && <Header />}
-      <Router>
-        <Route path="/" component={HomePage} />
-        <Route path="/room/:room" component={RoomRoute} />
-        <Route path="/invite/:code" component={InvitePage} />
-        <Route path="/access/:code" component={AccessPage} />
-        <Route path="/login" component={LoginPage} />
-        <Route path="/license" component={LicensePage} />
-        <Route path="/register" component={RegisterPage} />
-        <Route path="/profile" component={ProfilePage} />
-        <Route path="/settings" component={SettingsPage} />
-        <Route path="/admin/:tab?" component={AdminPage} />
-        <Route default component={NotFoundPage} />
-      </Router>
-    </>
+    <div class={styles.app}>
+      <Header />
+      {routes}
+      {settingsOpen.value && <SettingsDialog />}
+    </div>
   )
 }

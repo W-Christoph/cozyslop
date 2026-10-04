@@ -1,14 +1,17 @@
-import { useState } from 'preact/hooks'
+import { useId, useState } from 'preact/hooks'
 import { api } from '../../../api'
 import type { User } from '../../../room/protocol'
 import { Button } from '../../Button'
 import { Modal } from '../../Modal'
+import { Field, Select } from '../../ui/Field'
+import { Notice } from '../../ui/Notice'
 import { useRoomStore } from '../RoomContext'
+import { UserAvatar } from '../UserAvatar'
 import styles from './BanModal.module.css'
 
 const durations = [
-  ['0', 'Refresh (kick)'], ['10', '10 minutes'], ['60', '1 hour'],
-  ['1440', '1 day'], ['10080', '1 week'], ['43200', '1 month'], ['', 'Unlimited'],
+  ['0', 'Not at all (kick)'], ['10', '10 minutes'], ['60', '1 hour'],
+  ['1440', '1 day'], ['10080', '1 week'], ['43200', '1 month'], ['', 'Forever'],
 ] as const
 
 export function BanModal({ user, onClose, onBanned }: {
@@ -21,6 +24,7 @@ export function BanModal({ user, onClose, onBanned }: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const present = store.users.value.has(user.key)
+  const form = useId()
   async function ban() {
     if (busy || !present || !store.rights.value.admin) return
     setBusy(true)
@@ -37,18 +41,27 @@ export function BanModal({ user, onClose, onBanned }: {
     }
   }
   if (!store.rights.value.admin) return null
+  const kick = duration === '0'
   return (
-    <Modal title="Ban/Kick" onClose={onClose} compact>
-      <form class={styles.form} onSubmit={(e) => { e.preventDefault(); void ban() }}>
-        <p>User: {user.nickname} ({user.username || `Anon ${user.key.slice(2, 6)}`})</p>
-        <label class={styles.row}>Expiration
-          <select value={duration} disabled={busy} onChange={(e) => { setDuration(e.currentTarget.value); setError('') }}>
+    <Modal title={`${kick ? 'Kick' : 'Ban'} ${user.nickname}`} onClose={onClose} compact footer={<>
+      <Button onClick={onClose}>Cancel</Button>
+      <Button variant="danger" type="submit" form={form} disabled={busy || !present}>{kick ? 'Kick user' : 'Ban user'}</Button>
+    </>}>
+      <form id={form} class={styles.form} onSubmit={(e) => { e.preventDefault(); void ban() }}>
+        <div class={styles.user}>
+          <UserAvatar user={user} small />
+          <div>
+            <strong>{user.nickname}</strong>
+            <span>{user.username || `Anonymous (${user.key.slice(2, 6)})`}</span>
+          </div>
+        </div>
+        <Field label="Keep them out for" hint={kick ? 'They are removed from the room and can come straight back.' : user.anonymous ? 'Bans their address; other anonymous visitors on it are removed too.' : undefined}>
+          <Select value={duration} disabled={busy} onChange={(e) => { setDuration(e.currentTarget.value); setError('') }}>
             {durations.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-        </label>
-        <Button type="submit" disabled={busy || !present}>{duration === '0' ? 'Kick User' : 'Ban User'}</Button>
-        {!present && !busy && <p role="status">That user is no longer in the room.</p>}
-        {error && <p role="alert">{error}</p>}
+          </Select>
+        </Field>
+        {!present && !busy && <Notice>That user is no longer in the room.</Notice>}
+        {error && <Notice tone="error">{error}</Notice>}
       </form>
     </Modal>
   )

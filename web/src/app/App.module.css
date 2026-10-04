@@ -1,0 +1,3 @@
+/* Pages set their text size here, not on body: the room keeps the browser's
+   default size and line height, untouched. */
+.app { --page-min: calc(100dvh - var(--header-height)); min-height: 100%; display: flex; flex-direction: column; font-size: 15px; line-height: 1.45; -webkit-font-smoothing: antialiased; }

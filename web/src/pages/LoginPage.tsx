@@ -1,8 +1,10 @@
 import { useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
-import { login, logout, me, pendingInvite } from '../app/state'
-import { PageLayout } from '../components/PageLayout'
-import { Button } from '../components/Button'
+import { login, logout, me, pendingInvite, serverSettings } from '../app/state'
+import { AuthLayout } from '../components/PageLayout'
+import { Button, ButtonLink } from '../components/Button'
+import { Field, Input } from '../components/ui/Field'
+import { Notice } from '../components/ui/Notice'
 
 export function LoginPage() {
   const { route } = useLocation()
@@ -34,48 +36,58 @@ export function LoginPage() {
       setBusy(false)
     }
   }
-  return (
-    <PageLayout title={me.value ? 'Logged in' : 'Login'}>
-      {me.value ? (
-        <Button disabled={busy} onClick={signOut}>
-          Logout
+  if (me.value)
+    return (
+      <AuthLayout title="You're logged in" subtitle={`Signed in as ${me.value.username}.`}>
+        <ButtonLink accent size="lg" block href="/">
+          Go to rooms
+        </ButtonLink>
+        <Button size="lg" block disabled={busy} onClick={signOut}>
+          Log out
         </Button>
-      ) : (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            void submit()
-          }}
-        >
-          <label>
-            Username
-            <input
-              name="username"
-              autoComplete="username"
-              required
-              maxLength={12}
-              value={username}
-              onInput={(e) => setUsername(e.currentTarget.value)}
-            />
-          </label>
-          <label>
-            Password
-            <input
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              maxLength={100}
-              value={password}
-              onInput={(e) => setPassword(e.currentTarget.value)}
-            />
-          </label>
-          <Button type="submit" disabled={busy}>
-            Login
-          </Button>
-        </form>
-      )}
-      {error && <p role="alert">{error}</p>}
-    </PageLayout>
+        {error && <Notice tone="error">{error}</Notice>}
+      </AuthLayout>
+    )
+  const open = serverSettings.value.registration === 'open' || !!pendingInvite.get()
+  return (
+    <AuthLayout
+      title="Welcome back"
+      subtitle="Log in to CozyCast"
+      footer={open ? <>No account yet? <a href="/register">Sign up</a></> : undefined}
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          void submit()
+        }}
+      >
+        <Field label="Username">
+          <Input
+            name="username"
+            autoComplete="username"
+            autoFocus
+            required
+            maxLength={12}
+            value={username}
+            onInput={(e) => setUsername(e.currentTarget.value)}
+          />
+        </Field>
+        <Field label="Password">
+          <Input
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            maxLength={100}
+            value={password}
+            onInput={(e) => setPassword(e.currentTarget.value)}
+          />
+        </Field>
+        {error && <Notice tone="error">{error}</Notice>}
+        <Button accent size="lg" block type="submit" disabled={busy}>
+          {busy ? 'Logging in…' : 'Log in'}
+        </Button>
+      </form>
+    </AuthLayout>
   )
 }

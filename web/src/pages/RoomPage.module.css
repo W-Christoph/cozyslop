@@ -1,4 +1,11 @@
-.page { display: flex; width: 100%; height: 100%; position: relative; overflow: hidden; background: var(--color-menu); }
+/* The room keeps CozyCast's own font, whatever the pages around it use. */
+.page { display: flex; width: 100%; height: 100%; position: relative; overflow: hidden; background: var(--color-menu); color: var(--color-text); font-family: var(--font-sans); color-scheme: normal; scrollbar-color: var(--color-scrollbar) var(--color-scroll-thumb); }
+/* Buttons in the room darken on hover as they always did, with the weight the
+   rule had as an element default (base.css now keeps its defaults in :where()).
+   Windows opened over the room are not part of it. */
+:where(.page) button:hover:not(:disabled):not(:where([role='dialog'] *)) { background: var(--color-button-accent); }
+.page[data-chat-width='wide'] { --chat-size: max(17%, 20em); }
+.page[data-chat-width='wider'] { --chat-size: max(22%, 25em); }
 /* The stream, the buttons and the user icons are not text: dragging over them selects nothing. */
 .videoWrapper { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; position: relative; -webkit-user-select: none; user-select: none; }
 .toolbar { flex-shrink: 0; }

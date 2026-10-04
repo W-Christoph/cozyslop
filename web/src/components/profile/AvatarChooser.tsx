@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import Cropper from 'cropperjs'
 import { Modal } from '../Modal'
 import { Button } from '../Button'
+import { Icon } from '../ui/Icon'
 import styles from './AvatarChooser.module.css'
 
 export function AvatarChooser({
@@ -82,7 +83,8 @@ export function AvatarChooser({
         aria-label="Upload avatar"
       >
         <img src={avatar || '/png/default_avatar.png'} alt="Avatar" />
-        <span class={styles.overlay}>Upload</span>
+        <span class={styles.overlay}>Change</span>
+        <span class={styles.badge}><Icon name="upload" size={14} /></span>
       </button>
       <input
         class={styles.input}
@@ -95,7 +97,7 @@ export function AvatarChooser({
         }}
       />
       {source && (
-        <Modal title="Crop avatar" onClose={close}>
+        <Modal title="Crop avatar" size="lg" onClose={close}>
           <div class={styles.cropper}>
             <img
               ref={image}
@@ -109,15 +111,15 @@ export function AvatarChooser({
             />
           </div>
           <div class={styles.actions}>
+            <Button onClick={close}>Close</Button>
             <Button accent disabled={!ready} onClick={crop}>
               Crop
             </Button>
-            <Button onClick={close}>Close</Button>
           </div>
-          {error && <p role="alert">{error}</p>}
+          {error && <p class={styles.error} role="alert">{error}</p>}
         </Modal>
       )}
-      {!source && error && <p role="alert">{error}</p>}
+      {!source && error && <p class={styles.error} role="alert">{error}</p>}
     </>
   )
 }

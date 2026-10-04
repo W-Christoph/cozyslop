@@ -2,6 +2,7 @@ import Cropper from 'cropperjs'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { Button } from '../Button'
 import { Modal } from '../Modal'
+import { Notice } from '../ui/Notice'
 import { useObjectUrl } from './useObjectUrl'
 import styles from './ScreenshotModal.module.css'
 
@@ -30,12 +31,13 @@ export function ScreenshotModal({ source, onCrop, onClose }: { source: Blob; onC
       }, 'image/png')
     } catch { setError('Could not crop this screenshot.') }
   }
-  return <Modal title="Crop screenshot" onClose={onClose}>
+  return <Modal title="Crop screenshot" size="xl" onClose={onClose}>
+    <p class={styles.hint}>Drag to choose the part of the picture to post in chat.</p>
     <div class={styles.cropper}>{url && <img ref={image} src={url} alt="Select an area of the screenshot" onError={() => setError('Could not load this screenshot.')} />}</div>
     <div class={styles.actions}>
-      <Button accent onClick={crop} disabled={!ready}>Crop</Button>
       <Button onClick={onClose}>Close</Button>
+      <Button accent onClick={crop} disabled={!ready}>Crop</Button>
     </div>
-    {error && <p role="alert">{error}</p>}
+    {error && <Notice tone="error">{error}</Notice>}
   </Modal>
 }

@@ -1,0 +1,20 @@
+/* The chat as it sits in the room: a sidebar-wide column with the room's
+   background, font and size. */
+.preview {
+  display: flex;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-app);
+  overflow: hidden;
+}
+.chat {
+  width: min(100%, 340px);
+  padding: 2px 10px 12px;
+  border-inline: 1px solid var(--border);
+  background: var(--color-menu) var(--noise);
+  color: var(--color-text);
+  font: 16px/normal var(--font-sans);
+  -webkit-font-smoothing: auto;
+  word-break: break-word;
+}

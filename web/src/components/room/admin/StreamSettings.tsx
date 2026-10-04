@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import { api } from '../../../api'
 import { Button } from '../../Button'
+import { Spinner } from '../../ui/EmptyState'
+import { Select } from '../../ui/Field'
+import { Notice } from '../../ui/Notice'
+import { Section, SettingRow } from '../../ui/Section'
 import { useRoomStore } from '../RoomContext'
 import {
   bitrates,
@@ -19,7 +23,7 @@ import {
   type Stream,
 } from './streamOptions'
 import { useRoomSettingsForm } from './useRoomSettingsForm'
-import styles from './StreamSettings.module.css'
+import styles from './RoomAccessSettings.module.css'
 
 const fields = ['screen', 'stream'] as const
 
@@ -88,73 +92,72 @@ export function StreamSettings() {
     if (stream) change('stream', stream.id)
   }
 
+  const select = (id: string) => `stream-${id}`
   return (
-    <form class={styles.form} onSubmit={(e) => { e.preventDefault(); void save() }}>
-      <h2 class={styles.heading}>Stream Settings</h2>
-      {loadError ? (
-        <div>
-          <p role="alert">{loadError}</p>
-          <Button onClick={() => setRevision((v) => v + 1)}>Retry</Button>
-        </div>
-      ) : !choices ? (
-        <p role="status">Loading…</p>
-      ) : (
-        <>
-          <label class={styles.row}>Resolution
-            <select value={choices.resolution} disabled={busy} onChange={(e) => setResolution(e.currentTarget.value)}>
-              <option value="">Server default</option>
-              {choices.resolutions.map((r) => <option key={r} value={r}>{r.replace('x', '×')}</option>)}
-            </select>
-          </label>
-          {choices.screen && (
-            <label class={styles.row}>Frame rate
-              <select value={choices.screen.rate} disabled={busy} onChange={(e) => setRate(Number(e.currentTarget.value))}>
-                {choices.rates.map((r) => <option key={r} value={r}>{r} fps</option>)}
-              </select>
-            </label>
-          )}
-          {choices.stream && (
-            <>
-              <label class={styles.row}>Bitrate
-                <select value={choices.stream.kbps} disabled={busy}
-                  onChange={(e) => setStream(Number(e.currentTarget.value), choices.stream!.scale, choices.stream!.preset)}>
-                  {choices.bitrates.map((b) => <option key={b} value={b}>{formatBitrate(b)}</option>)}
-                </select>
-              </label>
-              <label class={styles.row}>Stream size
-                <select value={choices.stream.scale} disabled={busy}
-                  onChange={(e) => setStream(choices.stream!.kbps, Number(e.currentTarget.value), choices.stream!.preset)}>
-                  {choices.scales.map((s) => {
-                    const size = choices.screen ? scaledSize(choices.screen.width, choices.screen.height, s) : null
-                    return <option key={s} value={s}>{s === 100 ? 'Full' : `${s}%`}{size ? ` (${size[0]}×${size[1]})` : ''}</option>
-                  })}
-                </select>
-              </label>
-              {choices.presets.length > 1 && (
-                <label class={styles.row}>Encoder
-                  <select value={choices.stream.preset} disabled={busy}
-                    onChange={(e) => setStream(choices.stream!.kbps, choices.stream!.scale, e.currentTarget.value)}>
-                    {choices.presets.map((p, i, all) => (
-                      <option key={p} value={p}>
-                        {p[0].toUpperCase() + p.slice(1)}
-                        {i === 0 ? ' (least CPU)' : i === all.length - 1 ? ' (sharpest)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-            </>
-          )}
-          <p class={styles.hint}>
-            Higher bitrates look better and need more bandwidth per viewer. A smaller stream size is encoded
-            at lower resolution: less CPU on the server and less bandwidth, at the cost of sharpness.
-            A faster encoder also saves CPU, but looks blockier at the same bitrate.
-          </p>
-        </>
-      )}
-      <Button type="submit" disabled={busy || !draft || !choices}>Update Stream Settings</Button>
-      {error && <p role="alert">{error}</p>}
-      {message && <p role="status">{message}</p>}
+    <form onSubmit={(e) => { e.preventDefault(); void save() }}>
+      <Section title="Video" description="What the room's desktop looks like and how it is sent to viewers. Applies to everyone at once.">
+        {loadError ? (
+          <>
+            <Notice tone="error">{loadError}</Notice>
+            <div><Button icon="refresh" onClick={() => setRevision((v) => v + 1)}>Retry</Button></div>
+          </>
+        ) : !choices ? (
+          <Spinner label="Loading…" />
+        ) : (
+          <>
+            <SettingRow title="Resolution" description="Of the desktop itself." htmlFor={select('resolution')}>
+              <Select id={select('resolution')} value={choices.resolution} disabled={busy} onChange={(e) => setResolution(e.currentTarget.value)}>
+                <option value="">Server default</option>
+                {choices.resolutions.map((r) => <option key={r} value={r}>{r.replace('x', '×')}</option>)}
+              </Select>
+            </SettingRow>
+            {choices.screen && (
+              <SettingRow title="Frame rate" htmlFor={select('rate')}>
+                <Select id={select('rate')} value={choices.screen.rate} disabled={busy} onChange={(e) => setRate(Number(e.currentTarget.value))}>
+                  {choices.rates.map((r) => <option key={r} value={r}>{r} fps</option>)}
+                </Select>
+              </SettingRow>
+            )}
+            {choices.stream && (
+              <>
+                <SettingRow title="Bitrate" description="Higher looks better and needs more bandwidth per viewer." htmlFor={select('bitrate')}>
+                  <Select id={select('bitrate')} value={choices.stream.kbps} disabled={busy}
+                    onChange={(e) => setStream(Number(e.currentTarget.value), choices.stream!.scale, choices.stream!.preset)}>
+                    {choices.bitrates.map((b) => <option key={b} value={b}>{formatBitrate(b)}</option>)}
+                  </Select>
+                </SettingRow>
+                <SettingRow title="Stream size" description="A smaller stream is encoded at lower resolution: less CPU on the server and less bandwidth, at the cost of sharpness." htmlFor={select('scale')}>
+                  <Select id={select('scale')} value={choices.stream.scale} disabled={busy}
+                    onChange={(e) => setStream(choices.stream!.kbps, Number(e.currentTarget.value), choices.stream!.preset)}>
+                    {choices.scales.map((s) => {
+                      const size = choices.screen ? scaledSize(choices.screen.width, choices.screen.height, s) : null
+                      return <option key={s} value={s}>{s === 100 ? 'Full' : `${s}%`}{size ? ` (${size[0]}×${size[1]})` : ''}</option>
+                    })}
+                  </Select>
+                </SettingRow>
+                {choices.presets.length > 1 && (
+                  <SettingRow title="Encoder" description="A faster encoder saves CPU, but looks blockier at the same bitrate." htmlFor={select('preset')}>
+                    <Select id={select('preset')} value={choices.stream.preset} disabled={busy}
+                      onChange={(e) => setStream(choices.stream!.kbps, choices.stream!.scale, e.currentTarget.value)}>
+                      {choices.presets.map((p, i, all) => (
+                        <option key={p} value={p}>
+                          {p[0].toUpperCase() + p.slice(1)}
+                          {i === 0 ? ' (least CPU)' : i === all.length - 1 ? ' (sharpest)' : ''}
+                        </option>
+                      ))}
+                    </Select>
+                  </SettingRow>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </Section>
+      <div class={styles.actions}>
+        {error && <Notice tone="error">{error}</Notice>}
+        {message && <Notice tone="success">{message}</Notice>}
+        <Button accent type="submit" disabled={busy || !draft || !choices}>{busy ? 'Saving…' : 'Save changes'}</Button>
+      </div>
     </form>
   )
 }

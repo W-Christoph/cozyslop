@@ -1,0 +1,15 @@
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.notice svg { margin-top: 2px; }
+.error { background: var(--danger-soft); color: var(--danger-text); }
+.success { background: var(--success-soft); color: var(--success-text); }
+.info { background: var(--bg-raised); color: var(--text-secondary); }

@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'preact/hooks'
 import { api, type RoomInfo } from '../api'
 import { me, serverSettings } from '../app/state'
-import { Button } from '../components/Button'
+import { Button, ButtonLink } from '../components/Button'
+import { PageLayout } from '../components/PageLayout'
 import { InviteModal } from '../components/admin/InviteModal'
+import { Badge } from '../components/ui/Badge'
+import { EmptyState, Spinner } from '../components/ui/EmptyState'
+import { Icon, type IconName } from '../components/ui/Icon'
+import { Notice } from '../components/ui/Notice'
 import styles from './HomePage.module.css'
 
-const badges = {
-  invite: 'Invite Only',
-  account: 'Account Only',
-  verified: 'Verified Only',
-  public: '',
+const access: Record<RoomInfo['access'], { label: string; icon: IconName } | null> = {
+  invite: { label: 'Invite only', icon: 'ticket' },
+  account: { label: 'Accounts only', icon: 'user' },
+  verified: { label: 'Verified only', icon: 'shield' },
+  public: null,
 }
 export function HomePage() {
   const [rooms, setRooms] = useState<RoomInfo[]>([]),
@@ -38,65 +43,59 @@ export function HomePage() {
     }
   }, [username])
   return (
-    <main class={styles.background}>
+    <PageLayout narrow title="Rooms" subtitle="Pick a room and watch together.">
       {inviteRoom !== null && (
         <InviteModal room={inviteRoom} onClose={() => setInviteRoom(null)} />
       )}
-      <div class={styles.list}>
-        {serverSettings.value.message && (
-          <div class={styles.message}>{serverSettings.value.message}</div>
-        )}
-        <div class={styles.title}>Rooms</div>
-        <table
-          class={`${styles.table} ${me.value?.admin ? styles.adminTable : ''}`}
-        >
-          <colgroup>
-            {me.value?.admin && <col class={styles.inviteColumn} />}
-            <col class={styles.nameColumn} />
-            <col class={styles.countColumn} />
-            <col class={styles.joinColumn} />
-          </colgroup>
-          <tbody>
-            {rooms.map((room) => (
-              <tr key={room.name}>
-                {me.value?.admin && (
-                  <td>
-                    <Button onClick={() => setInviteRoom(room.name)}>
-                      Invite
-                    </Button>
-                  </td>
-                )}
-                <td>
+      {serverSettings.value.message && (
+        <div class={styles.announcement}>
+          <Icon name="info" size={18} />
+          <p>{serverSettings.value.message}</p>
+        </div>
+      )}
+      {error && <Notice tone="error">{error}</Notice>}
+      {loading && rooms.length === 0 && <Spinner label="Loading rooms..." />}
+      {!loading && !error && rooms.length === 0 && (
+        <EmptyState icon="monitor" title="No rooms available">
+          {me.value ? 'There is no room you can join right now.' : 'Log in to see the rooms you have access to.'}
+        </EmptyState>
+      )}
+      <ul class={styles.rooms}>
+        {rooms.map((room) => {
+          const badge = access[room.access]
+          return (
+            <li class={`${styles.room} ${room.open ? '' : styles.closed}`} key={room.name}>
+              <div class={styles.tile}><Icon name="monitor" size={22} /></div>
+              <div class={styles.info}>
+                <div class={styles.nameLine}>
                   <span class={styles.name}>{room.name}</span>
-                  {badges[room.access] && (
-                    <span class={styles.badge}>{badges[room.access]}</span>
-                  )}
-                </td>
-                <td>{room.userCount} users</td>
-                <td class={styles.joinCell}>
-                  {room.open ? (
-                    <a
-                      class={styles.join}
-                      href={`/room/${encodeURIComponent(room.name)}`}
-                    >
-                      Join
-                    </a>
-                  ) : (
-                    <Button class={styles.closed} disabled>
-                      Closed
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {loading && <div role="status">Loading rooms...</div>}
-        {error && <p role="alert">{error}</p>}
-        {!loading && !error && rooms.length === 0 && (
-          <div>Currently none available</div>
-        )}
-      </div>
-    </main>
+                  {badge && <Badge icon={badge.icon}>{badge.label}</Badge>}
+                </div>
+                <div class={styles.count}>
+                  <span class={`${styles.dot} ${room.userCount > 0 ? styles.live : ''}`} />
+                  {room.userCount === 0 ? 'Nobody watching' : `${room.userCount} watching`}
+                </div>
+              </div>
+              <div class={styles.actions}>
+                {me.value?.admin && (
+                  <Button variant="ghost" icon="ticket" onClick={() => setInviteRoom(room.name)}>
+                    Invite
+                  </Button>
+                )}
+                {room.open ? (
+                  <ButtonLink accent href={`/room/${encodeURIComponent(room.name)}`}>
+                    Join
+                  </ButtonLink>
+                ) : (
+                  <Button disabled>
+                    Closed
+                  </Button>
+                )}
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </PageLayout>
   )
 }

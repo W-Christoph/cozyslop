@@ -1,5 +1,8 @@
 import type { AdminUser } from '../../api'
 import { Button } from '../Button'
+import { Avatar } from '../ui/Avatar'
+import { Badge } from '../ui/Badge'
+import { Switch } from '../ui/Switch'
 import styles from './AccountRow.module.css'
 
 export function AccountRow({
@@ -21,67 +24,69 @@ export function AccountRow({
   onReset: (username: string) => void
 }) {
   return (
-    <tr key={user.username}>
-      <td class={styles.avatarCell}>
-        <img
-          class={styles.avatar}
-          src={user.avatarUrl || '/png/default_avatar.png'}
-          alt={`${user.username}'s avatar`}
-        />
+    <tr key={user.username} class={user.disabled ? styles.disabled : undefined}>
+      <td>
+        <div class={styles.account}>
+          <Avatar src={user.avatarUrl} size={40} alt={`${user.username}'s avatar`} />
+          <div class={styles.names}>
+            <div class={styles.username}>
+              {user.username}
+              {self && <Badge>You</Badge>}
+              {user.disabled && <Badge tone="danger">Disabled</Badge>}
+            </div>
+            <div class={styles.nickname}>
+              <span class={styles.swatch} style={{ backgroundColor: user.nameColor }} title={user.nameColor} />
+              {user.nickname}
+            </div>
+          </div>
+        </div>
       </td>
-      <td class={styles.username}>
-        {user.username}
-        {self && ' (you)'}
-      </td>
-      <td class={styles.text}>{user.nickname}</td>
-      <td class={styles.text}>
-        <span
-          class={styles.swatch}
-          style={{ backgroundColor: user.nameColor }}
-        />
-        {user.nameColor}
-      </td>
-      <td class={styles.center}>
-        <Button
-          accent={user.verified}
+      <td class={styles.toggle} data-label="Verified">
+        <Switch
+          label={`Verified: ${user.username}`}
+          checked={user.verified}
           disabled={busy}
-          onClick={() => onUpdate(user.username, { verified: !user.verified })}
-        >
-          {user.verified ? 'verified' : 'Not verified'}
-        </Button>
+          onChange={(verified) => onUpdate(user.username, { verified })}
+        />
       </td>
-      <td class={styles.center}>
-        <Button
-          accent={user.admin}
+      <td class={styles.toggle} data-label="Admin">
+        <Switch
+          label={`Admin: ${user.username}`}
+          checked={user.admin}
           disabled={busy || self}
-          onClick={() => onUpdate(user.username, { admin: !user.admin })}
-        >
-          {user.admin ? 'Remove Admin' : 'Make Admin'}
-        </Button>
+          onChange={(admin) => onUpdate(user.username, { admin })}
+        />
       </td>
-      <td class={styles.center}>
-        <Button
-          accent={!user.disabled}
+      <td class={styles.toggle} data-label="Enabled">
+        <Switch
+          label={`Enabled: ${user.username}`}
+          checked={!user.disabled}
           disabled={busy || self}
-          onClick={() => onUpdate(user.username, { disabled: !user.disabled })}
-        >
-          {user.disabled ? 'Enable' : 'Disable'}
-        </Button>
+          onChange={(enabled) => onUpdate(user.username, { disabled: !enabled })}
+        />
       </td>
-      <td class={styles.center}>
-        <Button
-          accent
-          disabled={busy || self || user.admin}
-          title={user.admin ? 'remove admin first' : undefined}
-          onClick={() => onDelete(user.username)}
-        >
-          {user.admin && !self ? 'remove admin first' : 'Delete'}
-        </Button>
-      </td>
-      <td class={styles.center}>
-        <Button disabled={busy || self} onClick={() => onReset(user.username)}>
-          Reset password
-        </Button>
+      <td>
+        <div class={styles.actions}>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon="key"
+            aria-label={`Reset password of ${user.username}`}
+            title="Reset password"
+            disabled={busy || self}
+            onClick={() => onReset(user.username)}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            icon="trash"
+            class={styles.delete}
+            aria-label={`Delete ${user.username}`}
+            title={user.admin ? 'Remove admin first' : 'Delete'}
+            disabled={busy || self || user.admin}
+            onClick={() => onDelete(user.username)}
+          />
+        </div>
       </td>
     </tr>
   )

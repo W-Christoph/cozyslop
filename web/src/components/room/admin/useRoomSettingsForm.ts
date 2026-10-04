@@ -33,7 +33,7 @@ export function useRoomSettingsForm(fields: readonly (keyof RoomSettings)[]) {
         { ...current, ...edited },
       )
       setDraft(saved)
-      setMessage('Settings saved!')
+      setMessage('Settings saved.')
       // The room_settings push updates the store for all viewers.
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.')

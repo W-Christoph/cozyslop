@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { api } from '../../api'
 import { Button } from '../Button'
 import { Modal } from '../Modal'
+import { fileSize } from '../room/fileSize'
+import { Notice } from '../ui/Notice'
 import { useRoomStore } from '../room/RoomContext'
 import { useObjectUrl } from './useObjectUrl'
 import styles from './ConfirmUpload.module.css'
@@ -39,14 +41,16 @@ export function ConfirmUpload({ file, screenshot, onClose, onUploaded, onError }
       if (mounted.current) setSending(false)
     }
   }
-  return <Modal title="Upload this file?" compact={!screenshot} onClose={onClose}>
-    {source && (file.type.startsWith('video/')
-      ? <video class={styles.preview} src={source} autoplay loop muted playsInline />
-      : <img class={styles.preview} src={source} alt="Upload preview" />)}
-    <div class={styles.actions}>
-      <Button accent disabled={sending || !store.rights.value.image || store.server.value !== 'connected'} onClick={() => { void upload() }}>{sending ? 'Uploading…' : 'Upload'}</Button>
-      <Button onClick={onClose}>Cancel</Button>
+  return <Modal title="Upload this file?" size={screenshot ? 'lg' : 'sm'} onClose={onClose} footer={<>
+    <Button onClick={onClose}>Cancel</Button>
+    <Button accent icon="upload" disabled={sending || !store.rights.value.image || store.server.value !== 'connected'} onClick={() => { void upload() }}>{sending ? 'Uploading…' : 'Upload'}</Button>
+  </>}>
+    <div class={styles.frame}>
+      {source && (file.type.startsWith('video/')
+        ? <video class={styles.preview} src={source} autoplay loop muted playsInline />
+        : <img class={styles.preview} src={source} alt="Upload preview" />)}
     </div>
-    {error && <p class={styles.error} role="alert">{error}</p>}
+    <div class={styles.file}><span class={styles.name}>{file.name}</span><span>{fileSize(file.size)}</span></div>
+    {error && <Notice tone="error">{error}</Notice>}
   </Modal>
 }

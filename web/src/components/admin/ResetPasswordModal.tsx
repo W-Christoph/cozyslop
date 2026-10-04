@@ -1,7 +1,10 @@
-import { useState } from 'preact/hooks'
+import { useId, useState } from 'preact/hooks'
 import { api } from '../../api'
 import { Modal } from '../Modal'
 import { Button } from '../Button'
+import { Field, Input } from '../ui/Field'
+import { Notice } from '../ui/Notice'
+import styles from './ResetPasswordModal.module.css'
 
 export function ResetPasswordModal({
   username,
@@ -16,6 +19,7 @@ export function ResetPasswordModal({
     [confirmation, setConfirmation] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false)
+  const form = useId()
   async function save() {
     setError('')
     if (password !== confirmation) {
@@ -36,16 +40,23 @@ export function ResetPasswordModal({
     }
   }
   return (
-    <Modal compact title={`Reset password: ${username}`} onClose={onClose}>
+    <Modal compact title={`Reset password: ${username}`} onClose={onClose} footer={<>
+      <Button onClick={onClose}>Cancel</Button>
+      <Button accent type="submit" form={form} disabled={busy}>
+        Reset password
+      </Button>
+    </>}>
       <form
+        id={form}
+        class={styles.form}
         onSubmit={(e) => {
           e.preventDefault()
           void save()
         }}
       >
-        <label>
-          New password
-          <input
+        <Notice>{username} is logged out everywhere and removed from rooms.</Notice>
+        <Field label="New password" hint="At least 8 characters.">
+          <Input
             required
             type="password"
             autoComplete="new-password"
@@ -54,10 +65,9 @@ export function ResetPasswordModal({
             value={password}
             onInput={(e) => setPassword(e.currentTarget.value)}
           />
-        </label>
-        <label>
-          Confirm Password
-          <input
+        </Field>
+        <Field label="Confirm password">
+          <Input
             required
             type="password"
             autoComplete="new-password"
@@ -65,12 +75,9 @@ export function ResetPasswordModal({
             value={confirmation}
             onInput={(e) => setConfirmation(e.currentTarget.value)}
           />
-        </label>
-        <Button type="submit" disabled={busy}>
-          Reset password
-        </Button>
+        </Field>
+        {error && <Notice tone="error">{error}</Notice>}
       </form>
-      {error && <p role="alert">{error}</p>}
     </Modal>
   )
 }

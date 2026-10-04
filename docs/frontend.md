@@ -1,9 +1,12 @@
 # Frontend
 
-Preact + TypeScript + Vite in `web/`. The UI is a port of CozyCast's
+Preact + TypeScript + Vite in `web/`. The room (stream, controls, user list,
+chat) is a port of CozyCast's
 (`cozycast-server/npm-website/src/private/js/` in the old repository): same
-pages, same layout, same behaviour, rewritten on top of the new server API.
-Look and feel should stay the same; code quality should not.
+layout, same behaviour, and by default the same look. Everything around it
+(rooms page, login, admin area, and the windows opened from a room: personal
+settings, room settings, files) has its own design, built from the shared
+parts in `components/ui/`.
 
 ## Layout
 
@@ -19,7 +22,13 @@ web/src/
   neko/               neko protocol client (video, input); do not use from pages
   pages/              one component per route; pages/admin/ for the admin area
   components/         everything else, grouped in folders by area (room/, chat/, admin/, ...)
-  styles/tokens.css   design tokens (themes)
+  components/ui/      shared parts of pages and windows: Icon, Dialog, SettingsLayout
+                      (navigation left, section right), Section/SettingRow/ToggleRow,
+                      Field/Input/Select/Checkbox, Switch, RadioCards, Slider, Badge,
+                      Notice, Avatar, EmptyState
+  components/settings/ the personal settings window (account, appearance, chat, room,
+                      notifications); opened through `settingsOpen` in app/state.ts
+  styles/tokens.css   design tokens (themes, accent colours)
   styles/base.css     element defaults only
 web/public/           static files served at / (svg/, png/, audio/), same paths as CozyCast
 ```
@@ -34,6 +43,21 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
   colours; spacing via `--space-*` where it fits. When porting, copy the
   relevant rules from the old `styles.css` into the module, drop dead rules,
   and keep the visual result identical.
+- **Two sets of tokens**: the room uses the `--color-*` tokens carried over
+  from CozyCast and the font `--font-sans`; pages and windows use the
+  semantic ones (`--bg-*`, `--text*`, `--border*`, `--accent*`, `--danger*`,
+  `--success*`) and `--font-ui`. A theme (`<html data-theme>`) defines both
+  sets; the accent (`<html data-accent>`) is also the room's highlight
+  colour (`--color-orange`).
+- **Menus are windows**: anything with more than a couple of controls opens
+  as a `Modal` or, with several sections, a `SettingsWindow`, not in the chat
+  sidebar. Buttons are `Button` (`accent` for the one main action, `variant`
+  `ghost`/`danger` otherwise); messages are `Notice`. Personal preferences
+  apply as they are changed; forms that write to the server have a save
+  button.
+- **Chat display**: `preferences.chatStyle` (`classic`, `modern`, `compact`)
+  is set as `data-chat-style` on the chat panel and styled in the chat's own
+  modules; `settings/ChatPreview` draws with those same modules.
 - **State**: app-wide state from `app/state.ts`; room state and actions from
   the `RoomStore` (pass the store down as a prop or via a context created in
   the room page). Local UI state with hooks. Signals are read with `.value`
@@ -68,7 +92,7 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
 | `--cozyMessageBackground` / `--cozyMessageShadow` / `--cozyMessageHover` | `--color-message-bg` / `--shadow-message` / `--color-message-hover` |
 | `--cozySvgFilter` / `--cozyIconChange` | `--icon-filter` / `--icon-invert` |
 | `--cozycast-noise` | `--noise` |
-| theme classes `defaultDesign` / `legacyDesign` / `lightDesign` | `<html data-theme="default|legacy|light">` |
+| theme classes `defaultDesign` / `legacyDesign` / `lightDesign` | `<html data-theme="default|legacy|light">` (shown as Midnight, Onyx, Light; `dark` = Graphite is new) |
 
 ### Old server API -> new
 

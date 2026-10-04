@@ -179,13 +179,16 @@ test('image and video previews follow their message and close when it disappears
 test('own verified flag is editable while account lockout controls remain disabled', () => {
   const changes = [], user = { username: 'alice', verified: true, admin: true, disabled: false }
   const props = { user, self: true, busy: false, onUpdate: (...args) => changes.push(args) }
+  const toggle = (node, name) => nodes(node).find((n) => n.type?.name === 'Switch' && n.props.label === `${name}: alice`)
   let node = AccountRow(props)
-  assert.equal(button(node, 'verified').props.disabled, false)
-  button(node, 'verified').props.onClick()
+  assert.equal(toggle(node, 'Verified').props.disabled, false)
+  toggle(node, 'Verified').props.onChange(false)
   assert.deepEqual(changes, [['alice', { verified: false }]])
-  for (const text of ['Remove Admin', 'Disable', 'Delete', 'Reset password']) assert.equal(button(node, text).props.disabled, true)
+  for (const name of ['Admin', 'Enabled']) assert.equal(toggle(node, name).props.disabled, true)
+  const action = (node, label) => nodes(node).find((n) => n.props?.['aria-label'] === label)
+  for (const label of ['Delete alice', 'Reset password of alice']) assert.equal(action(node, label).props.disabled, true)
   node = AccountRow({ ...props, busy: true })
-  assert.equal(button(node, 'verified').props.disabled, true)
+  assert.equal(toggle(node, 'Verified').props.disabled, true)
 })
 
 test('media clicks select the message ID and the modal reads its current URL', (t) => {

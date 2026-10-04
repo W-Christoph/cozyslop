@@ -1,4 +1,6 @@
 import type { Permission, RoomInfo } from '../../api'
+import { Checkbox, Input, Select } from '../ui/Field'
+import styles from './PermissionRow.module.css'
 
 export function PermissionFields({
   draft,
@@ -22,19 +24,21 @@ export function PermissionFields({
   const checkbox = (
     flag: 'banned' | 'trusted' | 'invited' | 'remote' | 'image' | 'upload',
   ) => (
-    <input
-      type="checkbox"
+    <Checkbox
       aria-label={`${flag} for ${draft.username || 'new permission'}`}
       disabled={busy}
       checked={draft[flag]}
       onChange={(e) => onChange({ [flag]: e.currentTarget.checked })}
     />
   )
+  const name = draft.username || 'new permission'
   return (
     <>
-      <td>
-        {creating && !room ? (
-          <select
+      {!room && <td>
+        {creating ? (
+          <Select
+            compact
+            class={styles.room}
             aria-label="Room for new permission"
             value={draft.room}
             disabled={busy}
@@ -46,14 +50,17 @@ export function PermissionFields({
                 {value.name}
               </option>
             ))}
-          </select>
+          </Select>
         ) : (
           draft.room
         )}
-      </td>
+      </td>}
       <td>
         {creating ? (
-          <input
+          <Input
+            compact
+            class={styles.username}
+            placeholder="Username"
             aria-label="Username for new permission"
             maxLength={12}
             value={draft.username}
@@ -61,33 +68,42 @@ export function PermissionFields({
             onInput={(e) => onChange({ username: e.currentTarget.value })}
           />
         ) : (
-          draft.username
+          <strong>{draft.username}</strong>
         )}
       </td>
-      <td>{checkbox('banned')}</td>
-      <td>{checkbox('trusted')}</td>
-      <td>{checkbox('invited')}</td>
-      <td>
-        <input
-          aria-label={`Invite name for ${draft.username || 'new permission'}`}
+      <td data-label="Remote">{checkbox('remote')}</td>
+      <td data-label="Images">{checkbox('image')}</td>
+      <td data-label="Upload">{checkbox('upload')}</td>
+      <td data-label="Trusted">{checkbox('trusted')}</td>
+      <td data-label="Invited">{checkbox('invited')}</td>
+      <td data-label="Invite name">
+        <Input
+          compact
+          class={`${styles.inviteName} ${styles.quiet}`}
+          placeholder="—"
+          aria-label={`Invite name for ${name}`}
           maxLength={64}
           value={draft.inviteName}
           disabled={busy}
           onInput={(e) => onChange({ inviteName: e.currentTarget.value })}
         />
       </td>
-      <td>{checkbox('remote')}</td>
-      <td>{checkbox('image')}</td>
-      <td>{checkbox('upload')}</td>
-      <td>
-        <input
-          type="datetime-local"
-          aria-label={`Banned until for ${draft.username || 'new permission'} (empty means forever)`}
-          title="Empty = forever when banned"
-          value={until}
-          disabled={busy || !draft.banned}
-          onInput={(e) => onUntil(e.currentTarget.value)}
-        />
+      <td data-label="Banned">
+        <div class={styles.ban}>
+          {checkbox('banned')}
+          {draft.banned && (
+            <Input
+              compact
+              class={styles.until}
+              type="datetime-local"
+              aria-label={`Banned until for ${name} (empty means forever)`}
+              title="Until when. Empty = banned forever"
+              value={until}
+              disabled={busy}
+              onInput={(e) => onUntil(e.currentTarget.value)}
+            />
+          )}
+        </div>
       </td>
     </>
   )

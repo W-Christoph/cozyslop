@@ -1,16 +1,33 @@
 /* Design tokens. Components use only these variables, never raw colours.
-   Values carried over from CozyCast's three themes (styles.css), renamed:
-   see docs/frontend.md for the old -> new mapping. The theme is set on
-   <html data-theme="..."> from the user's preferences. */
+
+   Two layers:
+   - The room (stream, controls, user list, chat) uses the --color-* tokens
+     carried over from CozyCast's themes (styles.css): see docs/frontend.md
+     for the old -> new mapping.
+   - Pages, dialogs and menus use the semantic tokens below them (--bg-*,
+     --text*, --border*, --accent*).
+
+   The theme is set on <html data-theme="..."> and the accent colour on
+   <html data-accent="..."> from the user's preferences. */
 
 :root {
   --font-sans: Arial, sans-serif;
+  --font-ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
   --radius: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
   --chat-size: max(12%, 15em);
+  --header-height: 60px;
+  --control-height: 38px;
 
   --color-crop-white: #fff;
   --color-crop-guide: #39f;
@@ -21,19 +38,77 @@
   --color-backdrop: rgba(0, 0, 0, 0.7);
   --color-overlay: rgba(0, 0, 0, 0.5);
   --color-disabled: gray;
-  --color-on-orange: black;
-  --color-orange-hover: #b60;
   --color-online: #199239;
   --color-away: #e6c714;
-  --color-orange: #f90;
   --color-orange-ping: #df9e3e;
   --color-ping-other: rgb(74, 149, 173);
   --color-chat-overlay-bg: rgba(0, 0, 0, 0.45);
   --color-chat-overlay-border: rgba(255, 255, 255, 0.45);
+
+  /* The room's highlight colour follows the accent. */
+  --color-orange: var(--accent);
+  --color-orange-hover: var(--accent-hover);
+  --color-on-orange: var(--on-accent);
+
+  --danger: #d4353c;
+  --danger-hover: #b52a31;
+  --on-danger: #fff;
+  --success: #3ecf8e;
+  --warning: #f5b83d;
+  --focus-ring: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--accent-text);
 }
+
+/* ---- accent colours ------------------------------------------------------ */
+
+:root,
+[data-accent='orange'] {
+  --accent: #f90;
+  --accent-hover: #b60;
+  --on-accent: black;
+}
+
+[data-accent='blurple'] {
+  --accent: #5865f2;
+  --accent-hover: #4752c4;
+  --on-accent: #fff;
+}
+
+[data-accent='blue'] {
+  --accent: #1d6ae0;
+  --accent-hover: #1556b8;
+  --on-accent: #fff;
+}
+
+[data-accent='teal'] {
+  --accent: #2dd4bf;
+  --accent-hover: #1fa896;
+  --on-accent: #04211d;
+}
+
+[data-accent='green'] {
+  --accent: #3ecf8e;
+  --accent-hover: #2ea56f;
+  --on-accent: #06281a;
+}
+
+[data-accent='pink'] {
+  --accent: #f472b6;
+  --accent-hover: #d9559b;
+  --on-accent: #2a0a1c;
+}
+
+[data-accent='red'] {
+  --accent: #e11d62;
+  --accent-hover: #b9154f;
+  --on-accent: #fff;
+}
+
+/* ---- themes -------------------------------------------------------------- */
 
 :root,
 [data-theme='default'] {
+  color-scheme: dark;
+  --scheme: dark;
   --noise: url('/png/noise_128.png');
   --color-bg: #181828;
   --color-menu: #123;
@@ -56,9 +131,87 @@
   --icon-filter: invert(63%) sepia(61%) saturate(457%) hue-rotate(191deg)
     brightness(95%) contrast(90%);
   --icon-invert: none;
+
+  --bg-app: #0c1622;
+  --bg-surface: #132132;
+  --bg-sidebar: #0f1b2a;
+  --bg-raised: #1b2e45;
+  --bg-input: #0c1724;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.1);
+  --border: #213449;
+  --border-strong: #31496a;
+  --text: #f2f5f9;
+  --text-secondary: #b6c2d2;
+  --text-muted: #8496ab;
+  --accent-text: color-mix(in srgb, var(--accent) 72%, white);
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --danger-text: #ff7b80;
+  --danger-soft: rgba(229, 72, 77, 0.16);
+  --success-text: #4ade9c;
+  --success-soft: rgba(62, 207, 142, 0.14);
+  --warning-text: #f5c35a;
+  --warning-soft: rgba(245, 184, 61, 0.14);
+  --scrim: rgba(3, 8, 14, 0.72);
+  --shadow-dialog: 0 24px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--border);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --scheme: dark;
+  --noise: none;
+  --color-bg: #0b0b0d;
+  --color-menu: #1e2024;
+  --color-accent: #2b2d33;
+  --color-button: #34373e;
+  --color-button-accent: #24262b;
+  --color-scrollbar: #40434b;
+  --color-scroll-thumb: #1e2024;
+  --color-high-contrast: #9aa0aa;
+  --color-select: #4a4e57;
+
+  --color-text: #fff;
+  --color-text-muted: rgba(255, 255, 255, 0.7);
+  --color-text-misc: lightgray;
+
+  --color-message-bg: rgba(0, 0, 0, 0.22);
+  --shadow-message: 0 0 3px rgba(0, 0, 0, 0.8) inset;
+  --color-message-hover: rgba(255, 255, 255, 0.05);
+
+  --icon-filter: invert(72%);
+  --icon-invert: none;
+
+  --bg-app: #151619;
+  --bg-surface: #1e2024;
+  --bg-sidebar: #191a1e;
+  --bg-raised: #2b2d33;
+  --bg-input: #131417;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.1);
+  --border: #2e3037;
+  --border-strong: #454851;
+  --text: #f2f3f5;
+  --text-secondary: #b9bdc5;
+  --text-muted: #8b909a;
+  --accent-text: color-mix(in srgb, var(--accent) 72%, white);
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --danger-text: #ff7b80;
+  --danger-soft: rgba(229, 72, 77, 0.16);
+  --success-text: #4ade9c;
+  --success-soft: rgba(62, 207, 142, 0.14);
+  --warning-text: #f5c35a;
+  --warning-soft: rgba(245, 184, 61, 0.14);
+  --scrim: rgba(0, 0, 0, 0.72);
+  --shadow-dialog: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 [data-theme='legacy'] {
+  color-scheme: dark;
+  --scheme: dark;
   --noise: none;
   --color-bg: #000;
   --color-menu: #171b22;
@@ -81,9 +234,36 @@
   --icon-filter: invert(67%) sepia(10%) saturate(1119%) hue-rotate(182deg)
     brightness(94%) contrast(87%);
   --icon-invert: none;
+
+  --bg-app: #060709;
+  --bg-surface: #12151b;
+  --bg-sidebar: #0b0d11;
+  --bg-raised: #1f232d;
+  --bg-input: #07080b;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.1);
+  --border: #232733;
+  --border-strong: #394052;
+  --text: #f1f3f6;
+  --text-secondary: #b3b9c6;
+  --text-muted: #7f8798;
+  --accent-text: color-mix(in srgb, var(--accent) 72%, white);
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --danger-text: #ff7b80;
+  --danger-soft: rgba(229, 72, 77, 0.16);
+  --success-text: #4ade9c;
+  --success-soft: rgba(62, 207, 142, 0.14);
+  --warning-text: #f5c35a;
+  --warning-soft: rgba(245, 184, 61, 0.14);
+  --scrim: rgba(0, 0, 0, 0.78);
+  --shadow-dialog: 0 24px 64px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--border);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 [data-theme='light'] {
+  color-scheme: light;
+  --scheme: light;
   --noise: none;
   --color-bg: #242424;
   --color-menu: #fdfdfd;
@@ -105,4 +285,29 @@
 
   --icon-filter: invert(40%);
   --icon-invert: invert(90%);
+
+  --bg-app: #eef0f4;
+  --bg-surface: #fff;
+  --bg-sidebar: #f4f5f8;
+  --bg-raised: #e8eaf0;
+  --bg-input: #fff;
+  --bg-hover: rgba(15, 23, 42, 0.05);
+  --bg-active: rgba(15, 23, 42, 0.09);
+  --border: #dcdfe6;
+  --border-strong: #b9beca;
+  --text: #14171c;
+  --text-secondary: #454c5a;
+  --text-muted: #6b7382;
+  --accent-text: color-mix(in srgb, var(--accent) 62%, black);
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --danger-text: #c4262c;
+  --danger-soft: rgba(229, 72, 77, 0.1);
+  --success-text: #13794a;
+  --success-soft: rgba(62, 207, 142, 0.16);
+  --warning-text: #8a5a00;
+  --warning-soft: rgba(245, 184, 61, 0.2);
+  --scrim: rgba(20, 24, 32, 0.5);
+  --shadow-dialog: 0 24px 64px rgba(20, 24, 32, 0.25), 0 0 0 1px var(--border);
+  --shadow-pop: 0 12px 32px rgba(20, 24, 32, 0.18), 0 0 0 1px var(--border);
+  --shadow-card: 0 1px 2px rgba(20, 24, 32, 0.06);
 }

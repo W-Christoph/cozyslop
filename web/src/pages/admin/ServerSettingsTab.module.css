@@ -1,21 +1,2 @@
-.settings {
-  display: flex;
-  flex-direction: column;
-  gap: 2em;
-  align-items: center;
-  color: var(--color-text);
-}
-.message {
-  width: 90%;
-}
-.message textarea {
-  display: block;
-  border-radius: 5px;
-  background: var(--color-accent) var(--noise);
-  color: var(--color-text);
-  border: none;
-  padding: 0.6em;
-  font-size: 1.1em;
-  width: 100%;
-  max-width: 85vw;
-}
+.actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-6); }
+.actions > p { flex: 1; }

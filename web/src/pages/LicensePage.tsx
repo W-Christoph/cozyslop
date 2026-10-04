@@ -7,7 +7,7 @@ import styles from './LicensePage.module.css'
 export function LicensePage() {
   const source = serverSettings.value.sourceUrl
   return (
-    <PageLayout title="License">
+    <PageLayout narrow title="License" subtitle="CozyCast is free software.">
       <div class={styles.notice}>
         <p>
           CozyCast — movie night over the internet

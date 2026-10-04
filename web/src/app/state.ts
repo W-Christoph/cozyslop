@@ -4,11 +4,22 @@
 import { computed, effect, signal } from '@preact/signals'
 import { api, ApiError, setUnauthorizedHandler, type Me, type ServerSettings } from '../api'
 
-export type Theme = 'default' | 'legacy' | 'light'
+// 'system' follows the device: light, or the default dark theme.
+export type Theme = 'system' | 'default' | 'dark' | 'legacy' | 'light'
+export type Accent = 'orange' | 'blurple' | 'blue' | 'teal' | 'green' | 'pink' | 'red'
+// classic: CozyCast's bubbles; modern: flat, with room for pictures;
+// compact: one line per message.
+export type ChatStyle = 'classic' | 'modern' | 'compact'
+export type ChatWidth = 'default' | 'wide' | 'wider'
 
 // Per-browser preferences, persisted in localStorage.
 export interface Preferences {
   theme: Theme
+  accent: Accent
+  chatStyle: ChatStyle
+  chatAvatars: boolean
+  chatScale: number // percent of the normal text size
+  chatWidth: ChatWidth
   volume: number // 0-100
   muted: boolean
   muteChatNotification: boolean
@@ -25,6 +36,11 @@ export interface Preferences {
 
 const defaultPreferences: Preferences = {
   theme: 'default',
+  accent: 'orange',
+  chatStyle: 'classic',
+  chatAvatars: false,
+  chatScale: 100,
+  chatWidth: 'default',
   volume: 100,
   muted: false,
   muteChatNotification: true,
@@ -75,9 +91,23 @@ effect(() => {
   }
 })
 
+const lightScheme = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: light)') : undefined
+const deviceLight = signal(lightScheme?.matches ?? false)
+lightScheme?.addEventListener('change', (e) => { deviceLight.value = e.matches })
+
+export function resolveTheme(theme: Theme): Exclude<Theme, 'system'> {
+  return theme === 'system' ? (deviceLight.value ? 'light' : 'default') : theme
+}
+
 effect(() => {
-  document.documentElement.dataset.theme = preferences.value.theme
+  const { theme, accent } = preferences.value
+  document.documentElement.dataset.theme = resolveTheme(theme)
+  document.documentElement.dataset.accent = accent
 })
+
+// The settings window, opened from the header and from inside a room.
+export type SettingsSection = 'account' | 'appearance' | 'chat' | 'room' | 'notifications'
+export const settingsOpen = signal<SettingsSection | null>(null)
 
 effect(() => {
   const title = pageTitle.value

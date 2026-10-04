@@ -1,103 +1,35 @@
-import { createPortal } from 'preact/compat'
 import type { ComponentChildren } from 'preact'
-import { useLayoutEffect, useId, useRef } from 'preact/hooks'
+import { useId } from 'preact/hooks'
+import { Dialog } from './ui/Dialog'
+import { Icon } from './ui/Icon'
 import styles from './Modal.module.css'
-
-const openModals: string[] = []
 
 export function Modal({
   title,
   onClose,
   children,
+  footer,
   compact = false,
+  size,
 }: {
   title: string
   onClose: () => void
   children: ComponentChildren
-  compact?: boolean
+  footer?: ComponentChildren // buttons, right-aligned under the content
+  compact?: boolean // same as size="sm"
+  size?: 'sm' | 'md' | 'lg' | 'xl'
 }) {
   const id = useId()
-  const dialog = useRef<HTMLDivElement>(null)
-  const close = useRef(onClose)
-  close.current = onClose
-  useLayoutEffect(() => {
-    openModals.push(id)
-    const previous =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null
-    dialog.current?.focus()
-    const keydown = (e: KeyboardEvent) => {
-      if (openModals.at(-1) !== id) return
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        close.current()
-      }
-      if (e.key === 'Tab') {
-        const elements = dialog.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]',
-        )
-        if (!elements?.length) {
-          e.preventDefault()
-          return
-        }
-        const first = elements[0],
-          last = elements[elements.length - 1]
-        if (
-          e.shiftKey &&
-          (document.activeElement === first ||
-            document.activeElement === dialog.current)
-        ) {
-          e.preventDefault()
-          last.focus()
-        } else if (
-          !e.shiftKey &&
-          (document.activeElement === last ||
-            document.activeElement === dialog.current)
-        ) {
-          e.preventDefault()
-          first.focus()
-        }
-      }
-    }
-    document.addEventListener('keydown', keydown)
-    return () => {
-      openModals.splice(openModals.indexOf(id), 1)
-      document.removeEventListener('keydown', keydown)
-      previous?.focus()
-    }
-  }, [])
-  return createPortal(
-    <div
-      class={styles.backdrop}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
-      <div
-        class={`${styles.modal} ${compact ? styles.compact : ''}`}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={id}
-        tabIndex={-1}
-        ref={dialog}
-      >
-        <div class={styles.title}>
-          <div id={id}>{title}</div>
-          <button
-            class={styles.close}
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            X
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>,
-    // Fullscreen hides DOM outside its element, including body-level portals.
-    document.fullscreenElement ?? document.body,
+  return (
+    <Dialog id={id} labelledBy={id} onClose={onClose} class={`${styles.modal} ${styles[size ?? (compact ? 'sm' : 'md')]}`}>
+      <header class={styles.header}>
+        <h2 id={id} class={styles.title}>{title}</h2>
+        <button class={styles.close} type="button" onClick={onClose} aria-label="Close">
+          <Icon name="x" size={20} />
+        </button>
+      </header>
+      <div class={styles.body}>{children}</div>
+      {footer && <footer class={styles.footer}>{footer}</footer>}
+    </Dialog>
   )
 }

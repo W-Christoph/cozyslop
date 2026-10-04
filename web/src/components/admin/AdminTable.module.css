@@ -1,45 +1,51 @@
-.background {
-  background: var(--color-menu) var(--noise);
-  padding: 1rem;
+.frame {
   max-width: 100%;
   overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
 }
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  color: var(--color-text);
-  box-shadow: 0 0 9px var(--color-backdrop);
-}
-.table input,
-.table select {
-  background: var(--color-accent) var(--noise);
-  color: var(--color-text);
-  border: none;
-  height: 2em;
-  vertical-align: middle;
-}
-.table input[type='checkbox'] {
-  width: 1.4em;
-}
+.table th:first-child, .table td:first-child { padding-left: 14px; }
+.table th:last-child, .table td:last-child { padding-right: 14px; }
+.table { width: 100%; border-collapse: collapse; color: var(--text); font-size: 0.9rem; }
 .table th {
+  padding: 10px 8px;
   text-align: left;
-  padding: 15px 20px 15px 10px;
-  background: var(--color-button);
-  color: var(--color-text);
-  font-weight: bold;
-  border: 1px solid var(--color-button);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-muted);
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
 }
-.table td {
-  padding: 10px;
-  border-left: 1px solid var(--color-button);
-  border-right: 1px solid var(--color-button);
-}
-.table tr:last-child {
-  border-bottom: 1px solid var(--color-button);
-}
-.table tbody tr:nth-child(even) {
-  background: var(--color-message-bg);
-}
-.table tbody tr:hover {
-  background: var(--color-message-hover);
+.table td { height: 52px; padding: 6px 8px; vertical-align: middle; border-bottom: 1px solid var(--border); }
+.table tbody tr:last-child td { border-bottom: 0; }
+.table tbody tr:hover td { background: color-mix(in srgb, var(--text) 5%, var(--bg-surface)); }
+/* The actions stay in view when a wide table scrolls sideways. */
+.table td:last-child, .table th:last-child { position: sticky; right: 0; }
+.table td:last-child { background: var(--bg-surface); }
+.scrolls td:last-child, .scrolls th:last-child { box-shadow: -8px 0 8px -8px var(--scrim); }
+/* Phones: each row becomes a card; cells name themselves with data-label. */
+@media (max-width: 760px) {
+  .frame { overflow: visible; border: 0; background: transparent; }
+  .table, .table tbody { display: block; }
+  .table thead { display: none; }
+  .table tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-4);
+    margin-bottom: var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-surface);
+  }
+  .table td, .table td:first-child, .table td:last-child { display: flex; align-items: center; gap: var(--space-2); height: auto; padding: 0; border: 0; background: transparent !important; position: static; box-shadow: none; }
+  .table td:first-child { flex: 1 0 100%; }
+  .table td:last-child { flex: 1 0 100%; justify-content: flex-end; flex-wrap: wrap; }
+  .table td:empty { display: none; }
+  .table td[data-label]::before { content: attr(data-label); font-size: 0.8rem; color: var(--text-muted); }
 }

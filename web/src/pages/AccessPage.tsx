@@ -37,12 +37,16 @@ export function AccessPage() {
   }, [code])
   return (
     <InfoScreen
-      message={error ? 'Error' : 'checking Access'}
-      submessage={error || 'please wait'}
+      message={error ? 'Access link not usable' : 'Checking access'}
+      submessage={error || 'Please wait'}
+      busy={!error}
+      icon="alert"
     >
-      <Button accent onClick={() => route('/')}>
-        Home
-      </Button>
+      {error && (
+        <Button size="lg" onClick={() => route('/')}>
+          All rooms
+        </Button>
+      )}
     </InfoScreen>
   )
 }

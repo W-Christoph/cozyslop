@@ -2,7 +2,11 @@ import { useEffect, useState } from 'preact/hooks'
 import { api } from '../../../api'
 import { AdminTable } from '../../admin/AdminTable'
 import { Button } from '../../Button'
+import { Badge } from '../../ui/Badge'
+import { EmptyState, Spinner } from '../../ui/EmptyState'
+import { Notice } from '../../ui/Notice'
 import { useRoomStore } from '../RoomContext'
+import styles from './AnonymousBans.module.css'
 
 interface AnonymousBan {
   id: number
@@ -41,7 +45,7 @@ export function AnonymousBans() {
     try {
       await api.del(`/api/admin/bans/${id}`)
       setBans((current) => current.filter((ban) => ban.id !== id))
-      setMessage('Ban removed!')
+      setMessage('Ban removed.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.')
     } finally {
@@ -51,16 +55,18 @@ export function AnonymousBans() {
   if (!admin) return null
   return (
     <>
-      <Button disabled={busy || loading} onClick={() => setRevision((value) => value + 1)}>Refresh bans</Button>
-      {loading && <p role="status">Loading anonymous bans...</p>}
-      {error && <p role="alert">{error}</p>}
-      {message && <p role="status">{message}</p>}
-      {!loading && !error && !bans.length && <p>No active anonymous bans.</p>}
+      <div class={styles.actions}>
+        <Button size="sm" variant="ghost" icon="refresh" disabled={busy || loading} onClick={() => setRevision((value) => value + 1)}>Refresh</Button>
+      </div>
+      {error && <Notice tone="error">{error}</Notice>}
+      {message && <Notice tone="success">{message}</Notice>}
+      {loading && <Spinner label="Loading anonymous bans..." />}
+      {!loading && !error && !bans.length && <EmptyState icon="ban" title="No active anonymous bans">Ban someone from "In the room".</EmptyState>}
       {!loading && bans.length > 0 && <AdminTable headings={['IP', 'Banned until', '']}>
         {bans.map((ban) => <tr key={ban.id}>
-          <td>{ban.ip}</td>
-          <td>{ban.bannedUntil === null ? 'forever' : new Date(ban.bannedUntil * 1000).toLocaleString()}</td>
-          <td><Button disabled={busy} aria-label={`Unban ${ban.ip}`} onClick={() => { void unban(ban.id) }}>Unban</Button></td>
+          <td class={styles.ip}>{ban.ip}</td>
+          <td>{ban.bannedUntil === null ? <Badge tone="danger">Forever</Badge> : new Date(ban.bannedUntil * 1000).toLocaleString()}</td>
+          <td><div class={styles.actions}><Button size="sm" disabled={busy} aria-label={`Unban ${ban.ip}`} onClick={() => { void unban(ban.id) }}>Unban</Button></div></td>
         </tr>)}
       </AdminTable>}
     </>

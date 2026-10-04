@@ -1,8 +1,16 @@
-.actions {
-  text-align: center;
-}
-.actions p {
-  min-width: 12em;
-  max-width: 20em;
-  white-space: pre-wrap;
-}
+/* The row that adds a permission. */
+.creating td, .creating td:last-child, .creating:hover td { background: var(--bg-sidebar) !important; }
+.creating td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+/* An input that only shows its box when it is in use. */
+.quiet:not(:focus):not(:hover) { background: transparent; border-color: transparent; }
+tr:hover .quiet { background: var(--bg-input); border-color: var(--border); }
+.room { min-width: 8em; }
+.username { width: 8em; }
+.inviteName { width: 8em; }
+.ban { display: flex; align-items: center; gap: var(--space-2); min-height: 30px; }
+.until { width: 13.2em; font-size: 0.82rem !important; }
+.actions { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-1); }
+.delete:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger-text); }
+.error, .status { margin: var(--space-1) 0 0; max-width: 20em; font-size: 0.82rem; text-align: right; white-space: pre-wrap; }
+.error { color: var(--danger-text); }
+.status { color: var(--success-text); }

@@ -8,3 +8,5 @@
 .resume { display: none; }
 .badge:hover .badgeLabel { display: none; }
 .badge:hover .resume { display: inline; }
+[data-chat-style='modern'] .temporary, [data-chat-style='compact'] .temporary { background: transparent; box-shadow: none; color: var(--color-text-muted); }
+[data-chat-style='compact'] .temporary { margin-top: 0.3em; text-align: left; padding-left: 0; }

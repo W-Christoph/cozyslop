@@ -8,7 +8,7 @@
 .deleteButton:hover { background: var(--color-orange); }
 .editButton { right: 1.5em; }
 .editButton img { padding: 15%; width: 100%; height: 100%; filter: var(--icon-invert); }
-.username { font-weight: 600; padding-left: 0.5em; position: relative; word-break: normal; overflow: hidden; }
+.username { color: var(--name-colour); font-weight: 600; padding-left: 0.5em; position: relative; word-break: normal; overflow: hidden; }
 .realUsername { opacity: 0; position: absolute; background: var(--color-menu); border-radius: 0.2em; color: var(--color-text); user-select: none; pointer-events: none; top: -0.2em; right: 0.4em; min-width: 3em; text-align: right; }
 .username:hover .realUsername { opacity: 1; }
 .timestamp { font-weight: 300; font-size: 0.8em; color: var(--color-text-misc); margin-right: 0.5em; float: right; }
@@ -19,3 +19,30 @@
 .subMessage:hover .hoverTime { visibility: visible; opacity: 1; }
 .hoverTime::before { content: ''; position: absolute; border: 0.3em solid; left: 50%; top: 100%; transform: translateX(-50%); border-color: var(--color-accent) transparent transparent; }
 @media (hover: none) { .deleteButton { visibility: visible; } }
+
+/* On the light theme, name colours picked for dark backgrounds are darkened
+   until they read. Not over the stream, where chat is light on dark. */
+[data-theme='light'] [data-chat-style]:not([data-chat-overlay]) .username { color: color-mix(in oklab, var(--name-colour) 55%, black); }
+
+/* Profile pictures: a column on the left of the group. */
+.withAvatar { position: relative; padding-left: 2.2em; min-height: 2.7em; }
+.withAvatar .username { padding-left: 0.3em; }
+.withAvatar .subMessage { padding-left: 0.3em; }
+
+/* Modern: no bubble, name and time on one line. */
+[data-chat-style='modern'] .message { background: transparent; box-shadow: none; margin-top: 0.8em; padding-top: 0; line-height: 1.3; }
+[data-chat-style='modern'] .username { display: flex; align-items: baseline; gap: 0.5em; padding-left: 0; overflow: visible; }
+[data-chat-style='modern'] .timestamp { float: none; margin: 0; font-size: 0.7em; }
+[data-chat-style='modern'] .subMessage { padding: 0.1em 0.3em 0.1em 0; border-radius: 0.2em; }
+[data-chat-style='modern'] .subMessage:last-of-type { padding-bottom: 0.1em; }
+[data-chat-style='modern'] .withAvatar { padding-left: 2.9em; min-height: 2.5em; }
+[data-chat-style='modern'] .avatarSlot { left: 0; top: 0.15em; width: 2.3em; height: 2.3em; }
+
+/* Compact: the name in front of the first line, wrapped lines indented under
+   it, nothing else around it. */
+[data-chat-style='compact'] .message { background: transparent; box-shadow: none; margin-top: 0.35em; padding: 0 0 0 0.9em; line-height: 1.35; }
+[data-chat-style='compact'] .message::after { content: ''; display: block; clear: both; }
+[data-chat-style='compact'] .username { float: left; display: flex; flex-direction: row-reverse; align-items: baseline; gap: 0.4em; margin-left: -0.9em; padding: 0 0.45em 0 0; overflow: visible; font-size: 0.9em; line-height: 1.3; }
+[data-chat-style='compact'] .timestamp { float: none; margin: 0; font-size: 0.72em; }
+[data-chat-style='compact'] .subMessage { padding: 0 0.2em 0 0; border-radius: 0.2em; }
+[data-chat-style='compact'] .subMessage:last-of-type { padding-bottom: 0; }

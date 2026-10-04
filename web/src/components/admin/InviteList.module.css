@@ -1,4 +1,12 @@
-.link {
-  color: var(--color-text);
-  overflow-wrap: anywhere;
-}
+.room { font-weight: 600; white-space: nowrap; }
+.name { display: flex; align-items: center; gap: var(--space-2); font-weight: 600; }
+.link { display: block; max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 0.8rem var(--font-mono); color: var(--text-muted); text-decoration: none; }
+.link:hover { color: var(--accent-text); text-decoration: underline; }
+.expires { margin-top: 2px; font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; }
+.uses { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.grants { display: flex; flex-wrap: wrap; gap: 4px; }
+.none { font-size: 0.85rem; color: var(--text-muted); white-space: nowrap; }
+.unnamed { font-weight: 400; color: var(--text-muted); }
+.expired td:not(:last-child) { opacity: 0.8; }
+.actions { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-1); white-space: nowrap; }
+.delete:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger-text); }

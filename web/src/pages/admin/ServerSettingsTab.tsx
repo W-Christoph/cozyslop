@@ -2,6 +2,9 @@ import { useEffect, useState } from 'preact/hooks'
 import { api, type ServerSettings } from '../../api'
 import { refreshServerSettings, serverSettings } from '../../app/state'
 import { Button } from '../../components/Button'
+import { Field, Textarea } from '../../components/ui/Field'
+import { Notice } from '../../components/ui/Notice'
+import { Section, ToggleRow } from '../../components/ui/Section'
 import styles from './ServerSettingsTab.module.css'
 
 export function ServerSettingsTab() {
@@ -25,7 +28,7 @@ export function ServerSettingsTab() {
         { message, registration: inviteOnly ? 'invite' : 'open' },
       )
       await refreshServerSettings()
-      setStatus('updated!')
+      setStatus('Settings saved.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.')
     } finally {
@@ -34,35 +37,32 @@ export function ServerSettingsTab() {
   }
   return (
     <form
-      class={styles.settings}
       onSubmit={(e) => {
         e.preventDefault()
         void save()
       }}
     >
-      <label class={styles.message}>
-        Message
-        <textarea
-          rows={3}
-          cols={60}
-          maxLength={4096}
-          value={message}
-          onInput={(e) => setMessage(e.currentTarget.value)}
-        />
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={inviteOnly}
-          onChange={(e) => setInviteOnly(e.currentTarget.checked)}
-        />
-        Invite required to register
-      </label>
-      <Button accent type="submit" disabled={busy}>
-        Update Settings
-      </Button>
-      {error && <p role="alert">{error}</p>}
-      {status && <p role="status">{status}</p>}
+      <Section title="Announcement" description="Shown to everyone above the list of rooms.">
+        <Field label="Message" hint="Leave empty to show nothing.">
+          <Textarea
+            rows={4}
+            maxLength={4096}
+            value={message}
+            onInput={(e) => { setMessage(e.currentTarget.value); setStatus('') }}
+          />
+        </Field>
+      </Section>
+      <Section title="Registration">
+        <ToggleRow title="Invite required to register" description="Only people with an invite link can create an account."
+          checked={inviteOnly} onChange={(value) => { setInviteOnly(value); setStatus('') }} />
+      </Section>
+      <div class={styles.actions}>
+        {error && <Notice tone="error">{error}</Notice>}
+        {status && <Notice tone="success">{status}</Notice>}
+        <Button accent type="submit" disabled={busy}>
+          {busy ? 'Saving…' : 'Save changes'}
+        </Button>
+      </div>
     </form>
   )
 }

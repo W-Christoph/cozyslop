@@ -89,13 +89,15 @@ export function PermissionRow({
       onSaved(result)
       setDraft(creating ? blankPermission(room ?? rooms[0]?.name) : result)
       setUntil(creating ? '' : datetime(result.bannedUntil))
-      setStatus(creating ? 'Permission created!' : 'Permission saved!')
+      setStatus(creating ? 'Permission added.' : 'Saved.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.')
     } finally {
       setBusy(false)
     }
   }
+  const dirty = (creating && !!draft.username.trim()) || until !== datetime(permission.bannedUntil) ||
+    (Object.keys(draft) as (keyof Permission)[]).some((key) => key !== 'bannedUntil' && draft[key] !== permission[key])
   async function remove() {
     setBusy(true)
     setError('')
@@ -112,7 +114,7 @@ export function PermissionRow({
     }
   }
   return (
-    <tr>
+    <tr class={creating ? styles.creating : undefined}>
       <PermissionFields
         draft={draft}
         room={room}
@@ -126,30 +128,40 @@ export function PermissionRow({
           setStatus('')
         }}
       />
-      <td class={styles.actions}>
-        <Button accent disabled={busy} onClick={save}>
-          {creating ? 'Create' : 'Save'}
-        </Button>
-        {error && <p role="alert">{error}</p>}
-        {status && <p role="status">{status}</p>}
-      </td>
       <td>
-        <Button
-          accent
-          disabled={busy}
-          onClick={
-            creating
-              ? () => {
-                  setDraft(blankPermission(room ?? rooms[0]?.name))
-                  setUntil('')
-                  setError('')
-                  setStatus('')
-                }
-              : remove
-          }
-        >
-          {creating ? 'Clear' : 'Delete'}
-        </Button>
+        <div class={styles.actions}>
+          <Button size="sm" variant={dirty ? 'primary' : 'ghost'} disabled={busy || !dirty} onClick={save}>
+            {creating ? 'Add' : 'Save'}
+          </Button>
+          {creating ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                setDraft(blankPermission(room ?? rooms[0]?.name))
+                setUntil('')
+                setError('')
+                setStatus('')
+              }}
+            >
+              Clear
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon="trash"
+              class={styles.delete}
+              aria-label={`Delete the permission of ${draft.username}`}
+              title="Delete"
+              disabled={busy}
+              onClick={remove}
+            />
+          )}
+        </div>
+        {error && <p class={styles.error} role="alert">{error}</p>}
+        {status && <p class={styles.status} role="status">{status}</p>}
       </td>
     </tr>
   )

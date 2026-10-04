@@ -12,13 +12,14 @@ body,
 }
 
 body {
-  font-family: var(--font-sans);
-  background: var(--color-bg);
-  color: var(--color-text);
-  scrollbar-color: var(--color-scrollbar) var(--color-scroll-thumb);
+  font-family: var(--font-ui);
+  background: var(--bg-app);
+  color: var(--text);
+  scrollbar-color: var(--border-strong) transparent;
 }
 
-button {
+/* Element defaults sit in :where() so that any class outweighs them. */
+:where(button) {
   font: inherit;
   color: var(--color-text);
   background: var(--color-button);
@@ -28,11 +29,25 @@ button {
   cursor: pointer;
 }
 
-button:hover:not(:disabled) {
+:where(button:hover:not(:disabled)) {
   background: var(--color-button-accent);
 }
 
-button:disabled {
+:where(button:disabled) {
   opacity: 0.5;
   cursor: default;
+}
+
+:where(input, select, textarea) {
+  font: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

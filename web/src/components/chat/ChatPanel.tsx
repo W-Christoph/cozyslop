@@ -33,8 +33,10 @@ export function ChatPanel({ active = true }: { active?: boolean }) {
     if (!active) { store.setTyping(false); setEditing(null); setMedia(null) }
   }, [active, store])
   const endEdit = () => { setEditing(null); input.current?.focus() }
-  const transparent = fullscreen && preferences.value.transparentChat
-  return <div ref={panel} hidden={!active} class={`${styles.chat} ${transparent ? styles.transparent : ''}`}>
+  const { transparentChat, chatStyle, chatScale } = preferences.value
+  const transparent = fullscreen && transparentChat
+  return <div ref={panel} hidden={!active} class={`${styles.chat} ${transparent ? styles.transparent : ''}`}
+    data-chat-style={chatStyle} data-chat-overlay={transparent || undefined} style={chatScale && chatScale !== 100 ? { fontSize: `${chatScale}%` } : undefined}>
     <MessageList lines={lines} editing={editing} onEdit={setEditing} onEndEdit={endEdit} onMedia={setMedia} />
     <ChatInput inputRef={input} onEdit={setEditing} />
     {mediaMessage && <MediaModal message={mediaMessage} onClose={() => setMedia(null)} />}

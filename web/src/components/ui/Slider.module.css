@@ -1,0 +1,33 @@
+.slider { display: flex; flex-direction: column; }
+.slider input {
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  margin: 8px 0;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--accent) var(--fill), var(--border-strong) var(--fill));
+  cursor: pointer;
+}
+.slider input:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.slider input::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-crop-white);
+  box-shadow: 0 0 0 1px var(--border-strong), 0 1px 4px var(--color-shadow);
+}
+.slider input::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-crop-white);
+  box-shadow: 0 0 0 1px var(--border-strong), 0 1px 4px var(--color-shadow);
+}
+/* Each label sits under the thumb's position for its stop (the thumb is 18px wide). */
+.stops { position: relative; height: 2em; font-size: 0.78rem; color: var(--text-muted); }
+.stops span { position: absolute; top: 8px; left: calc(9px + (100% - 18px) * var(--at)); transform: translateX(-50%); white-space: nowrap; }
+.stops span::before { content: ''; position: absolute; left: 50%; top: -8px; width: 1px; height: 6px; background: var(--border-strong); }
+.current { color: var(--accent-text); font-weight: 600; }

@@ -1,7 +1,11 @@
-import { useState } from 'preact/hooks'
+import { useId, useState } from 'preact/hooks'
 import { api, type InviteView } from '../../api'
 import { Modal } from '../Modal'
 import { Button } from '../Button'
+import { Field, Input, Select } from '../ui/Field'
+import { Notice } from '../ui/Notice'
+import { RadioCards } from '../ui/RadioCards'
+import { ToggleRow } from '../ui/Section'
 import styles from './InviteModal.module.css'
 
 export function InviteModal({
@@ -22,6 +26,7 @@ export function InviteModal({
     [error, setError] = useState(''),
     [message, setMessage] = useState(''),
     [busy, setBusy] = useState(false)
+  const form = useId()
   async function generate() {
     setBusy(true)
     setError('')
@@ -49,102 +54,86 @@ export function InviteModal({
     setMessage('')
     try {
       await navigator.clipboard.writeText(link)
-      setMessage('Copied!')
+      setMessage('Link copied.')
     } catch {
       setError('Could not copy the link. Select it and copy it manually.')
     }
   }
+  const changed = () => { setLink(''); setMessage('') }
   return (
-    <Modal title="Invite Link" onClose={onClose}>
+    <Modal title={`Invite to ${room}`} onClose={onClose} footer={<>
+      <Button onClick={onClose}>{link ? 'Done' : 'Cancel'}</Button>
+      <Button accent type="submit" form={form} disabled={busy}>
+        {link ? 'Generate another' : 'Generate link'}
+      </Button>
+    </>}>
       <form
+        id={form}
         class={styles.form}
         onSubmit={(e) => {
           e.preventDefault()
           void generate()
         }}
       >
-        <label class={styles.row}>
-          <input
-            type="checkbox"
-            checked={temporary}
-            onChange={(e) => setTemporary(e.currentTarget.checked)}
-          />
-          Temporary
-        </label>
-        <label class={styles.row}>
-          <input
-            type="checkbox"
-            checked={remote}
-            onChange={(e) => setRemote(e.currentTarget.checked)}
-          />
-          Allow remote rights
-        </label>
-        <label class={styles.row}>
-          <input
-            type="checkbox"
-            checked={image}
-            onChange={(e) => setImage(e.currentTarget.checked)}
-          />
-          Allow image rights
-        </label>
-        <label class={styles.row}>
-          <input
-            type="checkbox"
-            checked={upload}
-            onChange={(e) => setUpload(e.currentTarget.checked)}
-          />
-          Allow upload rights
-        </label>
-        <label class={styles.row}>
-          Max Uses
-          <select
-            value={maxUses}
-            onChange={(e) => setMaxUses(e.currentTarget.value)}
-          >
-            <option value="1">1</option>
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="">Unlimited</option>
-          </select>
-        </label>
-        <label class={styles.row}>
-          Expiration
-          <select
-            value={expiry}
-            onChange={(e) => setExpiry(e.currentTarget.value)}
-          >
-            <option value="5">5 minutes</option>
-            <option value="60">1 hour</option>
-            <option value="1440">1 day</option>
-            <option value="">Unlimited</option>
-          </select>
-        </label>
-        <label class={styles.row}>
-          Invite name (optional)
-          <input
+        <RadioCards name="inviteType" label="Kind of link" columns={2} value={temporary ? 'access' : 'invite'}
+          onChange={(value) => { setTemporary(value === 'access'); changed() }}
+          options={[
+            { value: 'invite', label: 'Invite', description: 'An account that opens it keeps access to the room.' },
+            { value: 'access', label: 'Temporary', description: 'Lets anyone in without an account, for that visit.' },
+          ]} />
+        <div class={styles.group}>
+          <div class={styles.groupLabel}>Whoever uses it may</div>
+          <ToggleRow title="Use the remote" checked={remote} onChange={(value) => { setRemote(value); changed() }} />
+          <ToggleRow title="Post images in chat" checked={image} onChange={(value) => { setImage(value); changed() }} />
+          <ToggleRow title="Upload files to the desktop" checked={upload} onChange={(value) => { setUpload(value); changed() }} />
+        </div>
+        <div class={styles.pair}>
+          <Field label="Max uses">
+            <Select
+              value={maxUses}
+              onChange={(e) => { setMaxUses(e.currentTarget.value); changed() }}
+            >
+              <option value="1">1</option>
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="">Unlimited</option>
+            </Select>
+          </Field>
+          <Field label="Expires after">
+            <Select
+              value={expiry}
+              onChange={(e) => { setExpiry(e.currentTarget.value); changed() }}
+            >
+              <option value="5">5 minutes</option>
+              <option value="60">1 hour</option>
+              <option value="1440">1 day</option>
+              <option value="">Never</option>
+            </Select>
+          </Field>
+        </div>
+        <Field label="Name" hint="Optional. To tell your invites apart later.">
+          <Input
             maxLength={64}
             value={name}
-            onInput={(e) => setName(e.currentTarget.value)}
+            onInput={(e) => { setName(e.currentTarget.value); changed() }}
           />
-        </label>
-        <label class={styles.row}>
-          Code
-          <input
-            class={styles.code}
-            readOnly
-            value={link || 'Press Generate'}
-            onFocus={(e) => e.currentTarget.select()}
-          />
-        </label>
-        <div class={styles.actions}>
-          <Button type="submit" disabled={busy}>
-            Generate
-          </Button>
-          {link && <Button onClick={copy}>Copy</Button>}
-        </div>
+        </Field>
+        {link && (
+          <Field label="Link">
+            <div class={styles.link}>
+              <Input
+                class={styles.code}
+                readOnly
+                value={link}
+                onFocus={(e) => e.currentTarget.select()}
+              />
+              <Button icon="copy" onClick={copy}>Copy</Button>
+            </div>
+          </Field>
+        )}
+        {error && <Notice tone="error">{error}</Notice>}
+        {message && <Notice tone="success">{message}</Notice>}
       </form>
-      {error && <p role="alert">{error}</p>}
-      {message && <p role="status">{message}</p>}
     </Modal>
   )
 }

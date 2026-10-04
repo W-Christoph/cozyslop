@@ -1,6 +1,7 @@
 import { preferences, updatePreferences } from '../../app/state'
 import { IconButton } from './IconButton'
 import { useRoomStore } from './RoomContext'
+import type { RoomWindow } from '../../pages/RoomPage'
 import type { SidebarTab } from './Sidebar'
 import styles from './Controls.module.css'
 
@@ -8,13 +9,15 @@ interface Props {
   fullscreen: boolean
   userlistHidden: boolean
   sidebar: SidebarTab
+  window: RoomWindow | null
   onToggleUsers: () => void
   onPersonalSettings: () => void
   onSidebar: (tab: SidebarTab) => void
+  onWindow: (window: RoomWindow) => void
   onFullscreen: () => void
 }
 
-export function Controls({ fullscreen, userlistHidden, sidebar, onToggleUsers, onPersonalSettings, onSidebar, onFullscreen }: Props) {
+export function Controls({ fullscreen, userlistHidden, sidebar, window, onToggleUsers, onPersonalSettings, onSidebar, onWindow, onFullscreen }: Props) {
   const store = useRoomStore()
   const host = store.isHost.value
   const holder = store.remoteHolder.value
@@ -56,10 +59,10 @@ export function Controls({ fullscreen, userlistHidden, sidebar, onToggleUsers, o
           }} />
       </div>
       {!(fullscreen && host) && <div class={styles.group}>
-        {store.rights.value.upload && <IconButton icon="imageupload" label="Files of the desktop" active={sidebar === 'FILES'}
-          aria-pressed={sidebar === 'FILES'} onClick={() => toggleSidebar('FILES')} />}
-        {store.rights.value.admin && <IconButton icon="settings" label="Room settings" active={sidebar === 'SETTINGS'}
-          aria-pressed={sidebar === 'SETTINGS'} onClick={() => toggleSidebar('SETTINGS')} />}
+        {store.rights.value.upload && <IconButton icon="imageupload" label="Files of the desktop" active={window === 'files'}
+          aria-haspopup="dialog" onClick={() => onWindow('files')} />}
+        {store.rights.value.admin && <IconButton icon="settings" label="Room settings" active={window === 'settings'}
+          aria-haspopup="dialog" onClick={() => onWindow('settings')} />}
         <IconButton icon="users" label="Users sidebar" active={sidebar === 'USERS'} aria-pressed={sidebar === 'USERS'} onClick={() => toggleSidebar('USERS')} />
         <IconButton icon="message-circle" label="Chat sidebar" active={sidebar === 'CHAT'} aria-pressed={sidebar === 'CHAT'} onClick={() => toggleSidebar('CHAT')} />
       </div>}

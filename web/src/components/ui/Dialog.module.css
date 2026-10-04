@@ -1,0 +1,36 @@
+.backdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: flex;
+  padding: var(--space-4);
+  overflow: auto;
+  background: var(--scrim);
+  backdrop-filter: blur(2px);
+  animation: fade 0.12s ease-out;
+  /* Dialogs opened from the room must not inherit its font and text shadow. */
+  font: 15px/1.45 var(--font-ui);
+  color: var(--text);
+  text-shadow: none;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: auto;
+  color-scheme: var(--scheme);
+  scrollbar-color: var(--border-strong) transparent;
+  -webkit-font-smoothing: antialiased;
+}
+.dialog {
+  margin: auto;
+  max-width: 100%;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-dialog);
+  animation: rise 0.16s ease-out;
+}
+.dialog:focus { outline: none; }
+@keyframes fade { from { opacity: 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(8px) scale(0.985); } }
+@media (max-width: 640px) {
+  .backdrop { padding: 0; }
+  .dialog { border-radius: 0; }
+}

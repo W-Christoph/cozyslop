@@ -1,3 +1,4 @@
-.preview { max-width: 95%; width: auto; max-height: 40vh; object-fit: contain; border-radius: 0.2em; }
-.actions { display: flex; justify-content: center; width: 100%; gap: 2.5em; margin: var(--space-4) 0; }
-.error { color: var(--color-orange); font-size: 0.9em; }
+.frame { display: grid; place-items: center; min-height: 160px; padding: var(--space-3); border-radius: var(--radius-md); background: var(--bg-input); }
+.preview { display: block; max-width: 100%; max-height: 50vh; object-fit: contain; border-radius: var(--radius); }
+.file { display: flex; justify-content: space-between; gap: var(--space-3); margin: var(--space-3) 0; font-size: 0.87rem; color: var(--text-muted); }
+.name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }

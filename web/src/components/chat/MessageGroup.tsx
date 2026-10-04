@@ -1,6 +1,8 @@
 import type { ChatMessage } from '../../room/protocol'
 import { useLayoutEffect, useRef } from 'preact/hooks'
+import { preferences } from '../../app/state'
 import { useRoomStore } from '../room/RoomContext'
+import { ChatAvatar } from './ChatAvatar'
 import { InlineMedia } from './InlineMedia'
 import { MessageEditor } from './MessageEditor'
 import { MessageText } from './MessageText'
@@ -27,9 +29,14 @@ export function MessageGroup({ messages, editing, onEdit, onEndEdit, onMedia, on
   }, [messages.length])
   const first = messages[0]
   const own = first.author === store.selfKey.value
-  const username = first.anonymous ? `Anon(${first.author.slice(2, 6)})` : store.users.value.get(first.author)?.username
-  return <div data-chat-bubble class={styles.message} ref={bubble}>
-    <div class={styles.username} style={{ color: first.nameColor }} title={username}>
+  const author = store.users.value.get(first.author)
+  const username = first.anonymous ? `Anon(${first.author.slice(2, 6)})` : author?.username
+  const { chatAvatars, chatStyle, manualLoadMedia } = preferences.value
+  const avatar = chatAvatars && chatStyle !== 'compact'
+  return <div data-chat-bubble class={`${styles.message} ${avatar ? styles.withAvatar : ''}`} ref={bubble}>
+    {avatar && <ChatAvatar class={styles.avatarSlot} nickname={first.nickname} color={first.nameColor}
+      url={manualLoadMedia || !author ? undefined : author.avatarUrl || (author.anonymous ? '/png/default_avatar_on_alpha.png' : '/png/default_avatar.png')} />}
+    <div class={styles.username} style={{ '--name-colour': first.nameColor }} title={username}>
       {first.nickname}
       {username && <div class={styles.realUsername}>{username}</div>}
       <span class={styles.timestamp}>{messageTime(first.time)}</span>

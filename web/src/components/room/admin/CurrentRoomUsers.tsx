@@ -3,10 +3,13 @@ import { api, type AnonGrant, type Permission } from '../../../api'
 import type { User } from '../../../room/protocol'
 import { AdminTable } from '../../admin/AdminTable'
 import { Button } from '../../Button'
+import { Spinner } from '../../ui/EmptyState'
+import { Notice } from '../../ui/Notice'
 import { useRoomStore } from '../RoomContext'
 import { BanModal } from './BanModal'
 import { CurrentRoomUserRow } from './CurrentRoomUserRow'
 import { RoomDefaultsRow } from './RoomDefaultsRow'
+import styles from './CurrentRoomUserRow.module.css'
 
 export function CurrentRoomUsers() {
   const store = useRoomStore()
@@ -45,10 +48,12 @@ export function CurrentRoomUsers() {
   const byKey = new Map(grants.map((grant) => [grant.key, grant]))
   return (
     <>
-      <Button disabled={loading} onClick={() => setRevision((value) => value + 1)}>Refresh permissions</Button>
-      {loading && <p role="status">Loading permissions...</p>}
-      {error && <p role="alert">{error}</p>}
-      <AdminTable headings={['Avatar', 'Nickname', 'User', 'Trusted', 'Invited', 'Invite Name', 'Remote', 'Images', 'Upload', '', '']}>
+      {error && <Notice tone="error">{error}</Notice>}
+      <div class={styles.toolbar}>
+        {loading ? <Spinner label="Loading permissions..." /> : <span>{users.length === 1 ? '1 person' : `${users.length} people`} in the room</span>}
+        <Button size="sm" variant="ghost" icon="refresh" disabled={loading} onClick={() => setRevision((value) => value + 1)}>Refresh</Button>
+      </div>
+      <AdminTable headings={['User', 'Trusted', 'Invited', 'Invite name', 'Remote', 'Images', 'Upload', '']}>
         <RoomDefaultsRow />
         {users.map((user) => (
           <CurrentRoomUserRow key={user.key} user={user} permission={byUsername.get(user.username)}
@@ -58,7 +63,6 @@ export function CurrentRoomUsers() {
             onSaved={(saved) => setPermissions((current) => [...current.filter((row) => row.username !== saved.username), saved])} />
         ))}
       </AdminTable>
-      {!users.length && <p>No users are currently in the room.</p>}
       {target && <BanModal user={target} onClose={() => setTarget(null)} onBanned={() => {
         setTarget(null)
         setRevision((value) => value + 1)

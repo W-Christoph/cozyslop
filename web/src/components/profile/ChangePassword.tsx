@@ -1,6 +1,8 @@
 import { useState } from 'preact/hooks'
 import { api } from '../../api'
 import { Button } from '../Button'
+import { Field, Input } from '../ui/Field'
+import { Notice } from '../ui/Notice'
 import styles from './ChangePassword.module.css'
 
 export function ChangePassword() {
@@ -23,7 +25,7 @@ export function ChangePassword() {
       setCurrent('')
       setPassword('')
       setConfirmation('')
-      setMessage('Password changed!')
+      setMessage('Password changed. Other devices have been logged out.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.')
     } finally {
@@ -38,10 +40,8 @@ export function ChangePassword() {
         void save()
       }}
     >
-      <h2>Change password</h2>
-      <label>
-        Current password
-        <input
+      <Field label="Current password">
+        <Input
           required
           type="password"
           autoComplete="current-password"
@@ -49,35 +49,37 @@ export function ChangePassword() {
           value={current}
           onInput={(e) => setCurrent(e.currentTarget.value)}
         />
-      </label>
-      <label>
-        New password
-        <input
-          required
-          type="password"
-          autoComplete="new-password"
-          minLength={8}
-          maxLength={72}
-          value={password}
-          onInput={(e) => setPassword(e.currentTarget.value)}
-        />
-      </label>
-      <label>
-        Confirm Password
-        <input
-          required
-          type="password"
-          autoComplete="new-password"
-          maxLength={72}
-          value={confirmation}
-          onInput={(e) => setConfirmation(e.currentTarget.value)}
-        />
-      </label>
-      <Button disabled={busy} type="submit">
-        Change password
-      </Button>
-      {error && <p role="alert">{error}</p>}
-      {message && <p role="status">{message}</p>}
+      </Field>
+      <div class={styles.pair}>
+        <Field label="New password" hint="At least 8 characters.">
+          <Input
+            required
+            type="password"
+            autoComplete="new-password"
+            minLength={8}
+            maxLength={72}
+            value={password}
+            onInput={(e) => setPassword(e.currentTarget.value)}
+          />
+        </Field>
+        <Field label="Confirm new password">
+          <Input
+            required
+            type="password"
+            autoComplete="new-password"
+            maxLength={72}
+            value={confirmation}
+            onInput={(e) => setConfirmation(e.currentTarget.value)}
+          />
+        </Field>
+      </div>
+      {error && <Notice tone="error">{error}</Notice>}
+      {message && <Notice tone="success">{message}</Notice>}
+      <div class={styles.actions}>
+        <Button disabled={busy} type="submit">
+          Change password
+        </Button>
+      </div>
     </form>
   )
 }

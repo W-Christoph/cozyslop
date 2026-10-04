@@ -1,0 +1,7 @@
+.preview { display: flex; flex-direction: column; gap: 6px; height: 92px; padding: 10px; background: var(--bg-sidebar); }
+.left { flex-direction: row-reverse; }
+.screen { flex: 1; border-radius: 4px; background: var(--color-bg); border: 1px solid var(--border); }
+.people { display: flex; justify-content: center; gap: 5px; }
+.left .people { flex-direction: column; }
+.people span { width: 12px; height: 12px; border-radius: 50%; background: var(--border-strong); }
+.people span:first-child { background: var(--accent); }

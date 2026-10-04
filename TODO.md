@@ -8,7 +8,6 @@ read; findings checked against the code). State as of the end of that day.
 Nothing in the code blocks a deployment any more. These are steps and
 checks on the real server.
 
-- [ ] Push `main` (the review fixes are local commits).
 - [ ] Set `DOMAIN` in `.env` (or put TLS in front). Without it, logins go
       over plain HTTP.
 - [ ] Rebuild both images: `docker compose up -d --build`. The room image
@@ -17,14 +16,9 @@ checks on the real server.
       network, as in `compose.yaml`.
 - [ ] Migration: `sudo chown 65532:65532 import/cozycast-export.tar.gz`
       before the first start (`docs/migration.md`).
-- [ ] Watch a room in a real browser: video and sound play, and the
-      picture follows a stream change in the room settings. The server now
-      carries neko's WebSocket itself; signalling was tested against neko
-      3.1.6 and in headless Chromium, playback was not.
-- [ ] Mobile keyboard on a real phone: capitals, autocorrect, Enter and
-      Backspace. Text goes through neko's paste (Ctrl+V), so typing into
-      the desktop's terminal is expected not to work.
-- [ ] In a room's terminal, `sudo` is refused (`no-new-privileges`).
+- [ ] In a real browser: the picture follows a stream change in the room
+      settings. (Video and sound play: checked locally on 2026-10-04, on a
+      PC and on a phone over the LAN.)
 - [ ] Check what neko's `filetransfer/update` message contains for a viewer
       without the upload right. It is sent to every viewer on connect; if
       it lists the desktop's Downloads, filter it in the proxy.
@@ -94,7 +88,12 @@ Housekeeping
       and the page becoming visible again.
 - [x] Mobile keyboard: all text is inserted through neko's paste, only
       Enter, Backspace and Delete are keys (capitals arrived lowercase).
+      Checked on a phone, capitals included. Text typed on a phone does not
+      reach programs that do not paste on Ctrl+V (the terminal).
 - [x] Room containers run with `no-new-privileges`: no sudo on the desktop.
+      Checked in the running room.
+- Checked in a browser: a mouse button released outside the desktop, "Room
+  not found", logout following other tabs.
 - Decided: an open tab keeps the chat it has, beyond the one-hour /
   1000-message retention.
 - Decided: Tab stays with the desktop while holding the remote; a keyboard

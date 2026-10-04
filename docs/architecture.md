@@ -34,7 +34,10 @@ its neko member id.
 
 neko runs as the desktop's user, so whoever holds the remote can read the
 admin token of their room's neko (the desktop has a terminal) and use neko's
-admin API from inside the room. That cannot be prevented, so it is contained:
+admin API from inside the room. Hiding the token would mean running neko
+under another user than the desktop, which needs a patched image. So the
+person holding the remote is treated as in control of their room's neko, and
+that is kept from reaching further:
 
 - Every room has its own token, derived from one secret and the room's name
   (`config.NekoToken`, `worker/entrypoint.sh`). The secret never reaches the
@@ -43,8 +46,17 @@ admin API from inside the room. That cannot be prevented, so it is contained:
 - The proxy only lets through neko tokens the server issued to a tab still
   in the room, so a member created with the admin token is no use from
   outside.
-- Every 30 seconds the server deletes neko members that belong to no tab and
-  resets profiles that differ from the tab's rights (`Room.checkMembers`).
+- The room containers run with `no-new-privileges` (`compose.yaml`): neko's
+  image gives the desktop user passwordless sudo, and this turns it off. The
+  remote holder is an ordinary user in the container, not root.
+
+Every 30 seconds the server compares neko's members with the tabs in the
+room, deletes members that belong to no tab and sets profiles that differ
+from the tab's rights again (`Room.checkMembers`). This repairs what a failed
+call to neko left behind (a rights change that did not reach neko). It also
+undoes changes made with the admin token, but it is not a defence against
+them: someone on the desktop can repeat a change faster than it is undone.
+What ends that is taking away their remote right and restarting the room.
 
 ## Auth
 

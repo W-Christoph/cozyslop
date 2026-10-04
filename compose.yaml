@@ -6,6 +6,11 @@ x-room: &room
   image: cozycast-worker
   restart: unless-stopped
   shm_size: 2gb
+  # neko's image gives the desktop user passwordless sudo. Whoever holds the
+  # remote has a terminal, so this takes sudo (and every other setuid
+  # program) away: they stay an ordinary user inside the room.
+  security_opt:
+    - no-new-privileges:true
   environment: &room-env
     NEKO_DESKTOP_SCREEN: ${SCREEN:-1280x720@30}
     # CozyCast's server is the only neko admin; browsers get per-user tokens.

@@ -19,7 +19,8 @@
 
 ## Layout
 
-- `worker/`: room image, unmodified neko XFCE image plus Firefox and VLC.
+- `worker/`: room image, unmodified neko XFCE image plus Firefox, VLC
+  and Ristretto.
   Configure neko through environment variables in `compose.yaml`, never by
   patching neko.
 - `server/`: Go. The server is the only neko admin; browsers get per-tab

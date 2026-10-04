@@ -1,4 +1,5 @@
-# CozyCast room worker: an unmodified neko XFCE desktop plus Firefox and VLC.
+# CozyCast room worker: an unmodified neko XFCE desktop plus Firefox, VLC and
+# the Ristretto image viewer.
 # Capture, encoding, WebRTC and input are handled by neko itself; this image
 # only adds the apps we want on the desktop.
 ARG NEKO_VERSION=3.1.6
@@ -23,7 +24,7 @@ RUN set -eux; \
     # librsvg2-common lets GTK draw SVG icons. The desktop's icon theme is
     # SVG apart from a 16 pixel set; without it, file and toolbar icons are
     # those 16 pixels blown up.
-    apt-get install -y --no-install-recommends vlc libdbus-glib-1-2 librsvg2-common greybird-gtk-theme; \
+    apt-get install -y --no-install-recommends vlc ristretto tumbler libdbus-glib-1-2 librsvg2-common greybird-gtk-theme; \
     apt-get clean -y; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 

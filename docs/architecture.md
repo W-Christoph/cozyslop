@@ -69,7 +69,12 @@ What ends that is taking away their remote right and restarting the room.
   sessions and closes its sockets.
 - The room WebSocket authenticates with the same cookie during the upgrade;
   same-origin is enforced on upgrade, so other sites cannot open it.
-- Login and registration are rate limited per IP.
+- Login and registration are rate limited per IP. With
+  `COZYCAST_TRUST_PROXY=true`, the client IP is the last entry of the last
+  `X-Forwarded-For` header, validated as an IP (IPv4-mapped addresses are
+  unmapped); an invalid entry falls back to the peer address. Use exactly
+  one proxy in front: it must append to `X-Forwarded-For`, and the server
+  must not be reachable around it.
 
 ## Data (SQLite)
 
@@ -95,7 +100,10 @@ embedded SQL files applied in order at startup (`server/internal/store/migration
   The server enforces this: it carries each tab's neko WebSocket itself,
   rewrites requests for a pipeline to the room's stream, and moves
   connected viewers when the setting changes. Rooms themselves come from configuration (`COZYCAST_ROOMS`); a row
-  holds their settings.
+  holds their settings. Clearing a room's screen applies
+  `COZYCAST_DEFAULT_SCREEN`, one container default for all rooms, parsed and
+  validated at startup. Compose sets it from the same `SCREEN` value as
+  `NEKO_DESKTOP_SCREEN`; when unset, clearing leaves the desktop size alone.
 - `room_permissions`: (room, user_id) unique; remote, image, upload, trusted,
   invited, invite_name, banned, banned_until.
 - `anon_bans`: room, anon_id, ip, banned_until.
@@ -132,7 +140,13 @@ always unban through the admin pages.
 Remote control is neko's "host". `remote_ownership` maps to neko's
 `implicit_hosting = false`: an occupied remote cannot be taken, only released
 or reset by an admin. The server follows neko's host changes over an admin
-WebSocket and broadcasts who holds the remote.
+WebSocket and broadcasts who holds the remote. Containers boot with implicit
+hosting off so ownership remains enforced until the server explicitly sets
+the room's value during preparation and after every observer reconnect,
+including turning it on for rooms without remote ownership. The observer
+has a 10-second dial deadline, requires `system/init` within 10 seconds,
+and pings every 20 seconds with a 10-second deadline. Failed connections
+reconnect with backoff; healthy quiet connections have no read deadline.
 
 ## Room WebSocket
 
@@ -181,7 +195,8 @@ the non-root server also needs the socket's group via `DOCKER_GID` (see
   Re-redeeming a permanent invite on the same account does not use it up.
 - Permission, role, ban and account changes reach connected users at once.
 - Global settings (front page message, registration mode) are persisted.
-- Avatars are decoded, center-cropped, resized and re-encoded; chat images are fully decoded to validate them and served with a locked-down content type.
+- Shared imported avatar files are deleted only after their last user
+  reference is removed. Avatars are decoded, center-cropped, resized and re-encoded; chat images are fully decoded to validate them and served with a locked-down content type.
 - New: desktop upload permission, change own password.
 - Stream settings (desktop size, frame rate, quality preset) are changed live
   through neko's API, without restarting anything. Restarting a room from the

@@ -2,7 +2,7 @@
 // preferences. One instance, imported directly.
 
 import { computed, effect, signal } from '@preact/signals'
-import { api, type Me, type ServerSettings } from '../api'
+import { api, ApiError, setUnauthorizedHandler, type Me, type ServerSettings } from '../api'
 
 export type Theme = 'default' | 'legacy' | 'light'
 
@@ -85,22 +85,58 @@ effect(() => {
   else document.title = preferences.value.titleNameInFront ? `CozyCast: ${title}` : `${title} - CozyCast`
 })
 
+let meVersion = 0
+const authChannel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel('cozycast-auth')
+
 export async function refreshMe() {
+  const version = ++meVersion
   try {
     const res = await api.get<{ user: Me | null }>('/api/me')
-    me.value = res.user
+    if (version === meVersion) me.value = res.user
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401 && version === meVersion) me.value = null
   } finally {
     meLoaded.value = true
   }
 }
+
+setUnauthorizedHandler((path) => {
+  // refreshMe handles its own 401; starting another read would loop.
+  if (path !== '/api/me') void refreshMe()
+})
+if (authChannel) authChannel.onmessage = () => { void refreshMe() }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') void refreshMe()
+})
 
 export async function refreshServerSettings() {
   serverSettings.value = await api.get<ServerSettings>('/api/settings')
 }
 
 export async function logout() {
+  ++meVersion
   await api.post('/api/auth/logout')
-  me.value = null
+  authChanged(null)
+}
+
+export async function login(username: string, password: string) {
+  ++meVersion
+  const res = await api.post<{ user: Me }>('/api/auth/login', { username, password })
+  authChanged(res.user)
+}
+
+export async function register(username: string, password: string, inviteCode?: string) {
+  ++meVersion
+  const res = await api.post<{ user: Me }>('/api/auth/register', {
+    username, password, ...(inviteCode ? { inviteCode } : {}),
+  })
+  authChanged(res.user)
+}
+
+function authChanged(user: Me | null) {
+  ++meVersion
+  me.value = user
+  authChannel?.postMessage('changed')
 }
 
 // An invite code waiting for the user to log in or register. Kept in

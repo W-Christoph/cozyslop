@@ -13,9 +13,11 @@ export function KickedScreen() {
     invite: ['You are not allowed in this room', 'This room is invite only.'],
     kicked: ['You have been kicked', 'You were removed from this room.'],
     deleted: ['Account deleted or disabled', 'Your account is no longer available.'],
+    not_found: ['Room not found', 'This room does not exist.'],
+    session: ['Session expired', 'Please log in again to join this room.'],
   }[kick.reason]
   return <InfoScreen message={info[0]} submessage={info[1]}>
-    {kick.reason === 'account' && <a class={styles.link} href="/login">Login</a>}
+    {(kick.reason === 'account' || kick.reason === 'session') && <a class={styles.link} href="/login">Login</a>}
     <a class={styles.link} href="/">Home</a>
   </InfoScreen>
 }

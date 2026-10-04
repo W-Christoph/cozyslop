@@ -57,3 +57,24 @@ func TestNekoToken(t *testing.T) {
 		t.Fatal("plain token:", cfg.NekoToken("default"), err)
 	}
 }
+
+func TestDefaultScreenConfig(t *testing.T) {
+	t.Setenv("COZYCAST_NEKO_API_TOKEN", "test-secret")
+	t.Setenv("COZYCAST_MAX_UPLOAD_MB", "10")
+	for _, tc := range []struct {
+		screen string
+		valid  bool
+	}{
+		{"", true}, {"1280x720@30", true}, {"1920x1080@60", true},
+		{"invalid", false}, {"1280x720", false}, {"1280x720@30junk", false},
+		{"0x720@30", false}, {"1280x-720@30", false}, {"1280x720@0", false},
+	} {
+		t.Run(tc.screen, func(t *testing.T) {
+			t.Setenv("COZYCAST_DEFAULT_SCREEN", tc.screen)
+			cfg, err := FromEnv()
+			if (err == nil) != tc.valid || (tc.valid && cfg.DefaultScreen != tc.screen) {
+				t.Fatalf("default screen %q: %q, %v", tc.screen, cfg.DefaultScreen, err)
+			}
+		})
+	}
+}

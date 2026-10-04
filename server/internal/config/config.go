@@ -9,6 +9,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"cozycast/internal/neko"
 )
 
 type Room struct {
@@ -30,6 +32,7 @@ type Config struct {
 	InitAdminPass string   // creates the "admin" account if it does not exist
 	NekoSecret    string   // each room's neko admin token is derived from it (see NekoToken)
 	NekoAPIToken  string   // instead of NekoSecret: one token for every neko, as given
+	DefaultScreen string   // container default desktop size for all rooms; empty leaves it alone
 	Rooms         []Room
 	WebDir        string // serve the UI from disk instead of the embedded build (dev)
 	SourceURL     string // where users can get this server's source code (AGPL)
@@ -51,6 +54,7 @@ func FromEnv() (Config, error) {
 		InitAdminPass: os.Getenv("COZYCAST_INIT_ADMIN_PASSWORD"),
 		NekoSecret:    os.Getenv("COZYCAST_NEKO_SECRET"),
 		NekoAPIToken:  os.Getenv("COZYCAST_NEKO_API_TOKEN"),
+		DefaultScreen: os.Getenv("COZYCAST_DEFAULT_SCREEN"),
 		WebDir:        os.Getenv("COZYCAST_WEB_DIR"),
 		SourceURL:     env("COZYCAST_SOURCE_URL", "https://github.com/W-Christoph/cozyslop"),
 	}
@@ -62,6 +66,12 @@ func FromEnv() (Config, error) {
 		return c, errors.New("COZYCAST_MAX_UPLOAD_MB must be a positive integer size in MiB")
 	}
 	c.MaxUploadMB = maxUploadMB
+	if c.DefaultScreen != "" {
+		size, err := neko.ParseScreen(c.DefaultScreen)
+		if err != nil || size.Width <= 0 || size.Height <= 0 || size.Rate <= 0 {
+			return c, errors.New("COZYCAST_DEFAULT_SCREEN must look like 1280x720@30 with positive dimensions and frame rate")
+		}
+	}
 
 	rooms, err := parseRooms(env("COZYCAST_ROOMS", "default=http://room-default:8080"))
 	if err != nil {

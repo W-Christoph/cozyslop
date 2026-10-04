@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
@@ -282,12 +283,12 @@ func (s *Server) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 	encodeErr := png.Encode(out, avatar)
 	closeErr := out.Close()
 	if err := errors.Join(encodeErr, closeErr); err != nil {
-		s.removeMediaFile("avatars", name)
+		s.removeAvatarFile(r.Context(), name)
 		s.internalError(w, r, err)
 		return
 	}
 	if !s.saveAvatar(w, r, u.ID, name) {
-		s.removeMediaFile("avatars", name)
+		s.removeAvatarFile(r.Context(), name)
 	}
 }
 
@@ -311,11 +312,26 @@ func (s *Server) saveAvatar(w http.ResponseWriter, r *http.Request, id int64, na
 		s.internalError(w, r, err)
 		return false
 	}
-	s.removeMediaFile("avatars", u.Avatar)
+	s.removeAvatarFile(r.Context(), u.Avatar)
 	u.Avatar = name
 	s.hub.UserChanged(r.Context(), id)
 	writeJSON(w, http.StatusOK, map[string]any{"user": toMe(u)})
 	return true
+}
+
+// removeAvatarFile deletes an avatar once its last account reference is gone.
+func (s *Server) removeAvatarFile(ctx context.Context, name string) {
+	if name == "" {
+		return
+	}
+	used, err := s.store.AvatarReferenced(ctx, name)
+	if err != nil {
+		s.log.Warn("check avatar references", "file", name, "err", err)
+		return
+	}
+	if !used {
+		s.removeMediaFile("avatars", name)
+	}
 }
 
 func (s *Server) removeMediaFile(dir, name string) {

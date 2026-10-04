@@ -393,3 +393,24 @@ func TestInboundRateLimitCoversEveryMessageType(t *testing.T) {
 	f.r.Handle(f.ctx, other, ClientMsg{Type: "chat_send", Body: "separate bucket"})
 	rec.wait(t, "chat")
 }
+
+func TestPostChecksMediaRights(t *testing.T) {
+	f := newFixture(t, store.RoomSettings{DefaultImage: true})
+	id := f.user("alice")
+	_, rec := f.join(id)
+	requireOK(t, f.r.CanPostMedia(id.Key()))
+	set := f.r.Settings()
+	set.DefaultImage = false
+	requireOK(t, f.s.SaveRoomSettings(f.ctx, set))
+	f.h.RoomSettingsChanged(f.ctx, f.r.Name)
+	for _, typ := range []string{"image", "video"} {
+		// Exercise the final commit point directly: every media post is
+		// checked under the same lock that inserts and broadcasts it.
+		requireEqual(t, errors.Is(f.r.post(f.ctx, id.Key(), typ, "", "refused"), ErrNotAllowed), true)
+	}
+	requireEqual(t, rec.count("chat"), 0)
+	history, err := f.s.ChatHistory(f.ctx, f.r.Name)
+	requireOK(t, err)
+	requireEqual(t, len(history), 0)
+	requireOK(t, f.r.post(f.ctx, id.Key(), "text", "still allowed", ""))
+}

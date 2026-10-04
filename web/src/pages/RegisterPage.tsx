@@ -1,7 +1,6 @@
 import { useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
-import { api, type Me } from '../api'
-import { me, pendingInvite, serverSettings } from '../app/state'
+import { me, pendingInvite, register, serverSettings } from '../app/state'
 import { PageLayout } from '../components/PageLayout'
 import { Button } from '../components/Button'
 
@@ -23,12 +22,7 @@ export function RegisterPage() {
     }
     setBusy(true)
     try {
-      const res = await api.post<{ user: Me }>('/api/auth/register', {
-        username,
-        password,
-        ...(inviteCode ? { inviteCode } : {}),
-      })
-      me.value = res.user
+      await register(username, password, inviteCode)
       pendingInvite.clear()
       route('/')
     } catch (e) {

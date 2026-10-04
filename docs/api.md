@@ -48,8 +48,8 @@ for account invites and `/access/<code>` for temporary room-access invites.
 | `GET /api/me` | Anyone | None | 200 `{"user":<own account>}` or `{"user":null}` | Invalid sessions become anonymous |
 | `PATCH /api/me` | Account | `{"nickname":"Alice","nameColor":"#f90"}`; both required | 200 `{"user":<own account>}` | 400 invalid nickname/colour; 409 `"That nickname is another account's username."` |
 | `POST /api/me/password` | Account | `{"current":"…","new":"…"}` | 204; keeps the current session and ends every other session | 403 `"Your current password is wrong."`; 400 invalid new password; 429 attempt rate limit |
-| `POST /api/me/avatar` | Account | Multipart form field `avatar`; PNG, JPEG, GIF or WebP, at most 5 MiB | 200 `{"user":<own account>}`; saves a 256×256 PNG and deletes the previous avatar | 415 `"Use a PNG, JPEG, GIF or WebP image."`; 413 `"File is too large."`; 400 malformed multipart or missing/duplicate field |
-| `DELETE /api/me/avatar` | Account | None | 200 `{"user":<own account>}`; clears the avatar and deletes its file | Common account errors |
+| `POST /api/me/avatar` | Account | Multipart form field `avatar`; PNG, JPEG, GIF or WebP, at most 5 MiB | 200 `{"user":<own account>}`; saves a 256×256 PNG and deletes the previous avatar if no account still references it | 415 `"Use a PNG, JPEG, GIF or WebP image."`; 413 `"File is too large."`; 400 malformed multipart or missing/duplicate field |
+| `DELETE /api/me/avatar` | Account | None | 200 `{"user":<own account>}`; clears the avatar and deletes its file if no account still references it | Common account errors |
 
 Profile and avatar changes reach live room connections as `user_updated`.
 Avatars are decoded (GIF uses its first frame), center-cropped to a square,
@@ -79,7 +79,7 @@ All callers: admin.
 |---|---|---|---|
 | `GET /api/admin/users` | None | 200 array of admin accounts, ordered by username | Common admin errors |
 | `PATCH /api/admin/users/{username}` | Any subset of `{"admin":true,"verified":true,"disabled":false}` | 200 updated admin account; disabling deletes all sessions; flags reach live room connections | 404 `"Unknown user."`; 403 `"You can't remove your own admin rights or disable yourself."`; 409 `"There must be at least one admin."` |
-| `DELETE /api/admin/users/{username}` | None | 204; deletes account, sessions, permissions and avatar file; disconnects live room connections | 404 unknown user; 403 `"You can't delete yourself."`; 409 `"Remove admin rights first."` |
+| `DELETE /api/admin/users/{username}` | None | 204; deletes account, sessions and permissions; deletes the avatar file if no account still references it; disconnects live room connections | 404 unknown user; 403 `"You can't delete yourself."`; 409 `"Remove admin rights first."` |
 | `POST /api/admin/users/{username}/password` | `{"password":"…"}` | 204; resets password and deletes all of the user's sessions | 404 unknown user; 400 `"Passwords are 8-100 characters."` |
 
 Admins may change their own verification flag, but may not change their own
@@ -108,7 +108,7 @@ All callers: admin.
 | Method and path | Request body | Response | Notable errors |
 |---|---|---|---|
 | `GET /api/admin/rooms/{room}/settings` | None | 200 room settings | 404 `"Unknown room."` |
-| `PUT /api/admin/rooms/{room}/settings` | Room settings: `{"access":"public","hidden":false,"remoteOwnership":false,"centerRemote":false,"defaultRemote":false,"defaultImage":false,"defaultUpload":false,"screen":"1280x720@30","stream":"b2500-s100-veryfast"}`. `screen` and `stream` may be omitted (unchanged); `screen` `""` = the container default; `stream` is a capture pipeline id from the stream options (`b<kbit/s>-s<percent>-<x264 preset>`), `""` = neko's default; `name` is ignored (the path decides) | 200 saved settings; reloads room settings, rechecks live admission/rights, applies the screen size to the desktop, and viewers switch to the chosen stream | 404 unknown room; 400 invalid access or screen format; 400 screen or stream not offered by the desktop; 503 desktop unreachable while changing the screen or stream |
+| `PUT /api/admin/rooms/{room}/settings` | Room settings: `{"access":"public","hidden":false,"remoteOwnership":false,"centerRemote":false,"defaultRemote":false,"defaultImage":false,"defaultUpload":false,"screen":"1280x720@30","stream":"b2500-s100-veryfast"}`. `screen` and `stream` may be omitted (unchanged); `screen` `""` = `COZYCAST_DEFAULT_SCREEN` (the container default; leaves the screen alone if unset); `stream` is a capture pipeline id from the stream options (`b<kbit/s>-s<percent>-<x264 preset>`), `""` = neko's default; `name` is ignored (the path decides) | 200 saved settings; reloads room settings, rechecks live admission/rights, applies the screen size to the desktop, and viewers switch to the chosen stream | 404 unknown room; 400 invalid access or screen format; 400 screen or stream not offered by the desktop; 503 desktop unreachable while changing the screen or stream |
 | `GET /api/admin/rooms/{room}/stream-options` | None | 200 `{"screens":["1920x1080@30",...],"streams":["b2500-s100-veryfast",...]}`: the 16:9 desktop sizes the room supports and the capture pipelines neko offers (default first) | 404 unknown room; 503 desktop unreachable |
 | `POST /api/admin/rooms/{room}/bans` | `{"key":"u:123","minutes":null}`; key is an account `u:<id>` or anonymous `a:<anon id>` identity from the room protocol; minutes is an integer or null | 204; null/omitted means permanent ban, 0 means kick, positive means ban for that many minutes; disconnects all tabs | 404 unknown room or `"That user is not in the room."`; 400 negative/out-of-range minutes |
 | `GET /api/admin/bans?room=<optional>` | None | 200 active anonymous bans; all rooms if the filter is absent/empty; ordered by room then ID | Account bans are listed under permissions |
@@ -145,7 +145,7 @@ successful room join, using the WebSocket `access` query parameter.
 | Method and path | Caller | Request | Response | Notable errors |
 |---|---|---|---|---|
 | `GET /api/rooms` | Anyone | No body | 200 array of `{"name":"default","access":"public","userCount":0,"open":true}` ordered by name; `open` means caller may join; hidden rooms appear only if caller may join | 500 on storage failure |
-| `GET /api/rooms/{room}/ws?access=<optional temporary invite>` | Anyone admitted by room access rules and bans | WebSocket upgrade with account/anonymous cookies; optional room-bound temporary invite | 101; JSON room protocol, starting with `welcome`; admission denial sends `kicked` and closes with code 4000 | 404 unknown room (plain HTTP response); cross-origin upgrade rejected; banned/account/verified/invite admission denial |
+| `GET /api/rooms/{room}/ws?access=<optional temporary invite>` | Anyone admitted by room access rules and bans | WebSocket upgrade with account/anonymous cookies; optional room-bound temporary invite | 101; JSON room protocol, starting with `welcome`; admission denial or an unknown room sends `kicked` and closes with code 4000 | unknown room (`not_found`); cross-origin upgrade rejected; banned/account/verified/invite admission denial |
 | `POST /api/rooms/{room}/media` | Identity currently joined through the room WebSocket with image rights | Multipart form field `file`; PNG, JPEG, GIF, WebP, MP4 or WebM | 204; stores the original file and broadcasts an image/video chat message | 404 `"Unknown room."`; 403 `"Join the room first."` / `"You are not allowed to post images."`; 415 `"Unsupported file type."`; 413 `"File is too large."`; 400 malformed multipart or missing/duplicate field |
 | `GET /neko/{room}/api/ws?token=<neko token>` | A tab currently in the room, with the neko token the room WebSocket issued to it | WebSocket upgrade; messages follow neko's protocol, except that requests for a capture pipeline (`signal/request`, `signal/video`) always get the room's stream | neko's messages | 404 unknown room or disallowed path; 403 for a token the server did not issue or whose tab has left; 502 if neko is unavailable; closed when the tab leaves or is kicked |
 | `POST /neko/{room}/api/filetransfer` | Holder of a per-tab neko token with upload rights | Query and body follow neko's file-transfer plugin (an upload); other methods and subpaths are not proxied, so the desktop's Downloads cannot be fetched | Upstream response | Upstream auth/permission errors; 404 unknown room or disallowed path; 403 for a token the server did not issue or whose tab has left; 502 if upstream unavailable |
@@ -163,6 +163,17 @@ always allowed and trusted users are allowed once per hour per room. The
 server broadcasts `{"type":"restarting","by":"<nickname>"}` to everyone
 before restarting. Disabled, unauthorized and cooldown requests receive an
 `error` message through the usual room protocol.
+An unknown room upgrades successfully, sends
+`{"type":"kicked","reason":"not_found"}`, then closes with code 4000.
+Other `kicked.reason` values are `banned`, `account`, `verified`, `invite`,
+`kicked` and `deleted`.
+
+On join or a `{"type":"neko_token"}` request, failure to issue a token
+because neko failed sends `{"type":"neko_unavailable","message":"..."}`
+with a user-facing explanation. Clients can retry the token request while
+keeping the chat connection. A successful request sends the usual `neko`
+message with `token` and `path`.
+
 See [the protocol definitions](../server/internal/hub/protocol.go) for message
 fields and types. Admission and effective rights are described in
 [architecture](architecture.md#permissions).

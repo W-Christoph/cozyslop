@@ -26,6 +26,14 @@ func (c *Client) SetImplicitHosting(ctx context.Context, implicit bool) error {
 	return c.do(ctx, http.MethodPost, "/api/room/settings", map[string]bool{"implicit_hosting": implicit}, nil, true)
 }
 
+// The observer's patience with neko: observerTimeout for the WebSocket
+// handshake, for system/init after it and for the answer to a ping, sent
+// every observerPingEvery. Variables so tests can shorten them.
+var (
+	observerTimeout   = 10 * time.Second
+	observerPingEvery = 20 * time.Second
+)
+
 // Init is what neko reports when the event stream (re)connects.
 type Init struct {
 	Videos []string // capture pipeline ids, the default first
@@ -63,19 +71,49 @@ func (c *Client) watchHostOnce(ctx context.Context, onConnect func(Init), onHost
 		return err
 	}
 
-	conn, _, err := websocket.Dial(ctx, c.SocketURL(token), nil)
+	dialCtx, dialCancel := context.WithTimeout(ctx, observerTimeout)
+	conn, _, err := websocket.Dial(dialCtx, c.SocketURL(token), nil)
+	dialCancel()
 	if err != nil {
 		return err
 	}
-	defer conn.CloseNow()
+	ctx, cancel := context.WithCancel(ctx)
+	pingDone := make(chan struct{})
+	go func() {
+		defer close(pingDone)
+		defer cancel()
+		ping := time.NewTicker(observerPingEvery)
+		defer ping.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ping.C:
+				pingCtx, pingCancel := context.WithTimeout(ctx, observerTimeout)
+				err := conn.Ping(pingCtx)
+				pingCancel()
+				if err != nil {
+					return
+				}
+			}
+		}
+	}()
+	defer func() {
+		cancel()
+		conn.CloseNow()
+		<-pingDone
+	}()
 	conn.SetReadLimit(1 << 20)
+	initCtx, initCancel := context.WithTimeout(ctx, observerTimeout)
+	defer initCancel()
+	readCtx := initCtx
 
 	type controlHost struct {
 		HasHost bool   `json:"has_host"`
 		HostID  string `json:"host_id"`
 	}
 	for {
-		_, data, err := conn.Read(ctx)
+		_, data, err := conn.Read(readCtx)
 		if err != nil {
 			return err
 		}
@@ -98,6 +136,8 @@ func (c *Client) watchHostOnce(ctx context.Context, onConnect func(Init), onHost
 			if json.Unmarshal(msg.Payload, &init) != nil {
 				continue
 			}
+			initCancel()
+			readCtx = ctx
 			onConnect(Init{Videos: init.WebRTC.Videos})
 			host = init.ControlHost
 		case "control/host":

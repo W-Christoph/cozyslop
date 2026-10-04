@@ -377,3 +377,27 @@ func TestPublicSettingsAndRooms(t *testing.T) {
 		t.Fatalf("rooms: %+v", rooms)
 	}
 }
+
+func TestUnknownRoomSocket(t *testing.T) {
+	a := newAPITest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, a.srv.URL+"/api/rooms/missing/ws", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	var msg struct{ Type, Reason string }
+	if err := wsjson.Read(ctx, conn, &msg); err != nil || msg.Type != "kicked" || msg.Reason != "not_found" {
+		t.Fatalf("unknown room: %+v, %v", msg, err)
+	}
+	if err := wsjson.Read(ctx, conn, &msg); websocket.CloseStatus(err) != 4000 {
+		t.Fatalf("unknown room close: %v", err)
+	}
+	_, res, err := websocket.Dial(ctx, a.srv.URL+"/api/rooms/missing/ws", &websocket.DialOptions{
+		HTTPHeader: http.Header{"Origin": {"https://evil.example"}},
+	})
+	if err == nil || res == nil || res.StatusCode != http.StatusForbidden {
+		t.Fatalf("cross-origin unknown room: %v, %v", res, err)
+	}
+}

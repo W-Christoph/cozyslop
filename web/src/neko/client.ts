@@ -35,6 +35,8 @@ const OP_BTN_UP = 0x06
 
 // neko sends a heartbeat every 10s by default.
 const STALE_TIMEOUT_MS = 25_000
+// Match the server's upload allowance.
+const UPLOAD_TIMEOUT_MS = 2 * 60 * 60 * 1_000
 
 interface Signal {
   sdp: string
@@ -163,22 +165,39 @@ export class NekoClient extends Emitter<NekoEvents> {
 
   // Upload files into the desktop's Downloads folder (neko's file transfer;
   // neko checks the upload right). Resolves when the upload finished.
-  upload(files: File[], onProgress?: (fraction: number) => void): Promise<void> {
+  upload(files: File[], signal: AbortSignal, onProgress?: (fraction: number) => void): Promise<void> {
     if (!this.token) return Promise.reject(new Error('Not connected to the room.'))
     const form = new FormData()
     for (const f of files) form.append('files', f, f.name)
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
+      const finish = (error?: Error) => {
+        signal.removeEventListener('abort', abort)
+        if (error) reject(error)
+        else resolve()
+      }
+      const abort = () => {
+        xhr.abort()
+        finish(new DOMException('Upload cancelled.', 'AbortError'))
+      }
       xhr.open('POST', `${this.path}/api/filetransfer?token=${encodeURIComponent(this.token)}`)
+      xhr.timeout = UPLOAD_TIMEOUT_MS
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) onProgress?.(e.loaded / e.total)
       }
       xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve()
-        else if (xhr.status === 403) reject(new Error('You are not allowed to upload files.'))
-        else reject(new Error(`Upload failed (${xhr.status}).`))
+        if (xhr.status >= 200 && xhr.status < 300) finish()
+        else if (xhr.status === 403) finish(new Error('You are not allowed to upload files.'))
+        else finish(new Error(`Upload failed (${xhr.status}).`))
       }
-      xhr.onerror = () => reject(new Error('Upload failed: connection lost.'))
+      xhr.onerror = () => finish(new Error('Upload failed: connection lost.'))
+      xhr.onabort = () => finish(new DOMException('Upload cancelled.', 'AbortError'))
+      xhr.ontimeout = () => finish(new DOMException('Upload timed out.', 'TimeoutError'))
+      signal.addEventListener('abort', abort, { once: true })
+      if (signal.aborted) {
+        abort()
+        return
+      }
       xhr.send(form)
     })
   }

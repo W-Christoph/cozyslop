@@ -131,7 +131,7 @@ func (s *Server) adminDeleteUser(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
-	s.removeMediaFile("avatars", u.Avatar)
+	s.removeAvatarFile(r.Context(), u.Avatar)
 	s.hub.UserChanged(r.Context(), u.ID)
 	w.WriteHeader(http.StatusNoContent)
 }

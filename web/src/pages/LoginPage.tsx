@@ -1,7 +1,6 @@
 import { useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
-import { api, type Me } from '../api'
-import { logout, me, pendingInvite } from '../app/state'
+import { login, logout, me, pendingInvite } from '../app/state'
 import { PageLayout } from '../components/PageLayout'
 import { Button } from '../components/Button'
 
@@ -15,11 +14,7 @@ export function LoginPage() {
     setBusy(true)
     setError('')
     try {
-      const res = await api.post<{ user: Me }>('/api/auth/login', {
-        username,
-        password,
-      })
-      me.value = res.user
+      await login(username, password)
       const code = pendingInvite.get()
       route(code ? `/invite/${encodeURIComponent(code)}` : '/')
     } catch (e) {

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -148,9 +149,12 @@ func (a *Service) LogoutOthers(ctx context.Context, r *http.Request, u *store.Us
 // ClientIP is the address rate limits and anonymous bans apply to.
 func (a *Service) ClientIP(r *http.Request) string {
 	if a.trustProxy {
-		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-			first, _, _ := strings.Cut(fwd, ",")
-			return strings.TrimSpace(first)
+		if values := r.Header.Values("X-Forwarded-For"); len(values) > 0 {
+			fwd := values[len(values)-1]
+			last := fwd[strings.LastIndex(fwd, ",")+1:]
+			if ip, err := netip.ParseAddr(strings.TrimSpace(last)); err == nil {
+				return ip.Unmap().String()
+			}
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)

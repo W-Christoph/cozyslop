@@ -619,3 +619,39 @@ func TestMediaUploadConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestSharedImportedAvatarCleanup(t *testing.T) {
+	for _, action := range []string{"replace", "clear", "delete account"} {
+		t.Run(action, func(t *testing.T) {
+			a := newMediaAPITest(t, 0)
+			a.user("root", true)
+			alice, bob := a.user("alice", false), a.user("bob", false)
+			name := strings.Repeat("a", 64) + ".png"
+			path := filepath.Join(a.dir, "avatars", name)
+			if err := os.WriteFile(path, testImage(t, "png"), 0o640); err != nil {
+				t.Fatal(err)
+			}
+			for _, u := range []*store.User{alice, bob} {
+				if err := a.st.UpdateAvatar(context.Background(), u.ID, name); err != nil {
+					t.Fatal(err)
+				}
+			}
+			switch action {
+			case "replace":
+				a.upload(a.login("alice"), "/api/me/avatar", "avatar", "new.png", testImage(t, "png"), 200, "")
+			case "clear":
+				a.call(a.login("alice"), "DELETE", "/api/me/avatar", nil, 200, nil)
+			case "delete account":
+				a.call(a.login("root"), "DELETE", "/api/admin/users/alice", nil, 204, nil)
+			}
+			if _, err := os.Stat(path); err != nil {
+				t.Fatalf("shared avatar removed: %v", err)
+			}
+			// Removing the last reference finally removes the imported file.
+			a.call(a.login("bob"), "DELETE", "/api/me/avatar", nil, 200, nil)
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Fatalf("unreferenced avatar retained: %v", err)
+			}
+		})
+	}
+}

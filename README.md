@@ -110,13 +110,14 @@ disk, or use `npm run dev` (Vite proxies `/api` and `/neko` to
 | `COZYCAST_NEKO_SECRET` | required | each room's neko admin token is derived from it and the room's name; the room containers get the same secret and do the same (`COZYCAST_ROOM`) |
 | `COZYCAST_NEKO_API_TOKEN` | | instead of the secret: one token used as-is for every room, for a neko you run yourself with `NEKO_SESSION_API_TOKEN` |
 | `COZYCAST_ROOMS` | `default=http://room-default:8080` | `name=url,name2=url2` |
+| `COZYCAST_DEFAULT_SCREEN` | | container default screen for all rooms (`1280x720@30`); Compose sets it from `SCREEN`; empty leaves the desktop size alone when clearing the room setting |
 | `COZYCAST_DATA_DIR` | `data` | database and uploaded chat media |
 | `COZYCAST_INIT_ADMIN_PASSWORD` | | creates the `admin` account on first start |
 | `COZYCAST_LISTEN` | `:8080` | HTTP; with a domain set it only redirects and answers Let's Encrypt |
 | `COZYCAST_TLS_LISTEN` | `:8443` | HTTPS, used when a domain is set |
 | `COZYCAST_DOMAIN` | | host names for automatic HTTPS, comma separated |
 | `COZYCAST_ACME_EMAIL` | | optional contact address for Let's Encrypt |
-| `COZYCAST_TRUST_PROXY` | `false` | take client IP and scheme from `X-Forwarded-*` (behind a reverse proxy) |
+| `COZYCAST_TRUST_PROXY` | `false` | take client IP from the last entry of the last `X-Forwarded-For` header, and scheme from `X-Forwarded-Proto` |
 | `COZYCAST_IMPORT` | | old CozyCast export archive, imported into an empty database |
 | `COZYCAST_MAX_UPLOAD_MB` | `10` | maximum chat image/video size |
 | `COZYCAST_DOCKER` | `false` | opt in to room restarts from the UI |
@@ -125,9 +126,16 @@ disk, or use `npm run dev` (Vite proxies `/api` and `/neko` to
 | `COZYCAST_SOURCE_URL` | this repository | source code link shown to users (AGPL) |
 | `COZYCAST_WEB_DIR` | | serve the UI from this directory instead of the embedded build |
 
+With `COZYCAST_TRUST_PROXY=true`, use exactly one proxy in front. It must
+append the client IP to `X-Forwarded-For`, and the server must not be reachable
+around it. Invalid forwarded IPs fall back to the peer address.
+
 Room restarts from the UI are an [opt-in Docker control feature](docs/architecture.md#room-websocket); enable the commented socket, environment and group settings in `compose.yaml`.
 
 ## Stream settings
+
+`SCREEN` in `.env` sets the shared container default; clearing a room's
+screen setting restores it.
 
 Admins change these in the room settings; viewers switch over within
 seconds without reconnecting:

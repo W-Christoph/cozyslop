@@ -3,6 +3,7 @@
 // they never talk to the sockets directly.
 
 import { batch, computed, signal } from '@preact/signals'
+import { refreshMe } from '../app/state'
 import { parseStream } from '../components/room/admin/streamOptions'
 import { NekoClient, type NekoStatus } from '../neko/client'
 import type { ChatMessage, KickReason, Rights, RoomSettings, ServerMessage, User } from './protocol'
@@ -65,6 +66,7 @@ export class RoomStore {
   private offs: (() => void)[] = []
   private nekoRetry?: number
   private uploadReset?: number
+  private uploadController?: AbortController
   private nekoRetryMs = NEKO_RETRY_MS
   private nekoFailures = 0
   private typingTimers = new Map<string, number>()
@@ -81,6 +83,7 @@ export class RoomStore {
       this.socket.on('open', () => (this.server.value = 'connected')),
       this.socket.on('close', () => {
         this.server.value = 'connecting'
+        window.clearTimeout(this.nekoRetry)
         // The server drops our neko member with the socket; a new token
         // comes after reconnecting.
         neko.disconnect()
@@ -108,6 +111,7 @@ export class RoomStore {
   }
 
   dispose() {
+    this.cancelDesktopUpload()
     window.clearTimeout(this.nekoRetry)
     window.clearTimeout(this.uploadReset)
     this.typingTimers.forEach((t) => window.clearTimeout(t))
@@ -195,16 +199,32 @@ export class RoomStore {
     window.clearTimeout(this.uploadReset)
     const set = (state: DesktopUpload['state'], progress: number, message: string) =>
       (this.desktopUpload.value = { state, progress, message })
+    const controller = new AbortController()
+    this.uploadController = controller
     const what = files.length === 1 ? files[0].name : `${files.length} files`
     set('uploading', 0, `Uploading ${what}…`)
     try {
       if (!this.rights.value.upload) throw new Error('You are not allowed to upload files.')
-      await this.neko.upload(files, (p) => set('uploading', p, `Uploading ${what}… ${Math.round(p * 100)}%`))
+      await this.neko.upload(files, controller.signal, (p) => {
+        if (this.uploadController === controller) set('uploading', p, `Uploading ${what}… ${Math.round(p * 100)}%`)
+      })
+      if (this.uploadController !== controller) return
       set('done', 1, `Uploaded ${what} to Downloads.`)
     } catch (e) {
+      if (this.uploadController !== controller) return
       set('error', 0, e instanceof Error ? e.message : 'Upload failed.')
     }
-    this.uploadReset = window.setTimeout(() => set('idle', 0, ''), 5_000)
+    this.uploadController = undefined
+    this.resetDesktopUploadLater()
+  }
+
+  cancelDesktopUpload() {
+    const controller = this.uploadController
+    if (!controller) return
+    this.uploadController = undefined
+    controller.abort()
+    this.desktopUpload.value = { state: 'error', progress: 0, message: 'Upload cancelled.' }
+    this.resetDesktopUploadLater()
   }
 
   restart() {
@@ -212,15 +232,28 @@ export class RoomStore {
     this.socket.send({ type: 'restart' })
   }
 
+  private resetDesktopUploadLater() {
+    window.clearTimeout(this.uploadReset)
+    this.uploadReset = window.setTimeout(() => {
+      this.desktopUpload.value = { state: 'idle', progress: 0, message: '' }
+    }, 5_000)
+  }
+
+  private setRights(rights: Rights) {
+    this.rights.value = rights
+    if (!rights.upload) this.cancelDesktopUpload()
+  }
+
   private retryNekoToken() {
     window.clearTimeout(this.nekoRetry)
+    if (this.paused.value || this.server.value !== 'connected' || this.kicked.value) return
     if (++this.nekoFailures >= NEKO_FAILURES_BEFORE_NOTICE && !this.restarting.value) {
       this.error.value = NEKO_FAILURE_NOTICE
     }
     const delay = this.nekoRetryMs
     this.nekoRetryMs = Math.min(this.nekoRetryMs * 2, NEKO_RETRY_MAX_MS)
     this.nekoRetry = window.setTimeout(() => {
-      if (!this.paused.value && this.server.value === 'connected' && this.neko.status === 'disconnected') {
+      if (!this.paused.value && !this.kicked.value && this.server.value === 'connected' && this.neko.status === 'disconnected') {
         this.socket.send({ type: 'neko_token' })
       }
     }, delay)
@@ -233,7 +266,7 @@ export class RoomStore {
       case 'welcome':
         batch(() => {
           this.self.value = msg.self
-          this.rights.value = msg.rights
+          this.setRights(msg.rights)
           this.settings.value = msg.settings
           this.users.value = new Map(msg.users.map((u) => [u.key, u]))
           this.chat.value = msg.history
@@ -281,7 +314,7 @@ export class RoomStore {
         this.setUserTyping(msg.key, msg.typing)
         break
       case 'rights':
-        this.rights.value = msg.rights
+        this.setRights(msg.rights)
         break
       case 'room_settings': {
         const stream = this.settings.value?.stream
@@ -302,15 +335,17 @@ export class RoomStore {
         break
       case 'kicked':
         this.kicked.value = { reason: msg.reason, bannedUntil: msg.bannedUntil }
+        window.clearTimeout(this.nekoRetry)
+        this.cancelDesktopUpload()
         this.neko.disconnect()
+        if (msg.reason === 'session') void refreshMe().catch(() => {})
+        break
+      case 'neko_unavailable':
+        this.error.value = msg.message
+        this.retryNekoToken()
         break
       case 'error':
         this.error.value = msg.message
-        // A restart can take longer than the first token retry. Keep trying
-        // after a failed token request until the desktop comes back.
-        if (this.restarting.value !== null && this.neko.status === 'disconnected' && !this.paused.value) {
-          this.retryNekoToken()
-        }
         break
     }
   }

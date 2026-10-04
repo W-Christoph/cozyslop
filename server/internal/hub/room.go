@@ -38,10 +38,11 @@ type Room struct {
 	Name     string
 	NekoPath string // public path the browser uses to reach this room's neko
 
-	hub   *Hub
-	neko  *neko.Client
-	log   *slog.Logger
-	ready chan struct{} // closed once neko is up and cleaned
+	hub           *Hub
+	neko          *neko.Client
+	log           *slog.Logger
+	ready         chan struct{} // closed once neko is up and cleaned
+	defaultScreen string
 
 	inbound   *ratelimit.Limiter // per person: every message type
 	chatUser  *ratelimit.Limiter // per person: new chat messages
@@ -238,9 +239,12 @@ func (r *Room) prepareNeko(ctx context.Context) error {
 	return r.neko.SetImplicitHosting(ctx, !set.RemoteOwnership)
 }
 
-// applyScreen sets the desktop resolution; "" keeps the container default.
+// applyScreen sets the desktop resolution; "" restores the configured default.
 // Setting the size it already has is skipped: it would restart the stream.
 func (r *Room) applyScreen(ctx context.Context, screen string) error {
+	if screen == "" {
+		screen = r.defaultScreen
+	}
 	if screen == "" {
 		return nil
 	}

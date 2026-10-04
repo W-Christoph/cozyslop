@@ -100,7 +100,7 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		room := hub.RoomConfig{Name: rc.Name, Neko: nc}
+		room := hub.RoomConfig{Name: rc.Name, Neko: nc, DefaultScreen: cfg.DefaultScreen}
 		if dc != nil {
 			u, err := url.Parse(rc.NekoURL)
 			if err != nil {

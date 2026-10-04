@@ -24,12 +24,14 @@ export function DesktopUploadButton() {
 
 // Progress and result of the current desktop upload.
 export function DesktopUploadStatus() {
-  const { state, progress, message } = useRoomStore().desktopUpload.value
+  const store = useRoomStore()
+  const { state, progress, message } = store.desktopUpload.value
   if (state === 'idle') return null
   return (
     <div class={`${styles.status} ${state === 'error' ? styles.error : ''}`} role="status" aria-live="polite">
       {message}
       {state === 'uploading' && <progress class={styles.progress} value={progress} max={1} />}
+      {state === 'uploading' && <button type="button" onClick={() => store.cancelDesktopUpload()}>Cancel</button>}
     </div>
   )
 }

@@ -93,7 +93,7 @@ func (r *Room) sendNekoToken(ctx context.Context, c *Client) {
 	if err != nil {
 		if ctx.Err() == nil && !errors.Is(err, ErrNotPresent) {
 			r.log.Error("issue neko token", "client", c.ID, "err", err)
-			c.send(errorMsg{Type: "error", Message: "The room's desktop is not reachable right now."})
+			c.send(nekoUnavailableMsg{Type: "neko_unavailable", Message: "The room's desktop is not reachable right now."})
 		}
 		return
 	}
@@ -148,16 +148,6 @@ func (r *Room) CanPostMedia(key string) error {
 // person with the given identity key. They must be in the room with the
 // image right. Call CanPostMedia before reading the upload.
 func (r *Room) PostMedia(ctx context.Context, key, typ, file string) error {
-	r.mu.Lock()
-	m := r.members[key]
-	allowed := m != nil && m.rights.Image
-	r.mu.Unlock()
-	if m == nil {
-		return ErrNotPresent
-	}
-	if !allowed {
-		return ErrNotAllowed
-	}
 	return r.post(ctx, key, typ, "", file)
 }
 
@@ -167,6 +157,10 @@ func (r *Room) post(ctx context.Context, key, typ, body, media string) error {
 	m := r.members[key]
 	if m == nil {
 		return ErrNotPresent
+	}
+
+	if (typ == "image" || typ == "video") && !m.rights.Image {
+		return ErrNotAllowed
 	}
 
 	if typ == "text" {

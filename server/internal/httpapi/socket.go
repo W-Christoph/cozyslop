@@ -63,10 +63,6 @@ func (s *Server) roomSocket(w http.ResponseWriter, r *http.Request) {
 	r = r.WithContext(ctx)
 
 	rm := s.hub.Room(r.PathValue("room"))
-	if rm == nil {
-		http.NotFound(w, r)
-		return
-	}
 	// Identify before the upgrade so a fresh anonymous cookie is set on the
 	// handshake response.
 	id, err := s.auth.Identify(w, r)
@@ -84,6 +80,13 @@ func (s *Server) roomSocket(w http.ResponseWriter, r *http.Request) {
 
 	sock := newSocket(conn)
 	go sock.writeLoop(ctx, cancel)
+
+	if rm == nil {
+		sock.send(map[string]any{"type": "kicked", "reason": "not_found"})
+		sock.kill()
+		<-ctx.Done()
+		return
+	}
 
 	client, err := rm.Join(ctx, hub.JoinRequest{
 		Identity:   id,

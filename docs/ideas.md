@@ -59,3 +59,15 @@ CozyCast does not use; none of them needs a patched neko.
 - A CPU benchmark script for real servers (one room, video playing, report
   CPU per stream setting), and measurements of fullscreen playback and
   several viewers over the internet.
+
+## Frontend
+
+- **A keyboard way out of the remote.** While someone holds the remote, the
+  desktop takes every key, Tab included, so keyboard focus cannot leave it
+  without the mouse. That is intended (Tab belongs to the app on the
+  desktop). A way out for keyboard-only use would be an advertised key
+  combination or a visible "leave the desktop" control.
+- **Ask before pasting into the room.** A personal setting: after Ctrl/Cmd+V
+  over the desktop, ask "paste your clipboard into the room?" before sending
+  it, so the local clipboard does not end up on the shared desktop by
+  accident.

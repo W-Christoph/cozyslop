@@ -52,7 +52,7 @@ export interface ChatMessage {
   time: number // unix ms
 }
 
-export type KickReason = 'banned' | 'account' | 'verified' | 'invite' | 'kicked' | 'deleted'
+export type KickReason = 'banned' | 'account' | 'verified' | 'invite' | 'kicked' | 'deleted' | 'not_found' | 'session'
 
 export type ServerMessage =
   | {
@@ -67,6 +67,7 @@ export type ServerMessage =
       restart: boolean
     }
   | { type: 'neko'; token: string; path: string }
+  | { type: 'neko_unavailable'; message: string }
   | { type: 'user_joined' | 'user_updated'; user: User }
   | { type: 'user_left'; key: string }
   | { type: 'chat'; message: ChatMessage }

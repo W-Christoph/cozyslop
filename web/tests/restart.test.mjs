@@ -4,7 +4,19 @@ import { createServer } from 'vite'
 
 // Use the existing Vite transform and fake browser sockets/timers to exercise
 // the restart lifecycle without a desktop or additional test dependencies.
-const server = await createServer({ configFile: false, server: { middlewareMode: true } })
+const server = await createServer({
+  configFile: false,
+  server: { middlewareMode: true },
+  plugins: [{
+    name: 'auth-fixture',
+    enforce: 'pre',
+    transform(code, id) {
+      if (id.endsWith('/room/store.ts')) return code.replace("'../app/state'", "'virtual:auth-fixture'")
+    },
+    resolveId(id) { if (id === 'virtual:auth-fixture') return '\0auth-fixture' },
+    load(id) { if (id === '\0auth-fixture') return 'export const refreshMe = async () => { globalThis.authRefreshes++ }' },
+  }],
+})
 let RoomStore
 try {
   ;({ RoomStore } = await server.ssrLoadModule('/src/room/store.ts'))
@@ -12,6 +24,7 @@ try {
 
 function fixture(t) {
   const timers = new Map()
+  const delays = []
   let timerID = 0
   class Socket {
     static OPEN = 1
@@ -26,7 +39,7 @@ function fixture(t) {
   const originals = ['window', 'location', 'WebSocket'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)])
   Object.assign(globalThis, {
     window: {
-      setTimeout(fn) { timers.set(++timerID, fn); return timerID },
+      setTimeout(fn, delay) { delays.push(delay); timers.set(++timerID, fn); return timerID },
       clearTimeout(id) { timers.delete(id) },
       clearInterval() {},
     },
@@ -44,7 +57,7 @@ function fixture(t) {
     }
   })
   return {
-    store, room, timers,
+    store, room, timers, delays,
     tick() {
       const pending = [...timers.values()]
       timers.clear()
@@ -95,13 +108,13 @@ test('failed token requests keep retrying through a restart; success cancels pen
   tick()
   assert.deepEqual(room.sent, [{ type: 'neko_token' }])
   for (let attempt = 0; attempt < 2; attempt++) {
-    room.message({ type: 'error', message: "The room's desktop is not reachable right now." })
+    room.message({ type: 'neko_unavailable', message: "The room's desktop is not reachable right now." })
     assert.equal(timers.size, 1)
     assert.equal(store.restarting.value, 'Alice')
     tick()
   }
   assert.equal(room.sent.length, 3)
-  room.message({ type: 'error', message: "The room's desktop is not reachable right now." })
+  room.message({ type: 'neko_unavailable', message: "The room's desktop is not reachable right now." })
   room.message({ type: 'neko', token: 'fresh', path: '/neko/default' })
   assert.equal(timers.size, 0)
   assert.equal(store.error.value, null)
@@ -117,7 +130,7 @@ test('paused playback does not retry token failures and resumes with a fresh tok
   store.neko.emit('closed')
   store.pause()
   assert.equal(timers.size, 0)
-  room.message({ type: 'error', message: "The room's desktop is not reachable right now." })
+  room.message({ type: 'neko_unavailable', message: "The room's desktop is not reachable right now." })
   tick()
   assert.deepEqual(room.sent, [])
   assert.equal(store.restarting.value, 'Alice')
@@ -137,4 +150,120 @@ test('room socket disconnection suppresses pending desktop retry; disposal clear
   assert.equal(timers.size, 1)
   store.dispose()
   assert.equal(timers.size, 0)
+})
+
+test('desktop token failures back off without an announced restart; generic errors do not retry', (t) => {
+  const { store, room, tick, timers, welcome, delays } = fixture(t)
+  welcome(false)
+  room.message({ type: 'error', message: 'Action denied.' })
+  assert.equal(timers.size, 0)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    room.message({ type: 'neko_unavailable', message: 'Desktop unavailable.' })
+    assert.equal(timers.size, 1)
+    tick()
+  }
+  assert.deepEqual(room.sent, Array(3).fill({ type: 'neko_token' }))
+  assert.deepEqual(delays, [1500, 3000, 6000])
+  assert.equal(store.restarting.value, null)
+  assert.match(store.error.value, /still trying/)
+  room.message({ type: 'neko', token: 'fresh', path: '/neko/default' })
+  store.neko.emit('status', 'connected')
+  assert.equal(store.error.value, null)
+})
+
+for (const reason of ['not_found', 'session', 'kicked']) {
+  test(`${reason} uses the terminal kick path and clears desktop retries`, (t) => {
+    const { store, room, timers, tick } = fixture(t)
+    globalThis.authRefreshes = 0
+    t.after(() => { delete globalThis.authRefreshes })
+    room.message({ type: 'neko_unavailable', message: 'Desktop unavailable.' })
+    assert.equal(timers.size, 1)
+    room.message({ type: 'kicked', reason })
+    assert.equal(store.kicked.value.reason, reason)
+    assert.equal(timers.size, 0)
+    assert.equal(globalThis.authRefreshes, reason === 'session' ? 1 : 0)
+    room.message({ type: 'neko_unavailable', message: 'Desktop unavailable.' })
+    room.onclose({ code: 4000 })
+    tick()
+    assert.deepEqual(room.sent, [])
+    assert.equal(timers.size, 0)
+  })
+}
+
+test('room close immediately clears a pending desktop retry', (t) => {
+  const { room, timers } = fixture(t)
+  room.message({ type: 'neko_unavailable', message: 'Desktop unavailable.' })
+  assert.equal(timers.size, 1)
+  room.onclose({ code: 4000 })
+  assert.equal(timers.size, 0)
+  room.message({ type: 'neko_unavailable', message: 'Desktop unavailable.' })
+  assert.equal(timers.size, 0)
+})
+
+function uploadFixture(t) {
+  const f = fixture(t), uploads = []
+  f.store.rights.value = { upload: true }
+  f.store.neko.upload = (files, signal, progress) => new Promise((resolve, reject) => {
+    uploads.push({ files, signal, progress, resolve, reject })
+  })
+  return { ...f, uploads }
+}
+
+test('desktop cancellation ignores stale progress and completion after a replacement upload', async (t) => {
+  const { store, uploads, timers } = uploadFixture(t)
+  const first = store.uploadToDesktop([{ name: 'first' }])
+  uploads[0].progress(0.5)
+  assert.equal(store.desktopUpload.value.progress, 0.5)
+  store.cancelDesktopUpload()
+  assert.equal(uploads[0].signal.aborted, true)
+  assert.equal(store.desktopUpload.value.message, 'Upload cancelled.')
+  const second = store.uploadToDesktop([{ name: 'second' }])
+  assert.equal(timers.size, 0)
+  uploads[0].progress(0.9)
+  uploads[0].resolve()
+  await first
+  assert.equal(store.desktopUpload.value.message, 'Uploading second…')
+  assert.equal(timers.size, 0)
+  uploads[1].resolve()
+  await second
+  assert.equal(store.desktopUpload.value.message, 'Uploaded second to Downloads.')
+  assert.equal(timers.size, 1)
+})
+
+for (const reason of ['dispose', 'kick', 'rights', 'welcome']) {
+  test(`desktop uploads abort on ${reason} and ignore late failure`, async (t) => {
+    const { store, room, uploads, welcome, timers } = uploadFixture(t)
+    const pending = store.uploadToDesktop([{ name: 'file' }])
+    if (reason === 'dispose') store.dispose()
+    if (reason === 'kick') room.message({ type: 'kicked', reason: 'kicked' })
+    if (reason === 'rights') room.message({ type: 'rights', rights: { upload: false } })
+    if (reason === 'welcome') welcome(false)
+    assert.equal(uploads[0].signal.aborted, true)
+    const before = store.desktopUpload.value
+    uploads[0].progress(1)
+    uploads[0].reject(new Error('Late network failure.'))
+    await pending
+    assert.equal(store.desktopUpload.value, before)
+    if (reason === 'dispose') assert.equal(timers.size, 0)
+  })
+}
+
+test('desktop upload failures report their error and reset through the existing status timer', async (t) => {
+  const { store, uploads, tick } = uploadFixture(t)
+  const pending = store.uploadToDesktop([{ name: 'file' }])
+  uploads[0].reject(new DOMException('Upload timed out.', 'TimeoutError'))
+  await pending
+  assert.equal(store.desktopUpload.value.message, 'Upload timed out.')
+  tick()
+  assert.equal(store.desktopUpload.value.state, 'idle')
+})
+
+test('generic errors do not initiate desktop recovery during an announced restart', (t) => {
+  const { store, room, timers, tick } = fixture(t)
+  room.message({ type: 'restarting', by: 'Alice' })
+  room.message({ type: 'error', message: 'Action denied.' })
+  assert.equal(store.error.value, 'Action denied.')
+  assert.equal(timers.size, 0)
+  tick()
+  assert.deepEqual(room.sent, [])
 })

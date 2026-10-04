@@ -21,6 +21,10 @@ checks on the real server.
       picture follows a stream change in the room settings. The server now
       carries neko's WebSocket itself; signalling was tested against neko
       3.1.6 and in headless Chromium, playback was not.
+- [ ] Mobile keyboard on a real phone: capitals, autocorrect, Enter and
+      Backspace. Text goes through neko's paste (Ctrl+V), so typing into
+      the desktop's terminal is expected not to work.
+- [ ] In a room's terminal, `sudo` is refused (`no-new-privileges`).
 - [ ] Check what neko's `filetransfer/update` message contains for a viewer
       without the upload right. It is sent to every viewer on connect; if
       it lists the desktop's Downloads, filter it in the proxy.
@@ -37,34 +41,18 @@ Moderation and rights
       that IP.
 - [ ] Join and permission-refresh races can admit a user, or restore a right,
       just after it was revoked.
-- [ ] Image right is checked, then the media is posted under a second lock.
 - [ ] A failed join can still consume a limited invite use.
-- [ ] Remote ownership is unenforced for a moment after a room restart.
 - [ ] A personal stream choice ("unless that feature is enabled"): a room
       setting that lets the proxy pass a viewer's own pipeline choice. Today
       every viewer is pinned to the room's stream (`docs/ideas.md`).
 
 Frontend
 - [ ] The chat draft is cleared before the server accepts the message.
-- [ ] The desktop does not reconnect after a neko outage unless a restart
-      was announced.
-- [ ] Remote control traps keyboard focus (no way to Tab out).
-- [ ] Mobile keyboard: single capital letters arrive lowercase.
-- [ ] An unknown room shows endless loading.
-- [ ] `me` is not cleared when the session expires or another tab logs out.
-- [ ] Desktop uploads cannot be cancelled and have no timeout.
 
 Housekeeping
 - [ ] Orphaned media files (crash between rename and insert, failed unlink)
       are never reconciled.
-- [ ] Deleting or replacing an imported avatar removes a file other imported
-      accounts may share.
 - [ ] Legacy avatar import cannot resume after a crash.
-- [ ] Clearing the screen setting does not restore the container default.
-- [ ] The neko observer's WebSocket has no handshake timeout or liveness
-      check.
-- [ ] `X-Forwarded-For` is trusted as-is with `COZYCAST_TRUST_PROXY`
-      (off by default).
 - [ ] Account ids can be reused after deleting the newest account.
 
 ## 3. Done on 2026-10-04
@@ -86,8 +74,31 @@ Housekeeping
 - [x] Admins can change their own verified flag.
 - [x] Vite dev server proxies `/media`.
 - [x] `docs/architecture.md`: Firefox restores its tabs after a restart.
+- [x] The image right is checked at the moment a media message is posted.
+- [x] Rooms boot with remote takeover off; the server turns it on for rooms
+      without remote ownership once it has applied the room's settings.
+- [x] The neko observer's WebSocket has a handshake and init deadline and a
+      ping; a dead connection is noticed and reconnected.
+- [x] Clearing the screen setting restores the default
+      (`COZYCAST_DEFAULT_SCREEN`, from `SCREEN` in `.env`).
+- [x] An imported avatar shared by several accounts is deleted only when
+      the last of them lets go of it.
+- [x] With `COZYCAST_TRUST_PROXY`, the client address is the last
+      `X-Forwarded-For` entry (the one the proxy added), not the first.
+- [x] An unknown room answers `kicked` / `not_found`; the page says "Room
+      not found".
+- [x] The desktop reconnects after a neko outage that was not announced
+      (`neko_unavailable`).
+- [x] Desktop uploads can be cancelled and time out after two hours.
+- [x] `me` follows login and logout in other tabs, a 401 from any request
+      and the page becoming visible again.
+- [x] Mobile keyboard: all text is inserted through neko's paste, only
+      Enter, Backspace and Delete are keys (capitals arrived lowercase).
+- [x] Room containers run with `no-new-privileges`: no sudo on the desktop.
 - Decided: an open tab keeps the chat it has, beyond the one-hour /
   1000-message retention.
+- Decided: Tab stays with the desktop while holding the remote; a keyboard
+  way out is an idea for later (`docs/ideas.md`).
 
 ## 4. Done on 2026-10-03
 

@@ -41,7 +41,7 @@ const server = await createServer({
     load(id) { if (id.startsWith('\0fixture:')) return mocks[id.slice(9)] },
   }],
 })
-let AvatarChooser, ChatPanel, MessageGroup, MediaModal, RemoteScreen, AccountRow, NekoClient, config
+let AvatarChooser, ChatPanel, MessageGroup, MediaModal, RemoteScreen, AccountRow, NekoClient, KickedScreen, DesktopUploadStatus, config
 try {
   ;({ AvatarChooser } = await server.ssrLoadModule('/src/components/profile/AvatarChooser.tsx'))
   ;({ ChatPanel } = await server.ssrLoadModule('/src/components/chat/ChatPanel.tsx'))
@@ -50,6 +50,8 @@ try {
   ;({ RemoteScreen } = await server.ssrLoadModule('/src/components/room/RemoteScreen.tsx'))
   ;({ AccountRow } = await server.ssrLoadModule('/src/components/admin/AccountRow.tsx'))
   ;({ NekoClient } = await server.ssrLoadModule('/src/neko/client.ts'))
+  ;({ KickedScreen } = await server.ssrLoadModule('/src/components/room/KickedScreen.tsx'))
+  ;({ DesktopUploadStatus } = await server.ssrLoadModule('/src/components/room/DesktopUpload.tsx'))
   ;({ default: config } = await server.ssrLoadModule('/vite.config.ts'))
 } finally { await server.close() }
 
@@ -257,4 +259,286 @@ for (const reason of ['blur', 'remote lost', 'disconnect', 'release remote', 'un
 test('media uses the same dev proxy target as the API', () => {
   assert.equal(config.server.proxy['/media'].target, config.server.proxy['/api'].target)
   assert.equal(config.server.proxy['/neko'].ws, true)
+})
+
+test('unknown rooms show Room not found and a home link', (t) => {
+  const f = fixture(t)
+  f.store = { kicked: { value: { reason: 'not_found' } } }
+  const node = KickedScreen()
+  assert.equal(node.props.message, 'Room not found')
+  assert.equal(nodes(node).find((n) => n.type === 'a').props.href, '/')
+  f.store.kicked.value.reason = 'session'
+  assert.equal(KickedScreen().props.message, 'Session expired')
+  assert.equal(nodes(KickedScreen()).find((n) => n.props?.href === '/login').props.children, 'Login')
+})
+
+test('desktop upload status offers Cancel only while uploading', (t) => {
+  const f = fixture(t)
+  let cancelled = 0
+  f.store = {
+    desktopUpload: { value: { state: 'uploading', progress: 0.5, message: 'Uploading…' } },
+    cancelDesktopUpload() { cancelled++ },
+  }
+  const node = DesktopUploadStatus()
+  button(node, 'Cancel').props.onClick()
+  assert.equal(cancelled, 1)
+  assert.equal(nodes(node).find((n) => n.type === 'progress').props.value, 0.5)
+  for (const state of ['done', 'error', 'idle']) {
+    f.store.desktopUpload.value.state = state
+    assert.equal(button(DesktopUploadStatus(), 'Cancel'), undefined)
+  }
+})
+
+function uploadXHR(t) {
+  const instances = []
+  class XHR {
+    upload = {}
+    status = 200
+    constructor() { instances.push(this) }
+    open(method, url) { Object.assign(this, { method, url }) }
+    send(form) { this.form = form }
+    abort() { this.aborted = true; if (this.form) this.onabort?.() }
+  }
+  globals(t, { XMLHttpRequest: XHR })
+  const neko = new NekoClient()
+  neko.token = 'secret token'
+  neko.path = '/neko/default'
+  return { neko, instances, files: [new File(['data'], 'movie.mkv')] }
+}
+
+test('desktop XHR uploads report progress, allow two hours, and detach abort on completion', async (t) => {
+  const { neko, instances, files } = uploadXHR(t)
+  const controller = new AbortController(), progress = []
+  const upload = neko.upload(files, controller.signal, (p) => progress.push(p))
+  const xhr = instances[0]
+  assert.equal(xhr.timeout, 2 * 60 * 60 * 1000)
+  assert.equal(xhr.method, 'POST')
+  assert.equal(xhr.url, '/neko/default/api/filetransfer?token=secret%20token')
+  assert.equal(xhr.form.get('files').name, 'movie.mkv')
+  xhr.upload.onprogress({ lengthComputable: false })
+  xhr.upload.onprogress({ lengthComputable: true, loaded: 1, total: 4 })
+  assert.deepEqual(progress, [0.25])
+  xhr.onload()
+  await upload
+  controller.abort()
+  assert.equal(xhr.aborted, undefined)
+})
+
+for (const reason of ['cancel', 'already cancelled', 'timeout', 'network', 'permission', 'server']) {
+  test(`desktop XHR upload reports ${reason} distinctly and removes the abort listener`, async (t) => {
+    const { neko, instances, files } = uploadXHR(t)
+    const controller = new AbortController()
+    if (reason === 'already cancelled') controller.abort()
+    const upload = neko.upload(files, controller.signal)
+    const rejected = assert.rejects(upload, (error) => {
+      if (reason.includes('cancel')) return error.name === 'AbortError' && error.message === 'Upload cancelled.'
+      if (reason === 'timeout') return error.name === 'TimeoutError' && error.message === 'Upload timed out.'
+      if (reason === 'network') return error.message === 'Upload failed: connection lost.'
+      if (reason === 'permission') return error.message === 'You are not allowed to upload files.'
+      return error.message === 'Upload failed (500).'
+    })
+    const xhr = instances[0]
+    if (reason === 'cancel') controller.abort()
+    if (reason === 'already cancelled') assert.equal(xhr.form, undefined)
+    if (reason === 'timeout') xhr.ontimeout()
+    if (reason === 'network') xhr.onerror()
+    if (reason === 'permission' || reason === 'server') {
+      xhr.status = reason === 'permission' ? 403 : 500
+      xhr.onload()
+    }
+    await rejected
+    if (reason.includes('cancel')) assert.equal(xhr.aborted, true)
+    else {
+      controller.abort()
+      assert.equal(xhr.aborted, undefined)
+    }
+  })
+}
+
+async function authFixture(t) {
+  const requests = [], channels = []
+  const document = new EventTarget()
+  document.documentElement = { dataset: {} }
+  document.visibilityState = 'visible'
+  class Channel {
+    posted = []
+    constructor(name) { this.name = name; channels.push(this) }
+    postMessage(value) { this.posted.push(value) }
+  }
+  globals(t, {
+    document,
+    localStorage: { getItem() { return null }, setItem() {} },
+    BroadcastChannel: Channel,
+    fetch(path, init) {
+      return new Promise((resolve, reject) => requests.push({ path, init, resolve, reject }))
+    },
+  })
+  const server = await createServer({ configFile: false, server: { middlewareMode: true } })
+  let state, api
+  try {
+    state = await server.ssrLoadModule('/src/app/state.ts')
+    ;({ api } = await server.ssrLoadModule('/src/api.ts'))
+  } finally { await server.close() }
+  const reply = (index, status, data) => requests[index].resolve({ status, ok: status >= 200 && status < 300, json: async () => data })
+  return { state, api, requests, channel: channels[0], document, reply }
+}
+
+const alice = { username: 'alice', nickname: 'Alice' }
+const settle = () => new Promise((resolve) => setImmediate(resolve))
+
+for (const action of ['login', 'register', 'logout']) {
+  test(`${action} updates me and broadcasts only after a successful request`, async (t) => {
+    const { state, requests, reply, channel } = await authFixture(t)
+    state.me.value = action === 'logout' ? alice : null
+    const pending = action === 'logout' ? state.logout() : state[action]('alice', 'password', 'invite')
+    assert.equal(requests[0].path, `/api/auth/${action}`)
+    if (action !== 'logout') {
+      assert.deepEqual(JSON.parse(requests[0].init.body), { username: 'alice', password: 'password', ...(action === 'register' ? { inviteCode: 'invite' } : {}) })
+    }
+    assert.deepEqual(channel.posted, [])
+    reply(0, action === 'logout' ? 204 : 200, { user: alice })
+    await pending
+    assert.deepEqual(state.me.value, action === 'logout' ? null : alice)
+    assert.equal(channel.name, 'cozycast-auth')
+    assert.deepEqual(channel.posted, ['changed'])
+  })
+}
+
+test('other-tab auth broadcasts and becoming visible refresh me without polling or rebroadcasting', async (t) => {
+  const { state, requests, reply, channel, document } = await authFixture(t)
+  state.me.value = alice
+  assert.equal(requests.length, 0)
+  channel.onmessage({ data: 'changed' })
+  assert.equal(requests[0].path, '/api/me')
+  reply(0, 200, { user: null })
+  await settle()
+  assert.equal(state.me.value, null)
+  document.visibilityState = 'hidden'
+  document.dispatchEvent(new Event('visibilitychange'))
+  assert.equal(requests.length, 1)
+  document.visibilityState = 'visible'
+  document.dispatchEvent(new Event('visibilitychange'))
+  assert.equal(requests[1].path, '/api/me')
+  reply(1, 200, { user: alice })
+  await settle()
+  assert.deepEqual(state.me.value, alice)
+  assert.deepEqual(channel.posted, [])
+})
+
+test('401 from ordinary API requests refreshes me; a login rejection leaves me alone', async (t) => {
+  const { state, api, requests, reply, channel } = await authFixture(t)
+  state.me.value = alice
+  const rejectedLogin = assert.rejects(state.login('wrong', 'wrong'), { status: 401 })
+  reply(0, 401, { error: 'Wrong password.' })
+  await rejectedLogin
+  assert.equal(requests.length, 1)
+  assert.equal(state.me.value, alice)
+  assert.deepEqual(channel.posted, [])
+  const rejectedGet = assert.rejects(api.get('/api/private'), { status: 401 })
+  reply(1, 401, { error: 'Session expired.' })
+  await rejectedGet
+  assert.equal(requests[2].path, '/api/me')
+  reply(2, 200, { user: null })
+  await settle()
+  assert.equal(state.me.value, null)
+})
+
+test('401 from /api/me clears me without recursively issuing more requests', async (t) => {
+  const { state, requests, reply } = await authFixture(t)
+  state.me.value = alice
+  const pending = state.refreshMe()
+  reply(0, 401, { error: 'Session expired.' })
+  await pending
+  assert.equal(state.me.value, null)
+  assert.equal(state.meLoaded.value, true)
+  assert.equal(requests.length, 1)
+})
+
+for (const reason of ['network', 'server']) {
+  test(`a ${reason} failure reading me keeps the current session`, async (t) => {
+    const { state, requests, reply } = await authFixture(t)
+    state.me.value = alice
+    const pending = state.refreshMe()
+    if (reason === 'network') requests[0].reject(new Error('Offline'))
+    else reply(0, 503, { error: 'Unavailable.' })
+    await pending
+    assert.equal(state.me.value, alice)
+    assert.equal(state.meLoaded.value, true)
+    assert.equal(requests.length, 1)
+  })
+}
+
+for (const action of ['login', 'register', 'logout']) {
+  for (const timing of ['before', 'during']) {
+    test(`a me read started ${timing} ${action} cannot overwrite the newer auth result`, async (t) => {
+      const { state, reply } = await authFixture(t)
+      state.me.value = alice
+      let refresh, mutation
+      if (timing === 'before') refresh = state.refreshMe()
+      mutation = action === 'logout' ? state.logout() : state[action]('alice', 'password')
+      if (timing === 'during') refresh = state.refreshMe()
+      const authIndex = timing === 'before' ? 1 : 0, meIndex = 1 - authIndex
+      reply(authIndex, action === 'logout' ? 204 : 200, { user: alice })
+      await mutation
+      reply(meIndex, 200, { user: action === 'logout' ? alice : null })
+      await refresh
+      assert.deepEqual(state.me.value, action === 'logout' ? null : alice)
+    })
+  }
+}
+
+test('a logout broadcast supersedes an older pending me read', async (t) => {
+  const { state, channel, requests, reply } = await authFixture(t)
+  state.me.value = alice
+  const old = state.refreshMe()
+  channel.onmessage({ data: 'changed' })
+  assert.equal(requests.length, 2)
+  reply(1, 200, { user: null })
+  await settle()
+  assert.equal(state.me.value, null)
+  reply(0, 200, { user: alice })
+  await old
+  assert.equal(state.me.value, null)
+})
+
+test('a me read cannot apply after a newer auth action starts', async (t) => {
+  const { state, reply } = await authFixture(t)
+  state.me.value = alice
+  const pending = state.refreshMe()
+  const login = state.login('bob', 'password')
+  reply(0, 200, { user: null })
+  await pending
+  assert.equal(state.me.value, alice)
+  const bob = { username: 'bob' }
+  reply(1, 200, { user: bob })
+  await login
+  assert.equal(state.me.value, bob)
+})
+
+test('an API 401 starts a new me read and supersedes a pending response', async (t) => {
+  const { state, api, requests, reply } = await authFixture(t)
+  state.me.value = alice
+  const old = state.refreshMe()
+  const denied = assert.rejects(api.get('/api/private'), { status: 401 })
+  reply(1, 401, { error: 'Session expired.' })
+  await denied
+  assert.equal(requests[2].path, '/api/me')
+  reply(2, 200, { user: null })
+  await settle()
+  reply(0, 200, { user: alice })
+  await old
+  assert.equal(state.me.value, null)
+})
+
+test('becoming visible supersedes an older pending me read', async (t) => {
+  const { state, document, requests, reply } = await authFixture(t)
+  state.me.value = alice
+  const old = state.refreshMe()
+  document.dispatchEvent(new Event('visibilitychange'))
+  assert.equal(requests.length, 2)
+  reply(1, 200, { user: null })
+  await settle()
+  reply(0, 200, { user: alice })
+  await old
+  assert.equal(state.me.value, null)
 })

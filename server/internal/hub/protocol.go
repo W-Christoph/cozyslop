@@ -57,6 +57,11 @@ type nekoMsg struct {
 	Path  string `json:"path"`
 }
 
+type nekoUnavailableMsg struct {
+	Type    string `json:"type"` // "neko_unavailable"
+	Message string `json:"message"`
+}
+
 type userMsg struct {
 	Type string `json:"type"` // "user_joined" | "user_updated"
 	User User   `json:"user"`
@@ -113,7 +118,7 @@ type restartingMsg struct {
 // Sent right before the server closes the socket on purpose.
 type kickedMsg struct {
 	Type        string `json:"type"`   // "kicked"
-	Reason      string `json:"reason"` // "banned" | "account" | "verified" | "invite" | "kicked" | "deleted"
+	Reason      string `json:"reason"` // "banned" | "account" | "verified" | "invite" | "kicked" | "deleted" | "not_found"
 	BannedUntil *int64 `json:"bannedUntil,omitempty"`
 }
 

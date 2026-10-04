@@ -407,3 +407,40 @@ func TestNekoTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestNekoUnavailable(t *testing.T) {
+	for _, entry := range []string{"join", "request"} {
+		t.Run(entry, func(t *testing.T) {
+			ctx := context.Background()
+			s, err := store.Open(ctx, ":memory:")
+			requireOK(t, err)
+			t.Cleanup(func() { requireOK(t, s.Close()) })
+			fake := nekotest.New(t, "admin-secret")
+			// An incorrect admin token makes member creation fail at neko.
+			nc, err := neko.NewClient(fake.URL(), "wrong-secret")
+			requireOK(t, err)
+			h := New(s, t.TempDir(), []RoomConfig{{Name: "main", Neko: nc}})
+			r := h.Room("main")
+			close(r.ready)
+			rec := newRecording()
+			c, err := r.Join(ctx, JoinRequest{Identity: anon("guest"), Send: rec.send, Kill: rec.kill})
+			requireOK(t, err)
+			if entry == "join" {
+				r.SendNekoToken(ctx, c)
+			} else {
+				r.Handle(ctx, c, ClientMsg{Type: "neko_token"})
+			}
+			msg := rec.wait(t, "neko_unavailable").(nekoUnavailableMsg)
+			requireEqual(t, msg.Message, "The room's desktop is not reachable right now.")
+			requireEqual(t, rec.count("error"), 0)
+			requireEqual(t, rec.count("neko"), 0)
+			// Neither cancellation nor leaving is a desktop failure.
+			canceled, cancel := context.WithCancel(ctx)
+			cancel()
+			r.SendNekoToken(canceled, c)
+			r.Leave(ctx, c)
+			r.SendNekoToken(ctx, c)
+			requireEqual(t, rec.count("neko_unavailable"), 1)
+		})
+	}
+}

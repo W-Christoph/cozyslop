@@ -107,6 +107,13 @@ func (s *Store) UpdateAvatar(ctx context.Context, id int64, avatar string) error
 	return s.execOne(ctx, "UPDATE users SET avatar = ? WHERE id = ?", avatar, id)
 }
 
+// AvatarReferenced reports whether any account still uses the avatar file.
+func (s *Store) AvatarReferenced(ctx context.Context, name string) (bool, error) {
+	var used bool
+	err := s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE avatar = ?)", name).Scan(&used)
+	return used, err
+}
+
 func (s *Store) UpdatePassword(ctx context.Context, id int64, hash string) error {
 	return s.execOne(ctx, "UPDATE users SET password_hash = ? WHERE id = ?", hash, id)
 }

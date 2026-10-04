@@ -28,8 +28,9 @@ type Hub struct {
 }
 
 type RoomConfig struct {
-	Name string
-	Neko *neko.Client
+	Name          string
+	Neko          *neko.Client
+	DefaultScreen string
 	// Restart restarts the room's container; nil when the operator has not
 	// enabled container control.
 	Restart func(ctx context.Context) error
@@ -40,6 +41,7 @@ func New(s *store.Store, mediaDir string, rooms []RoomConfig) *Hub {
 	for _, rc := range rooms {
 		r := newRoom(h, rc.Name, rc.Neko)
 		r.restart = rc.Restart
+		r.defaultScreen = rc.DefaultScreen
 		h.rooms[rc.Name] = r
 	}
 	return h

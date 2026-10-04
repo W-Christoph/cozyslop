@@ -9,6 +9,12 @@ export class ApiError extends Error {
   }
 }
 
+let onUnauthorized: ((path: string) => void) | undefined
+
+export function setUnauthorizedHandler(handler: (path: string) => void) {
+  onUnauthorized = handler
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -33,6 +39,7 @@ async function request<T>(
 
   const data = await res.json().catch(() => null)
   if (!res.ok) {
+    if (res.status === 401 && path !== '/api/auth/login') onUnauthorized?.(path)
     throw new ApiError(
       res.status,
       data?.error ?? `Request failed (${res.status}).`,

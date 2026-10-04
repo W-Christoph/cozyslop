@@ -165,6 +165,7 @@ func (s *Server) adminSetPassword(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
+	s.hub.EndSessions(u.ID, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 

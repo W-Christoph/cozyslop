@@ -104,10 +104,12 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
-	if err := s.auth.Logout(w, r); err != nil {
+	hash, err := s.auth.Logout(w, r)
+	if err != nil {
 		s.internalError(w, r, err)
 		return
 	}
+	s.hub.EndSessions(0, hash)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -234,17 +236,19 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hash, err := auth.HashPassword(req.New)
+	var keep []byte
 	if err == nil {
 		err = s.store.UpdatePassword(r.Context(), u.ID, hash)
 	}
 	if err == nil {
 		// Anyone who knew the old password is logged out.
-		err = s.auth.LogoutOthers(r.Context(), r, u)
+		keep, err = s.auth.LogoutOthers(r.Context(), r, u)
 	}
 	if err != nil {
 		s.internalError(w, r, err)
 		return
 	}
+	s.hub.EndSessions(u.ID, keep)
 	w.WriteHeader(http.StatusNoContent)
 }
 

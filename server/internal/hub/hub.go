@@ -5,6 +5,7 @@
 package hub
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -86,6 +87,29 @@ func (h *Hub) Start(ctx context.Context) error {
 func (h *Hub) UserChanged(ctx context.Context, userID int64) {
 	for _, r := range h.rooms {
 		r.refreshUser(ctx, userID)
+	}
+}
+
+// EndSessions removes a user's tabs in every room, keeping sessionHash if
+// supplied. With userID zero, it removes only tabs of sessionHash instead.
+// Call after the corresponding session rows have been deleted.
+func (h *Hub) EndSessions(userID int64, sessionHash []byte) {
+	for _, r := range h.rooms {
+		r.mu.Lock()
+		for _, c := range r.clients {
+			if c.m.user == nil {
+				continue
+			}
+			if userID != 0 {
+				if c.m.user.ID != userID || (len(sessionHash) > 0 && bytes.Equal(c.sessionHash, sessionHash)) {
+					continue
+				}
+			} else if len(sessionHash) == 0 || !bytes.Equal(c.sessionHash, sessionHash) {
+				continue
+			}
+			r.kickClientLocked(c, kickedMsg{Type: "kicked", Reason: "session"})
+		}
+		r.mu.Unlock()
 	}
 }
 

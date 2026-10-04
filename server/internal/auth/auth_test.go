@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +12,43 @@ import (
 	"cozycast/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
+
+func TestIdentitySessionHash(t *testing.T) {
+	ctx := context.Background()
+	s, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	u := &store.User{Username: "alice", Nickname: "Alice"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	token := newToken()
+	hash := hashToken(token)
+	if err := s.CreateSession(ctx, hash, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	a := &Service{store: s}
+	r := httptest.NewRequest("GET", "/", nil)
+	r.AddCookie(&http.Cookie{Name: sessionCookie, Value: token})
+	id, err := a.Identify(httptest.NewRecorder(), r)
+	if err != nil || id.User == nil || !bytes.Equal(id.SessionHash, hash) {
+		t.Fatalf("account identity: %+v, %v", id, err)
+	}
+	b, err := json.Marshal(id)
+	if err != nil || bytes.Contains(b, []byte("SessionHash")) || bytes.Contains(b, []byte(token)) {
+		t.Fatalf("serialized identity exposes session: %s, %v", b, err)
+	}
+	ended, err := a.Logout(httptest.NewRecorder(), r)
+	if err != nil || !bytes.Equal(ended, hash) {
+		t.Fatalf("logout hash: %x, %v", ended, err)
+	}
+	id, err = a.Identify(httptest.NewRecorder(), r)
+	if err != nil || id.User != nil || len(id.SessionHash) != 0 {
+		t.Fatalf("anonymous identity retains session: %+v, %v", id, err)
+	}
+}
 
 func TestValidatePassword(t *testing.T) {
 	for _, tt := range []struct {

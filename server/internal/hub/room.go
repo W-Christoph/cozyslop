@@ -66,7 +66,6 @@ type member struct {
 	key      string
 	user     *store.User // nil for anonymous
 	anonID   string
-	ip       string
 	perm     store.Permission
 	grant    *rights.Grant // from a temporary access invite
 	rights   rights.Rights
@@ -80,6 +79,10 @@ type Client struct {
 	ID   string
 	send func(any) // must not block
 	kill func()    // closes the connection; Leave follows
+
+	sessionHash []byte
+	ip          string
+	joinedAt    time.Time
 
 	// guarded by Room.mu
 	m      *member
@@ -324,10 +327,12 @@ func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
 		}
 	}
 
-	c := &Client{ID: "c-" + randomID(), send: req.Send, kill: req.Kill, active: true}
+	c := &Client{ID: "c-" + randomID(), send: req.Send, kill: req.Kill, active: true,
+		sessionHash: slices.Clone(id.SessionHash), ip: id.IP}
 	now := time.Now().UnixMilli()
 
 	r.mu.Lock()
+	c.joinedAt = time.Now()
 	key := id.Key()
 	m := r.members[key]
 	isNew := m == nil
@@ -335,7 +340,7 @@ func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
 		m = &member{key: key, anonID: id.AnonID, joinedAt: now, lastSeen: now, clients: make(map[string]*Client)}
 		r.members[key] = m
 	}
-	m.user, m.perm, m.ip = id.User, in.Perm, id.IP
+	m.user, m.perm = id.User, in.Perm
 	if in.Grant != nil {
 		m.grant = mergeGrant(m.grant, in.Grant)
 	}
@@ -538,7 +543,8 @@ func (r *Room) reloadSettings(ctx context.Context) {
 
 // Ban bans the person with the given identity key from this room until
 // `until` (unix seconds, nil = forever) and disconnects them. Accounts are
-// banned by account; anonymous users by browser id and IP.
+// banned by account; anonymous users by browser id and IP. All anonymous
+// identities with a tab on that IP are disconnected too.
 func (r *Room) Ban(ctx context.Context, key string, until *int64) error {
 	r.mu.Lock()
 	m := r.members[key]
@@ -546,7 +552,18 @@ func (r *Room) Ban(ctx context.Context, key string, until *int64) error {
 		r.mu.Unlock()
 		return ErrNotPresent
 	}
-	user, anonID, ip := m.user, m.anonID, m.ip
+	user, anonID := m.user, m.anonID
+	// Use the most recently joined tab's IP for the stored anonymous ban.
+	var latest *Client
+	for _, c := range m.clients {
+		if latest == nil || c.joinedAt.After(latest.joinedAt) {
+			latest = c
+		}
+	}
+	var ip string
+	if latest != nil {
+		ip = latest.ip
+	}
 	r.mu.Unlock()
 
 	var err error
@@ -558,7 +575,28 @@ func (r *Room) Ban(ctx context.Context, key string, until *int64) error {
 	if err != nil {
 		return err
 	}
-	r.kick(key, kickedMsg{Type: "kicked", Reason: "banned", BannedUntil: until})
+	msg := kickedMsg{Type: "kicked", Reason: "banned", BannedUntil: until}
+	if user != nil {
+		r.kick(key, msg)
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, m := range r.members {
+		if m.user != nil {
+			continue
+		}
+		if m.key == key {
+			r.kickLocked(m, msg)
+			continue
+		}
+		for _, c := range m.clients {
+			if ip != "" && c.ip == ip {
+				r.kickLocked(m, msg)
+				break
+			}
+		}
+	}
 	return nil
 }
 
@@ -587,11 +625,15 @@ func (r *Room) kick(key string, msg kickedMsg) bool {
 // deletes their neko members.
 func (r *Room) kickLocked(m *member, msg kickedMsg) {
 	for _, c := range m.clientList() {
-		c.send(msg)
-		r.removeClientLocked(c)
-		c.kill()
+		r.kickClientLocked(c, msg)
 	}
 	m.rights = rights.Rights{}
+}
+
+func (r *Room) kickClientLocked(c *Client, msg kickedMsg) {
+	c.send(msg)
+	r.removeClientLocked(c)
+	c.kill()
 }
 
 // ResetRemote takes the remote from whoever holds it.

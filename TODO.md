@@ -16,25 +16,19 @@ checks on the real server.
       network, as in `compose.yaml`.
 - [ ] Migration: `sudo chown 65532:65532 import/cozycast-export.tar.gz`
       before the first start (`docs/migration.md`).
-- [ ] In a real browser: the picture follows a stream change in the room
-      settings. (Video and sound play: checked locally on 2026-10-04, on a
-      PC and on a phone over the LAN.)
+- [ ] Restart a room while people watch (`docker compose restart
+      room-default`): the desktop comes back by itself, and in a room without
+      remote ownership the remote can be taken over again.
 - [ ] Check what neko's `filetransfer/update` message contains for a viewer
       without the upload right. It is sent to every viewer on connect; if
       it lists the desktop's Downloads, filter it in the proxy.
 
 ## 2. Open: worth fixing, not blocking
 
-Sessions
-- [ ] Logout / password reset does not close room sockets already connected.
-- [ ] The session cookie's 30-day lifetime does not slide with the database
-      expiry.
-
 Moderation and rights
-- [ ] An IP ban only kicks the one identity, not other anonymous tabs from
-      that IP.
 - [ ] Join and permission-refresh races can admit a user, or restore a right,
-      just after it was revoked.
+      just after it was revoked. Same window: a room socket authenticated
+      just before a logout can still join just after it.
 - [ ] A failed join can still consume a limited invite use.
 - [ ] A personal stream choice ("unless that feature is enabled"): a room
       setting that lets the proxy pass a viewer's own pipeline choice. Today
@@ -47,7 +41,6 @@ Housekeeping
 - [ ] Orphaned media files (crash between rename and insert, failed unlink)
       are never reconciled.
 - [ ] Legacy avatar import cannot resume after a crash.
-- [ ] Account ids can be reused after deleting the newest account.
 
 ## 3. Done on 2026-10-04
 
@@ -94,6 +87,21 @@ Housekeeping
       Checked in the running room.
 - Checked in a browser: a mouse button released outside the desktop, "Room
   not found", logout following other tabs.
+- [x] Account ids are never reused (`users.id` is AUTOINCREMENT; migration
+      0005 rebuilds the table and skips ids still named in chat).
+- [x] The session cookie is renewed whenever the database slides the
+      session's expiry.
+- [x] `cozycast reset-admin` (`docker compose run --rm server reset-admin`)
+      sets the admin password from `.env`, for a lost one.
+- [x] Logout, a password change and an admin password reset close the room
+      sockets of the sessions they end (`kicked` / `session`).
+- [x] Banning an anonymous user also removes the other anonymous users on
+      that IP from the room.
+- Checked in a browser: video and sound (PC, phone, Firefox), a stream
+  change and "Server default" in the stream settings, upload and cancel,
+  the media preview closing on delete, a cancelled avatar crop.
+- Known, left alone: switching stream settings in quick succession can
+  break the stream until the page is reloaded.
 - Decided: an open tab keeps the chat it has, beyond the one-hour /
   1000-message retention.
 - Decided: Tab stays with the desktop while holding the remote; a keyboard

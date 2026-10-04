@@ -28,7 +28,10 @@ an anon id is not enough to act as that person. Bans on anonymous users apply
 to the anon id **and** the IP address.
 
 Each browser tab is additionally a **client** with its own id, which is also
-its neko member id.
+its neko member id. Its IP is recorded at join. An anonymous ban stores the
+target's anon id and the IP of its most recently joined live tab, and removes
+all tabs of every anonymous identity in that room with a tab on that IP.
+Accounts on the IP are unaffected; an ordinary kick removes only its target.
 
 Account ids are never reused after deletion. Chat retains an account's
 identity key after its user reference is cleared, so a new account cannot
@@ -71,10 +74,19 @@ What ends that is taking away their remote right and restarting the room.
   SHA-256. Sessions expire after 30 days without use; use slides the expiry
   at most once an hour and renews the cookie with the same 30-day lifetime
   when the database expiry is extended. Invalid sessions are never renewed.
-  Logout deletes the session. Disabling or deleting an account deletes its
+  Logout deletes the session and closes its live room tabs. Password change
+  deletes every other session and closes their tabs, keeping the current
+  session's tabs. An admin password reset deletes all of the user's sessions
+  and closes all of their tabs. Disabling or deleting an account deletes its
   sessions and closes its sockets.
 - The room WebSocket authenticates with the same cookie during the upgrade;
   same-origin is enforced on upgrade, so other sites cannot open it.
+  Account identities carry the stored session hash internally, and each tab
+  retains it; it is never sent to clients. After deleting session rows, the
+  HTTP layer tells the hub to remove matching tabs across all rooms with
+  kick reason `session` and close code 4000, using the ordinary kick cleanup
+  for neko members and proxy connections. Authentication just before a
+  revocation followed by a join just after it can still admit a tab.
 - Login and registration are rate limited per IP. With
   `COZYCAST_TRUST_PROXY=true`, the client IP is the last entry of the last
   `X-Forwarded-For` header, validated as an IP (IPv4-mapped addresses are
@@ -88,7 +100,9 @@ migrations, then resets or creates `admin` using
 opening the database, then restores admin rights, enables the account and
 deletes its sessions in one short transaction. Existing profile and
 verification fields are preserved; a newly created admin is verified. It
-exits without starting listeners, rooms or the legacy import. See the
+exits without starting listeners, rooms or the legacy import. It does not
+notify a separately running server's hub, so its session deletion cannot
+close room sockets already open in that process. See the
 [recovery instructions](../README.md#develop).
 
 ## Data (SQLite)

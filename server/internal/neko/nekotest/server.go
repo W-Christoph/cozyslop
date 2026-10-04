@@ -114,6 +114,24 @@ func (s *Server) WaitObservers(ctx context.Context, n int) error {
 	}
 }
 
+// WaitMemberDeleted waits until the member is gone, or ctx cancellation.
+func (s *Server) WaitMemberDeleted(ctx context.Context, id string) error {
+	for {
+		s.mu.Lock()
+		_, present := s.members[id]
+		changed := s.changed
+		s.mu.Unlock()
+		if !present {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-changed:
+		}
+	}
+}
+
 // WaitReceived waits until the member's sockets have sent n messages and
 // returns them all.
 func (s *Server) WaitReceived(ctx context.Context, id string, n int) ([]string, error) {
@@ -276,6 +294,7 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		delete(s.members, id)
+		s.signalLocked()
 		for token, memberID := range s.tokens {
 			if memberID == id {
 				delete(s.tokens, token)

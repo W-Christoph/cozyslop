@@ -47,13 +47,18 @@ for account invites and `/access/<code>` for temporary room-access invites.
 |---|---|---|---|---|
 | `GET /api/settings` | Anyone | None | 200 global settings | 500 on storage failure |
 | `POST /api/auth/login` | Anyone | `{"username":"alice","password":"…"}` | 200 `{"user":<own account>}`; starts a session | 401 `"Wrong username or password."` (also for disabled accounts); 429 login rate limit |
-| `POST /api/auth/logout` | Anyone | None | 204; deletes the current session and clears its cookie | 500 on storage failure |
+| `POST /api/auth/logout` | Anyone | None | 204; deletes the current session, closes its live room tabs and clears its cookie | 500 on storage failure |
 | `POST /api/auth/register` | Anyone | `{"username":"alice","password":"…","inviteCode":"…"}`; code optional in open mode | 201 `{"user":<own account>}`; creates account and starts a session; an account invite also grants its room permission atomically | 400 username/password validation or `"That invite is invalid or has expired."`; 403 `"Registration requires an invite."` when invite-only and no code; 409 `"That username is taken."`; 429 registration rate limit |
 | `GET /api/me` | Anyone | None | 200 `{"user":<own account>}` or `{"user":null}` | Invalid sessions become anonymous |
 | `PATCH /api/me` | Account | `{"nickname":"Alice","nameColor":"#f90"}`; both required | 200 `{"user":<own account>}` | 400 invalid nickname/colour; 409 `"That nickname is another account's username."` |
-| `POST /api/me/password` | Account | `{"current":"…","new":"…"}` | 204; keeps the current session and ends every other session | 403 `"Your current password is wrong."`; 400 invalid new password; 429 attempt rate limit |
+| `POST /api/me/password` | Account | `{"current":"…","new":"…"}` | 204; keeps the current session and its room tabs; ends every other session and closes its room tabs | 403 `"Your current password is wrong."`; 400 invalid new password; 429 attempt rate limit |
 | `POST /api/me/avatar` | Account | Multipart form field `avatar`; PNG, JPEG, GIF or WebP, at most 5 MiB | 200 `{"user":<own account>}`; saves a 256×256 PNG and deletes the previous avatar if no account still references it | 415 `"Use a PNG, JPEG, GIF or WebP image."`; 413 `"File is too large."`; 400 malformed multipart or missing/duplicate field |
 | `DELETE /api/me/avatar` | Account | None | 200 `{"user":<own account>}`; clears the avatar and deletes its file if no account still references it | Common account errors |
+
+Session revocation sends affected room tabs `{"type":"kicked","reason":"session"}`
+and closes their sockets with code 4000; their neko members and proxy
+connections are removed too. Tabs of other accounts and anonymous browsers
+are unaffected.
 
 Profile and avatar changes reach live room connections as `user_updated`.
 Avatars are decoded (GIF uses its first frame), center-cropped to a square,
@@ -84,7 +89,7 @@ All callers: admin.
 | `GET /api/admin/users` | None | 200 array of admin accounts, ordered by username | Common admin errors |
 | `PATCH /api/admin/users/{username}` | Any subset of `{"admin":true,"verified":true,"disabled":false}` | 200 updated admin account; disabling deletes all sessions; flags reach live room connections | 404 `"Unknown user."`; 403 `"You can't remove your own admin rights or disable yourself."`; 409 `"There must be at least one admin."` |
 | `DELETE /api/admin/users/{username}` | None | 204; deletes account, sessions and permissions; deletes the avatar file if no account still references it; disconnects live room connections | 404 unknown user; 403 `"You can't delete yourself."`; 409 `"Remove admin rights first."` |
-| `POST /api/admin/users/{username}/password` | `{"password":"…"}` | 204; resets password and deletes all of the user's sessions | 404 unknown user; 400 `"Passwords are 8-100 characters."` |
+| `POST /api/admin/users/{username}/password` | `{"password":"…"}` | 204; resets password, deletes all of the user's sessions and closes all of their live room tabs with reason `session` | 404 unknown user; 400 `"Passwords are 8-100 characters."` |
 
 Admins may change their own verification flag, but may not change their own
 admin or disabled flag. At least one enabled admin must remain.
@@ -119,7 +124,11 @@ All callers: admin.
 | `DELETE /api/admin/bans/{id}` | None | 204; removes an anonymous ban | 400 invalid integer ID; 404 `"Unknown ban."` |
 
 Anonymous bans match the browser's anonymous ID **or** IP. Kicks do not create
-a ban and allow the person to rejoin immediately.
+a ban and allow the person to rejoin immediately. An anonymous ban also
+disconnects all tabs of every anonymous identity in that room with a tab on
+the banned IP, including its tabs on other IPs. Accounts on that IP are
+unaffected. The stored ban uses the target's anonymous ID and the IP of its
+most recently joined live tab; a plain kick removes only the target identity.
 
 ## Admin global settings
 
@@ -170,7 +179,7 @@ before restarting. Disabled, unauthorized and cooldown requests receive an
 An unknown room upgrades successfully, sends
 `{"type":"kicked","reason":"not_found"}`, then closes with code 4000.
 Other `kicked.reason` values are `banned`, `account`, `verified`, `invite`,
-`kicked` and `deleted`.
+`kicked`, `deleted` and `session`.
 
 On join or a `{"type":"neko_token"}` request, failure to issue a token
 because neko failed sends `{"type":"neko_unavailable","message":"..."}`

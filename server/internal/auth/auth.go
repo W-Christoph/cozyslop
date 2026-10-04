@@ -38,9 +38,10 @@ func ValidatePassword(password string) error {
 
 // Identity is who is making a request: an account, or an anonymous browser.
 type Identity struct {
-	User   *store.User // nil for anonymous
-	AnonID string      // always set; stable per browser, derived from the cozy_anon cookie
-	IP     string
+	User        *store.User // nil for anonymous
+	AnonID      string      // always set; stable per browser, derived from the cozy_anon cookie
+	IP          string
+	SessionHash []byte `json:"-"` // account session's stored hash; never sent to clients
 }
 
 // Key groups all connections of one person: "u:<id>" or "a:<anon id>".
@@ -86,10 +87,12 @@ func (a *Service) Identify(w http.ResponseWriter, r *http.Request) (Identity, er
 	}
 
 	if c, err := r.Cookie(sessionCookie); err == nil && validToken(c.Value) {
-		u, extended, err := a.store.SessionUser(r.Context(), hashToken(c.Value))
+		hash := hashToken(c.Value)
+		u, extended, err := a.store.SessionUser(r.Context(), hash)
 		switch {
 		case err == nil:
 			id.User = u
+			id.SessionHash = hash
 			if extended {
 				a.setCookie(w, r, sessionCookie, c.Value, store.SessionTTL)
 			}
@@ -132,21 +135,24 @@ func (a *Service) StartSession(w http.ResponseWriter, r *http.Request, u *store.
 	return nil
 }
 
-func (a *Service) Logout(w http.ResponseWriter, r *http.Request) error {
+// Logout ends the request's session and returns its hash for live revocation.
+func (a *Service) Logout(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	a.clearCookie(w, r, sessionCookie)
 	if c, err := r.Cookie(sessionCookie); err == nil {
-		return a.store.DeleteSession(r.Context(), hashToken(c.Value))
+		hash := hashToken(c.Value)
+		return hash, a.store.DeleteSession(r.Context(), hash)
 	}
-	return nil
+	return nil, nil
 }
 
-// LogoutOthers ends every session of u except the request's own.
-func (a *Service) LogoutOthers(ctx context.Context, r *http.Request, u *store.User) error {
+// LogoutOthers ends every session of u except the request's own, returning
+// the hash to keep for live revocation.
+func (a *Service) LogoutOthers(ctx context.Context, r *http.Request, u *store.User) ([]byte, error) {
 	var keep []byte
 	if c, err := r.Cookie(sessionCookie); err == nil {
 		keep = hashToken(c.Value)
 	}
-	return a.store.DeleteUserSessions(ctx, u.ID, keep)
+	return keep, a.store.DeleteUserSessions(ctx, u.ID, keep)
 }
 
 // ClientIP is the address rate limits and anonymous bans apply to.

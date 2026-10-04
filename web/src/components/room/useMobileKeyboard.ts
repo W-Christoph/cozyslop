@@ -1,40 +1,28 @@
 import type { RefObject } from 'preact'
 import { useLayoutEffect } from 'preact/hooks'
-import GuacamoleKeyboard from '../../neko/guacamole-keyboard.js'
 import { useRoomStore } from './RoomContext'
 
-// Use the same Guacamole translator as desktop input. A detached target
-// avoids sending both the native mobile event and its beforeinput fallback.
+// X11 keysyms of the keys a mobile keyboard reports as keys.
+const KEYSYMS = { Backspace: 0xff08, Enter: 0xff0d, Delete: 0xffff } as const
+type Key = keyof typeof KEYSYMS
+const isKey = (name: string): name is Key => Object.hasOwn(KEYSYMS, name)
+
+// A mobile keyboard reports text, not key presses: characters arrive without
+// the modifiers a physical key needs (a lone "A" pressed as a key comes out
+// as "a"). So all text is inserted as text, through neko's paste, and only
+// Enter and the delete keys are sent as keys.
 export function useMobileKeyboard(textarea: RefObject<HTMLTextAreaElement | null>) {
   const store = useRoomStore()
   useLayoutEffect(() => {
     const el = textarea.current
     if (!el) return
-    const target = document.createElement('div')
-    const keyboard = new GuacamoleKeyboard(target)
-    keyboard.onkeydown = (keysym) => {
-      if (store.isHost.value) store.neko.keyDown(keysym)
-      return false
-    }
-    keyboard.onkeyup = (keysym) => {
-      if (store.isHost.value) store.neko.keyUp(keysym)
-    }
-    const key = (value: string) => {
+    const key = (name: Key) => {
       if (!store.isHost.value) return
-      const special: Record<string, number> = { Backspace: 8, Enter: 13, Delete: 46 }
-      const keyCode = special[value] ?? value.toUpperCase().charCodeAt(0)
-      target.dispatchEvent(new KeyboardEvent('keydown', { key: value, keyCode, cancelable: true }))
-      if (Array.from(value).length === 1) {
-        target.dispatchEvent(new KeyboardEvent('keypress', {
-          key: value, keyCode: value.codePointAt(0), charCode: value.codePointAt(0), cancelable: true,
-        }))
-      }
-      target.dispatchEvent(new KeyboardEvent('keyup', { key: value, keyCode, cancelable: true }))
+      store.neko.keyDown(KEYSYMS[name])
+      store.neko.keyUp(KEYSYMS[name])
     }
     const text = (value: string) => {
-      if (!store.isHost.value || !value) return
-      if (Array.from(value).length === 1) key(value)
-      else store.neko.paste(value)
+      if (store.isHost.value && value) store.neko.paste(value)
     }
     let composing = false
     let composition = ''
@@ -42,11 +30,12 @@ export function useMobileKeyboard(textarea: RefObject<HTMLTextAreaElement | null
     const reset = () => { el.value = ' '; el.setSelectionRange(1, 1) }
     const keydown = (e: KeyboardEvent) => {
       if (!store.isHost.value || composing || e.isComposing || e.keyCode === 229) return
-      if (Array.from(e.key).length === 1 || ['Backspace', 'Enter', 'Delete'].includes(e.key)) {
-        e.preventDefault()
-        key(e.key)
-        reset()
-      }
+      const printable = Array.from(e.key).length === 1
+      if (!printable && !isKey(e.key)) return
+      e.preventDefault()
+      if (isKey(e.key)) key(e.key)
+      else text(e.key)
+      reset()
     }
     const beforeinput = (e: InputEvent) => {
       if (!store.isHost.value || composing || e.isComposing || e.inputType === 'insertCompositionText') return
@@ -76,14 +65,14 @@ export function useMobileKeyboard(textarea: RefObject<HTMLTextAreaElement | null
     const compositionend = (e: CompositionEvent) => {
       composing = false
       composition = e.data
-      if (store.isHost.value && e.data) store.neko.paste(e.data)
+      text(e.data)
       reset()
       window.clearTimeout(clearComposition)
       clearComposition = window.setTimeout(() => { composition = '' }, 0)
     }
     const paste = (e: ClipboardEvent) => {
       e.preventDefault()
-      if (store.isHost.value) store.neko.paste(e.clipboardData?.getData('text/plain') ?? '')
+      text(e.clipboardData?.getData('text/plain') ?? '')
       reset()
     }
     reset()
@@ -95,7 +84,6 @@ export function useMobileKeyboard(textarea: RefObject<HTMLTextAreaElement | null
     el.addEventListener('paste', paste)
     return () => {
       window.clearTimeout(clearComposition)
-      keyboard.reset()
       el.removeEventListener('keydown', keydown)
       el.removeEventListener('beforeinput', beforeinput)
       el.removeEventListener('input', input)

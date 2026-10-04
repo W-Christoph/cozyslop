@@ -30,6 +30,10 @@ to the anon id **and** the IP address.
 Each browser tab is additionally a **client** with its own id, which is also
 its neko member id.
 
+Account ids are never reused after deletion. Chat retains an account's
+identity key after its user reference is cleared, so a new account cannot
+inherit that account's message edit rights.
+
 ## The neko admin token
 
 neko runs as the desktop's user, so whoever holds the remote can read the
@@ -64,7 +68,9 @@ What ends that is taking away their remote right and restarting the room.
   verify unchanged.
 - Sessions: opaque random token in the `cozy_session` cookie (HttpOnly,
   SameSite=Lax, Secure when served over HTTPS). The database stores only its
-  SHA-256. Sessions expire after 30 days without use; use slides the expiry.
+  SHA-256. Sessions expire after 30 days without use; use slides the expiry
+  at most once an hour and renews the cookie with the same 30-day lifetime
+  when the database expiry is extended. Invalid sessions are never renewed.
   Logout deletes the session. Disabling or deleting an account deletes its
   sessions and closes its sockets.
 - The room WebSocket authenticates with the same cookie during the upgrade;
@@ -76,10 +82,24 @@ What ends that is taking away their remote right and restarting the room.
   one proxy in front: it must append to `X-Forwarded-For`, and the server
   must not be reachable around it.
 
+`cozycast reset-admin` reads the usual configuration and applies database
+migrations, then resets or creates `admin` using
+`COZYCAST_INIT_ADMIN_PASSWORD`. It validates and hashes the password before
+opening the database, then restores admin rights, enables the account and
+deletes its sessions in one short transaction. Existing profile and
+verification fields are preserved; a newly created admin is verified. It
+exits without starting listeners, rooms or the legacy import. See the
+[recovery instructions](../README.md#develop).
+
 ## Data (SQLite)
 
 One file, `data/cozycast.db`, WAL mode, foreign keys on. Schema migrations are
 embedded SQL files applied in order at startup (`server/internal/store/migrations`).
+The migration runner uses one connection with foreign keys disabled outside
+the migration transactions, checks `PRAGMA foreign_key_check` before each
+commit and restores enforcement afterward. A failed check rolls the migration
+back. The users rebuild preserves ids and seeds its AUTOINCREMENT sequence
+from both existing users and numeric account identity keys retained in chat.
 
 - `users`: id, username (lowercase, unique), password_hash, nickname,
   name_color, avatar (file name or empty), admin, verified, disabled,

@@ -24,8 +24,8 @@ func (s *Store) CreateSession(ctx context.Context, tokenHash []byte, userID int6
 }
 
 // SessionUser returns the enabled user owning a valid session and slides
-// the session's expiry.
-func (s *Store) SessionUser(ctx context.Context, tokenHash []byte) (*User, error) {
+// the session's expiry, reporting whether it was extended.
+func (s *Store) SessionUser(ctx context.Context, tokenHash []byte) (*User, bool, error) {
 	now := s.unix()
 	var lastSeen int64
 	row := s.db.QueryRowContext(ctx,
@@ -36,20 +36,27 @@ func (s *Store) SessionUser(ctx context.Context, tokenHash []byte) (*User, error
 	err := row.Scan(&lastSeen, &u.ID, &u.Username, &u.PasswordHash, &u.Nickname, &u.NameColor,
 		&u.Avatar, &u.Admin, &u.Verified, &u.Disabled, &u.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, false, ErrNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
+	var extended bool
 	if now-lastSeen >= int64(sessionTouchInterval.Seconds()) {
-		_, err = s.db.ExecContext(ctx, "UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?",
-			now, now+int64(SessionTTL.Seconds()), tokenHash)
+		res, err := s.db.ExecContext(ctx,
+			"UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ? AND last_seen_at <= ? AND expires_at > ?",
+			now, now+int64(SessionTTL.Seconds()), tokenHash, now-int64(sessionTouchInterval.Seconds()), now)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return nil, false, err
+		}
+		extended = n > 0
 	}
-	return &u, nil
+	return &u, extended, nil
 }
 
 func (s *Store) DeleteSession(ctx context.Context, tokenHash []byte) error {

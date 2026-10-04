@@ -8,9 +8,13 @@ fields return 400; oversized bodies return 413. Errors use
 A 204 response has no body.
 
 Authentication uses the HttpOnly `cozy_session` cookie (SameSite=Lax, Secure on
-HTTPS). Sessions expire after 30 days without use. Anonymous identity uses the
-HttpOnly `cozy_anon` cookie. State-changing requests with an `Origin` whose host
-(including port) differs from the request host return 403
+HTTPS). Sessions expire after 30 days without use. Authenticated requests
+extend the database expiry at most once an hour; those requests also renew
+the session cookie's 30-day Max-Age with the same attributes as login. Other
+requests do not renew it; expired or unknown sessions clear the session cookie.
+Anonymous identity uses the HttpOnly `cozy_anon` cookie. State-changing
+requests with an `Origin` whose host (including port) differs from the request
+host return 403
 `"cross-origin request rejected"`. WebSocket upgrades also enforce same origin.
 
 “Account” below means a logged-in, enabled account; missing or invalid sessions

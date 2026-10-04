@@ -86,10 +86,13 @@ func (a *Service) Identify(w http.ResponseWriter, r *http.Request) (Identity, er
 	}
 
 	if c, err := r.Cookie(sessionCookie); err == nil && validToken(c.Value) {
-		u, err := a.store.SessionUser(r.Context(), hashToken(c.Value))
+		u, extended, err := a.store.SessionUser(r.Context(), hashToken(c.Value))
 		switch {
 		case err == nil:
 			id.User = u
+			if extended {
+				a.setCookie(w, r, sessionCookie, c.Value, store.SessionTTL)
+			}
 		case errors.Is(err, store.ErrNotFound):
 			a.clearCookie(w, r, sessionCookie)
 		default:

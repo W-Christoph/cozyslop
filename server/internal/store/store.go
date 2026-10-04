@@ -51,9 +51,15 @@ func Open(ctx context.Context, path string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
-func (s *Store) migrate(ctx context.Context) error {
+func (s *Store) migrate(ctx context.Context) (err error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
 	var version int
-	if err := s.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+	if err := conn.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
 
@@ -62,6 +68,15 @@ func (s *Store) migrate(ctx context.Context) error {
 		return err
 	}
 	sort.Strings(names)
+	// Table rebuilds must disable foreign keys before beginning the transaction,
+	// on the same connection. Check references before committing each migration.
+	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
+		return err
+	}
+	defer func() {
+		_, restoreErr := conn.ExecContext(context.Background(), "PRAGMA foreign_keys = ON")
+		err = errors.Join(err, restoreErr)
+	}()
 
 	for i, name := range names {
 		if i+1 <= version {
@@ -71,18 +86,38 @@ func (s *Store) migrate(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		err = s.tx(ctx, func(tx *sql.Tx) error {
-			if _, err := tx.ExecContext(ctx, string(body)); err != nil {
-				return err
-			}
-			_, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", i+1))
-			return err
-		})
+		err = migrateSQL(ctx, conn, string(body), i+1)
 		if err != nil {
 			return fmt.Errorf("migration %s: %w", strings.TrimPrefix(name, "migrations/"), err)
 		}
 	}
 	return nil
+}
+
+func migrateSQL(ctx context.Context, conn *sql.Conn, body string, version int) error {
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, body); err != nil {
+		return err
+	}
+	rows, err := tx.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return errors.New("foreign_key_check failed")
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", version)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) tx(ctx context.Context, fn func(*sql.Tx) error) error {

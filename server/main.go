@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -27,16 +29,36 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
-		slog.Error("fatal", "err", err)
+	if err := run(os.Args[1:], os.Stdout); err != nil {
+		if len(os.Args) > 1 {
+			fmt.Fprintln(os.Stderr, err)
+		} else {
+			slog.Error("fatal", "err", err)
+		}
 		os.Exit(1)
 	}
 }
 
-func run() error {
+func run(args []string, out io.Writer) error {
+	if len(args) > 0 && args[0] != "reset-admin" {
+		return fmt.Errorf("unknown subcommand %q\nUsage: cozycast [reset-admin]", args[0])
+	}
+	if len(args) > 1 {
+		return errors.New("Usage: cozycast [reset-admin]")
+	}
 	cfg, err := config.FromEnv()
 	if err != nil {
 		return err
+	}
+	var adminHash string
+	if len(args) > 0 {
+		if err := auth.ValidatePassword(cfg.InitAdminPass); err != nil {
+			return fmt.Errorf("COZYCAST_INIT_ADMIN_PASSWORD: %w", err)
+		}
+		adminHash, err = auth.HashPassword(cfg.InitAdminPass)
+		if err != nil {
+			return err
+		}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -50,6 +72,18 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+	if len(args) > 0 {
+		created, err := db.ResetAdmin(ctx, adminHash)
+		if err != nil {
+			return err
+		}
+		action := "Reset admin password"
+		if created {
+			action = "Created admin account"
+		}
+		_, err = fmt.Fprintln(out, action+"; enabled admin rights and cleared sessions.")
+		return err
+	}
 	mediaDir := filepath.Join(cfg.DataDir, "media")
 	for _, dir := range []string{"chat", "avatars"} {
 		if err := os.MkdirAll(filepath.Join(mediaDir, dir), 0o750); err != nil {

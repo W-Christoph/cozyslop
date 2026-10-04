@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -189,5 +191,169 @@ func TestShutdownWaitsForRoomHandlers(t *testing.T) {
 				t.Fatal("shutdown retained room members")
 			}
 		})
+	}
+}
+
+func TestResetAdminCommand(t *testing.T) {
+	for _, existing := range []bool{true, false} {
+		name := "create"
+		if existing {
+			name = "reset"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			dir := t.TempDir()
+			t.Setenv("COZYCAST_DATA_DIR", dir)
+			t.Setenv("COZYCAST_NEKO_SECRET", "test secret")
+			t.Setenv("COZYCAST_INIT_ADMIN_PASSWORD", "new password")
+			t.Setenv("COZYCAST_LISTEN", "invalid listen address")
+			t.Setenv("COZYCAST_ROOMS", "main=invalid-neko-url")
+			t.Setenv("COZYCAST_DOCKER", "true")
+			archive := filepath.Join(dir, "invalid-import")
+			if err := os.WriteFile(archive, []byte("not an archive"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("COZYCAST_IMPORT", archive)
+			// Keep another connection open, as when the server is running.
+			st, err := store.Open(ctx, filepath.Join(dir, "cozycast.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer st.Close()
+			var old *store.User
+			if existing {
+				hash, err := auth.HashPassword("old password")
+				if err != nil {
+					t.Fatal(err)
+				}
+				old = &store.User{Username: "admin", PasswordHash: hash, Nickname: "Custom", NameColor: "#f90", Avatar: "avatar.png", Disabled: true}
+				if err := st.CreateUser(ctx, old); err != nil {
+					t.Fatal(err)
+				}
+				for _, token := range []string{"first", "second"} {
+					if err := st.CreateSession(ctx, []byte(token), old.ID); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			other := &store.User{Username: "alice", PasswordHash: "hash", Nickname: "Alice"}
+			if err := st.CreateUser(ctx, other); err != nil {
+				t.Fatal(err)
+			}
+			if err := st.CreateSession(ctx, []byte("other"), other.ID); err != nil {
+				t.Fatal(err)
+			}
+			var out bytes.Buffer
+			if err := run([]string{"reset-admin"}, &out); err != nil {
+				t.Fatal(err)
+			}
+			u, err := st.UserByUsername(ctx, "admin")
+			if err != nil || !u.Admin || u.Disabled || !auth.CheckPassword(u, "new password") || auth.CheckPassword(u, "old password") {
+				t.Fatalf("restored admin: %+v %v", u, err)
+			}
+			if existing {
+				if u.ID != old.ID || u.Nickname != old.Nickname || u.NameColor != old.NameColor || u.Avatar != old.Avatar || u.Verified != old.Verified || u.CreatedAt != old.CreatedAt {
+					t.Fatalf("reset changed unrelated account data: %+v want %+v", u, old)
+				}
+				for _, token := range []string{"first", "second"} {
+					if _, extended, err := st.SessionUser(ctx, []byte(token)); !errors.Is(err, store.ErrNotFound) || extended {
+						t.Fatalf("admin session retained: %v extended=%v", err, extended)
+					}
+				}
+			} else if u.Nickname != "admin" || !u.Verified {
+				t.Fatalf("created admin defaults: %+v", u)
+			}
+			if got, _, err := st.SessionUser(ctx, []byte("other")); err != nil || got.ID != other.ID {
+				t.Fatalf("other user's session changed: %+v %v", got, err)
+			}
+			want := "Created admin account; enabled admin rights and cleared sessions.\n"
+			if existing {
+				want = "Reset admin password; enabled admin rights and cleared sessions.\n"
+			}
+			if out.String() != want {
+				t.Fatalf("output: %q want %q", out.String(), want)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "media")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("reset initialized server media directories: %v", err)
+			}
+			db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, "cozycast.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			var count int
+			if err := db.QueryRow("SELECT count(*) FROM rooms").Scan(&count); err != nil || count != 0 {
+				t.Fatalf("reset initialized rooms: count=%d %v", count, err)
+			}
+		})
+	}
+}
+
+func TestResetAdminRejectsInvalidPassword(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	t.Setenv("COZYCAST_DATA_DIR", dir)
+	t.Setenv("COZYCAST_NEKO_SECRET", "test secret")
+	st, err := store.Open(ctx, filepath.Join(dir, "cozycast.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	hash, err := auth.HashPassword("old password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := &store.User{Username: "admin", PasswordHash: hash, Nickname: "Custom", Disabled: true}
+	if err := st.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateSession(ctx, []byte("session"), u.ID); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, "cozycast.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, password := range []string{"", "short", strings.Repeat("a", 73), strings.Repeat("é", 37)} {
+		t.Setenv("COZYCAST_INIT_ADMIN_PASSWORD", password)
+		var out bytes.Buffer
+		if err := run([]string{"reset-admin"}, &out); err == nil || !strings.Contains(err.Error(), "COZYCAST_INIT_ADMIN_PASSWORD") {
+			t.Fatalf("invalid password accepted: %v", err)
+		}
+		got, err := st.UserByUsername(ctx, "admin")
+		if err != nil || *got != *u || !auth.CheckPassword(got, "old password") {
+			t.Fatalf("invalid password changed admin: %+v %v", got, err)
+		}
+		var count int
+		if err := db.QueryRow("SELECT count(*) FROM sessions WHERE user_id = ?", u.ID).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("invalid password revoked sessions: %d %v", count, err)
+		}
+		if out.Len() != 0 {
+			t.Fatalf("invalid password printed success: %q", out.String())
+		}
+	}
+	if err := st.DeleteUser(ctx, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("COZYCAST_INIT_ADMIN_PASSWORD", "")
+	if err := run([]string{"reset-admin"}, &bytes.Buffer{}); err == nil {
+		t.Fatal("empty password accepted for missing admin")
+	}
+	if _, err := st.UserByUsername(ctx, "admin"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("invalid password created admin: %v", err)
+	}
+}
+
+func TestUnknownSubcommand(t *testing.T) {
+	for _, args := range [][]string{{"unknown"}, {"reset-admin", "extra"}} {
+		var out bytes.Buffer
+		err := run(args, &out)
+		if err == nil || !strings.Contains(err.Error(), "Usage: cozycast [reset-admin]") || out.Len() != 0 {
+			t.Fatalf("args %v: err=%v output=%q", args, err, out.String())
+		}
+		if args[0] == "unknown" && !strings.Contains(err.Error(), "unknown subcommand") {
+			t.Fatalf("unknown subcommand not identified: %v", err)
+		}
 	}
 }

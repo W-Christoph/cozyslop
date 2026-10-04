@@ -105,6 +105,22 @@ Run the server with `COZYCAST_WEB_DIR=server/webui/dist` to serve the UI from
 disk, or use `npm run dev` (Vite proxies `/api` and `/neko` to
 `COZYCAST_SERVER`, default `http://localhost:8080`).
 
+`COZYCAST_INIT_ADMIN_PASSWORD` creates `admin` only when the account is
+missing during normal startup. To recover a lost password, set it to the new
+password and run `cozycast reset-admin` with the usual server environment.
+With Compose, set `ADMIN_PASSWORD` in `.env`, then run:
+
+```bash
+docker compose run --rm server reset-admin
+```
+
+The command resets or creates `admin`, restores admin rights, enables the
+account and deletes all its sessions. It prints one line and exits without
+starting HTTP listeners or rooms. It is safe to run while the server is
+running. An empty or invalid password is rejected without changes; passwords
+must have at least 8 characters and at most 72 bytes. Later normal starts
+leave an existing account's password unchanged.
+
 | Server variable | Default | |
 |---|---|---|
 | `COZYCAST_NEKO_SECRET` | required | each room's neko admin token is derived from it and the room's name; the room containers get the same secret and do the same (`COZYCAST_ROOM`) |
@@ -112,7 +128,7 @@ disk, or use `npm run dev` (Vite proxies `/api` and `/neko` to
 | `COZYCAST_ROOMS` | `default=http://room-default:8080` | `name=url,name2=url2` |
 | `COZYCAST_DEFAULT_SCREEN` | | container default screen for all rooms (`1280x720@30`); Compose sets it from `SCREEN`; empty leaves the desktop size alone when clearing the room setting |
 | `COZYCAST_DATA_DIR` | `data` | database and uploaded chat media |
-| `COZYCAST_INIT_ADMIN_PASSWORD` | | creates the `admin` account on first start |
+| `COZYCAST_INIT_ADMIN_PASSWORD` | | creates the `admin` account on first start; sets its password with `reset-admin` |
 | `COZYCAST_LISTEN` | `:8080` | HTTP; with a domain set it only redirects and answers Let's Encrypt |
 | `COZYCAST_TLS_LISTEN` | `:8443` | HTTPS, used when a domain is set |
 | `COZYCAST_DOMAIN` | | host names for automatic HTTPS, comma separated |

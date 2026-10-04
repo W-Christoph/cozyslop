@@ -36,7 +36,7 @@ func TestUsersAndSessions(t *testing.T) {
 	if err := s.CreateSession(ctx, token, u.ID); err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.SessionUser(ctx, token)
+	got, _, err := s.SessionUser(ctx, token)
 	if err != nil || got.ID != u.ID {
 		t.Fatalf("session user: %v %+v", err, got)
 	}
@@ -45,14 +45,14 @@ func TestUsersAndSessions(t *testing.T) {
 	if err := s.UpdateFlags(ctx, u.ID, false, false, true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SessionUser(ctx, token); !errors.Is(err, ErrNotFound) {
+	if _, _, err := s.SessionUser(ctx, token); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("disabled user session: %v", err)
 	}
 	s.UpdateFlags(ctx, u.ID, false, false, false)
 
 	// Expiry.
 	s.now = func() time.Time { return time.Now().Add(SessionTTL + time.Minute) }
-	if _, err := s.SessionUser(ctx, token); !errors.Is(err, ErrNotFound) {
+	if _, _, err := s.SessionUser(ctx, token); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expired session: %v", err)
 	}
 }

@@ -118,6 +118,34 @@ func (s *Store) UpdatePassword(ctx context.Context, id int64, hash string) error
 	return s.execOne(ctx, "UPDATE users SET password_hash = ? WHERE id = ?", hash, id)
 }
 
+// ResetAdmin restores the admin account and revokes its sessions atomically.
+// The caller validates and hashes the password before taking the write lock.
+func (s *Store) ResetAdmin(ctx context.Context, hash string) (bool, error) {
+	var created bool
+	err := s.tx(ctx, func(tx *sql.Tx) error {
+		var id int64
+		err := tx.QueryRowContext(ctx, "SELECT id FROM users WHERE username = 'admin'").Scan(&id)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			u := &User{Username: "admin", PasswordHash: hash, Nickname: "admin", Admin: true, Verified: true}
+			if err := s.createUser(ctx, tx, u); err != nil {
+				return err
+			}
+			id = u.ID
+			created = true
+		case err != nil:
+			return err
+		default:
+			if _, err := tx.ExecContext(ctx, "UPDATE users SET password_hash = ?, admin = 1, disabled = 0 WHERE id = ?", hash, id); err != nil {
+				return err
+			}
+		}
+		_, err = tx.ExecContext(ctx, "DELETE FROM sessions WHERE user_id = ?", id)
+		return err
+	})
+	return created, err
+}
+
 // UpdateFlags sets the admin-controlled account flags.
 func (s *Store) UpdateFlags(ctx context.Context, id int64, admin, verified, disabled bool) error {
 	return s.execOne(ctx, "UPDATE users SET admin = ?, verified = ?, disabled = ? WHERE id = ?",

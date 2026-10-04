@@ -57,3 +57,17 @@ func TestSocketURL(t *testing.T) {
 		}
 	}
 }
+
+func TestWidescreen(t *testing.T) {
+	for size, want := range map[ScreenSize]bool{
+		{Width: 1920, Height: 1080, Rate: 60}: true,
+		{Width: 1024, Height: 576, Rate: 30}:  true,
+		{Width: 1368, Height: 768, Rate: 30}:  false, // neko's "768p" is not quite 16:9
+		{Width: 960, Height: 720, Rate: 30}:   false,
+		{Width: 800, Height: 1600, Rate: 30}:  false,
+	} {
+		if got := size.Widescreen(); got != want {
+			t.Errorf("%v: Widescreen() = %v, want %v", size, got, want)
+		}
+	}
+}

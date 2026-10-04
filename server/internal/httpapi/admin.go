@@ -339,7 +339,7 @@ func (s *Server) adminSaveRoomSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, set)
 }
 
-// adminStreamOptions lists what the room's desktop supports: screen sizes
+// adminStreamOptions lists what the room can be set to: 16:9 screen sizes
 // ("1280x720@30") and capture pipelines ("b2500-s100-veryfast", the default first).
 func (s *Server) adminStreamOptions(w http.ResponseWriter, r *http.Request) {
 	if s.requireAdmin(w, r) == nil {
@@ -350,7 +350,7 @@ func (s *Server) adminStreamOptions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Unknown room.")
 		return
 	}
-	list, err := rm.Neko().ScreenConfigurations(r.Context())
+	list, err := offeredScreens(r, rm)
 	streams := rm.Streams()
 	if err != nil || streams == nil {
 		if err != nil {
@@ -366,6 +366,13 @@ func (s *Server) adminStreamOptions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string][]string{"screens": screens, "streams": streams})
 }
 
+// offeredScreens lists the resolutions a room can be set to: the 16:9 ones
+// among what its desktop supports.
+func offeredScreens(r *http.Request, rm *hub.Room) ([]neko.ScreenSize, error) {
+	list, err := rm.Neko().ScreenConfigurations(r.Context())
+	return slices.DeleteFunc(list, func(s neko.ScreenSize) bool { return !s.Widescreen() }), err
+}
+
 // screenSupported checks a requested resolution against the room's desktop,
 // answering the request itself if it is not supported.
 func (s *Server) screenSupported(w http.ResponseWriter, r *http.Request, room, screen string) bool {
@@ -373,7 +380,7 @@ func (s *Server) screenSupported(w http.ResponseWriter, r *http.Request, room, s
 		writeError(w, http.StatusBadRequest, "Screen must look like 1280x720@30.")
 		return false
 	}
-	list, err := s.hub.Room(room).Neko().ScreenConfigurations(r.Context())
+	list, err := offeredScreens(r, s.hub.Room(room))
 	if err != nil {
 		s.log.Warn("list neko screens", "room", room, "err", err)
 		writeError(w, http.StatusServiceUnavailable, "The room's desktop is not reachable right now.")

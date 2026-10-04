@@ -159,6 +159,9 @@ type ScreenSize struct {
 
 func (s ScreenSize) String() string { return fmt.Sprintf("%dx%d@%d", s.Width, s.Height, s.Rate) }
 
+// Widescreen reports whether the resolution is exactly 16:9.
+func (s ScreenSize) Widescreen() bool { return s.Width*9 == s.Height*16 }
+
 // ParseScreen reads "1280x720@30".
 func ParseScreen(str string) (ScreenSize, error) {
 	var s ScreenSize

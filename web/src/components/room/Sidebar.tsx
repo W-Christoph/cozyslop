@@ -7,7 +7,7 @@ export function Sidebar({ chatOpen, fullscreen, idle }: { chatOpen: boolean; ful
   const store = useRoomStore()
   const transparent = fullscreen && preferences.value.transparentChat
   return <aside hidden={!chatOpen} aria-label="Chat"
-    class={`${styles.sidebar} ${transparent ? styles.transparent : ''} ${fullscreen && idle && chatOpen ? styles.hidden : ''} ${transparent && store.isHost.value ? styles.host : ''}`}>
-    <ChatPanel active={chatOpen} />
+    class={`${styles.sidebar} ${transparent ? styles.transparent : ''} ${transparent && store.isHost.value ? styles.host : ''}`}>
+    <ChatPanel active={chatOpen} idle={fullscreen && idle} />
   </aside>
 }

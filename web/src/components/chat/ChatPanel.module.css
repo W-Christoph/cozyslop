@@ -3,10 +3,14 @@
 .transparent { color: var(--color-crop-white); }
 .transparent * { text-shadow: 0.07em 0 var(--color-border), 0 0.07em var(--color-border), -0.07em 0 var(--color-border), 0 -0.07em var(--color-border); }
 .transparent [data-chat-bubble], .transparent [data-chat-input-wrapper] { border: 1px solid var(--color-chat-overlay-border); background: var(--color-chat-overlay-bg); box-shadow: 0 0 2px var(--color-border) inset; }
-.transparent [data-chat-bubble] { opacity: 0; animation: fadeout 300ms 10s backwards; }
+/* Over the stream a message shows for ten seconds and then fades, as in the
+   old CozyCast: the animation holds it visible whatever else hides it.
+   Pointing at the chat or writing in it shows all of it, until the pointer
+   rests (idle) and the chat hides with the toolbar. */
+.transparent [data-chat-bubble] { opacity: 0; animation: fadeout 300ms 10s backwards; transition: opacity 0.2s linear; }
 .transparent [data-chat-input] { opacity: 0; transition: opacity 0.2s linear; }
-.transparent:hover [data-chat-bubble], .transparent:focus-within [data-chat-bubble], .transparent:hover [data-chat-input], .transparent:focus-within [data-chat-input], .transparent [data-has-text='true'] { opacity: 1; transition: none; }
-.transparent:hover [data-chat-bubble], .transparent:focus-within [data-chat-bubble] { animation-duration: 0s; }
+.transparent:not(.idle):hover [data-chat-bubble], .transparent:not(.idle):focus-within [data-chat-bubble], .transparent:not(.idle):hover [data-chat-input], .transparent:not(.idle):focus-within [data-chat-input], .transparent [data-has-text='true'] { opacity: 1; transition: none; }
+.transparent:not(.idle):hover [data-chat-bubble], .transparent:not(.idle):focus-within [data-chat-bubble] { animation-duration: 0s; }
 @keyframes fadeout { from { opacity: 1; } to { opacity: 0; } }
 @media (max-width: 780px) and (orientation: portrait) {
   .transparent [data-chat-bubble], .transparent [data-chat-input] { opacity: 1; animation: none; }

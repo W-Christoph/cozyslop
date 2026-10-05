@@ -1,14 +1,9 @@
-.sidebar { width: var(--chat-size); flex-shrink: 0; min-width: 0; display: flex; flex-direction: column; color: var(--color-text); background: var(--color-menu) var(--noise); overflow: auto; transition: opacity 0.2s linear; }
+.sidebar { width: var(--chat-size); flex-shrink: 0; min-width: 0; display: flex; flex-direction: column; color: var(--color-text); background: var(--color-menu) var(--noise); overflow: auto; }
 .sidebar[hidden] { display: none; }
 .transparent { position: absolute; top: 0; right: 0; height: calc(100% - 3em); z-index: 3; background: transparent; color: var(--color-crop-white); text-shadow: 0 1px 2px var(--color-border); }
-.hidden { opacity: 0; pointer-events: none; }
 .host { visibility: hidden; }
 @media (max-width: 780px) and (orientation: portrait) {
   .sidebar { width: 100%; flex: 1; }
   .transparent { position: relative; height: auto; }
   .host { visibility: visible; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sidebar { transition: none; }
 }

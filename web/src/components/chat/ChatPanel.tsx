@@ -7,7 +7,8 @@ import { MessageList } from './MessageList'
 import { useChatEvents } from './useChatEvents'
 import styles from './ChatPanel.module.css'
 
-export function ChatPanel({ active = true }: { active?: boolean }) {
+// idle: in fullscreen, the pointer has rested and the toolbar is hidden.
+export function ChatPanel({ active = true, idle = false }: { active?: boolean; idle?: boolean }) {
   const store = useRoomStore()
   const lines = useChatEvents(store)
   const [editing, setEditing] = useState<number | null>(null)
@@ -35,7 +36,7 @@ export function ChatPanel({ active = true }: { active?: boolean }) {
   const endEdit = () => { setEditing(null); input.current?.focus() }
   const { transparentChat, chatStyle, chatScale } = preferences.value
   const transparent = fullscreen && transparentChat
-  return <div ref={panel} hidden={!active} class={`${styles.chat} ${transparent ? styles.transparent : ''}`}
+  return <div ref={panel} hidden={!active} class={`${styles.chat} ${transparent ? styles.transparent : ''} ${transparent && idle ? styles.idle : ''}`}
     data-chat-style={chatStyle} data-chat-overlay={transparent || undefined} style={chatScale && chatScale !== 100 ? { fontSize: `${chatScale}%` } : undefined}>
     <MessageList lines={lines} editing={editing} onEdit={setEditing} onEndEdit={endEdit} onMedia={setMedia} />
     <ChatInput inputRef={input} onEdit={setEditing} />

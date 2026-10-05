@@ -51,4 +51,6 @@
   .action { min-width: 36px; height: 36px; }
   .action img { width: 20px; height: 20px; }
   .subMessage.withActions.actionsShown, .subMessage.withActions:focus-within { min-height: 42px; padding-right: 88px; }
+  /* Leave room for the wider "Delete?" button while it is visible. */
+  .subMessage.withActions.actionsShown:has(.confirm), .subMessage.withActions:focus-within:has(.confirm) { padding-right: calc(52px + 5em); }
 }

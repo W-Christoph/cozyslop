@@ -15,7 +15,7 @@ const results = [], keyboard = [], contrast = [], errors = []
 
 async function setup(browser, theme, width) {
   const page = await browser.newPage({ viewport: { width, height: 900 }, hasTouch: width === 390 })
-  let signedIn = true, room
+  let signedIn = true, room, neko
   page.on('pageerror', e => errors.push(e.message))
   page.on('dialog', d => { errors.push(`Native ${d.type()} dialog`); d.dismiss() })
   await page.addInitScript(({ theme }) => {
@@ -55,18 +55,84 @@ async function setup(browser, theme, width) {
       ws.send(JSON.stringify({ type: 'neko', token: 'test', path: '/neko/default' }))
     }, 20)
   })
-  await page.routeWebSocket('**/neko/**', ws => ws.onMessage(data => {
-    const event = JSON.parse(data).event
-    if (event === 'signal/request') {
-      // neko's heartbeat: the client drops a connection silent for 25s.
-      const beat = setInterval(() => ws.send(JSON.stringify({ event: 'system/heartbeat' })), 10_000)
-      ws.onClose(() => clearInterval(beat))
-      ws.send(JSON.stringify({ event: 'system/init', payload: { session_id: 'tab', sessions: { tab: { profile: { can_host: true } } }, screen_size: { width: 640, height: 360, rate: 30 }, control_host: { has_host: false } } }))
-      ws.send(JSON.stringify({ event: 'signal/provide', payload: { sdp: 'test' } }))
-    }
-    if (event === 'filetransfer/update') ws.send(JSON.stringify({ event: 'filetransfer/update', payload: { files: [{ name: 'Movie night notes.txt', type: 'file', size: 2048 }, { name: 'A very long movie filename for the mobile download window.mp4', type: 'file', size: 1048576 }] } }))
-  }))
-  return { page, signIn: value => { signedIn = value }, send: data => room.send(JSON.stringify(data)) }
+  await page.routeWebSocket('**/neko/**', ws => {
+    neko = ws
+    ws.onMessage(data => {
+      const event = JSON.parse(data).event
+      if (event === 'signal/request') {
+        // neko's heartbeat: the client drops a connection silent for 25s.
+        const beat = setInterval(() => ws.send(JSON.stringify({ event: 'system/heartbeat' })), 10_000)
+        ws.onClose(() => clearInterval(beat))
+        ws.send(JSON.stringify({ event: 'system/init', payload: { session_id: 'tab', sessions: { tab: { profile: { can_host: true } } }, screen_size: { width: 640, height: 360, rate: 30 }, control_host: { has_host: false } } }))
+        ws.send(JSON.stringify({ event: 'signal/provide', payload: { sdp: 'test' } }))
+      }
+      if (event === 'filetransfer/update') ws.send(JSON.stringify({ event: 'filetransfer/update', payload: { files: [{ name: 'Movie night notes.txt', type: 'file', size: 2048 }, { name: 'A very long movie filename for the mobile download window.mp4', type: 'file', size: 1048576 }] } }))
+    })
+  })
+  return { page, sendNeko: data => neko.send(JSON.stringify(data)), signIn: value => { signedIn = value }, send: data => room.send(JSON.stringify(data)) }
+}
+
+async function toolbar(h, width) {
+  const p = h.page
+  const styles = await p.evaluate(async () => (await import('/src/components/room/Controls.module.css')).default)
+  const buttons = await p.evaluate(async () => (await import('/src/components/room/IconButton.module.css')).default)
+  const center = p.locator(`.${styles.center}`), right = p.locator(`.${styles.right}`)
+  assert.deepEqual(await center.locator('button,input').evaluateAll(els => els.map(el => el.getAttribute('aria-label'))), ['Remote', 'Pause', 'Mute', 'Volume', 'Fullscreen'])
+  const volume = p.getByRole('slider', { name: 'Volume', exact: true })
+  await expect(volume).toBeVisible()
+  assert.equal((await volume.boundingBox()).height, 25)
+  assert(await volume.evaluate(el => [...document.styleSheets].some(sheet => [...sheet.cssRules].some(rule =>
+    rule.selectorText === `.${el.classList[0]}::-webkit-slider-runnable-track` && rule.style.height === '5px'))), 'volume draws a 5px track')
+  await expect(p.getByRole('button', { name: 'Upload image or video', exact: true }).locator('img')).toHaveAttribute('src', '/svg/image.svg')
+  const chat = p.getByRole('button', { name: 'Hide chat', exact: true })
+  await expect(chat).toHaveAttribute('aria-pressed', 'true')
+  const quiet = async (control, on) => {
+    await p.waitForTimeout(220)
+    assert(await control.evaluate((el, { styles, buttons, on }) => el.classList.contains(styles.quiet)
+      && el.classList.contains(styles.on) === on && !el.classList.contains(buttons.active)
+      && getComputedStyle(el).backgroundColor === 'rgba(0, 0, 0, 0)'
+      && (!on || getComputedStyle(el, '::after').height === '2px'), { styles, buttons, on }), 'quiet buttons mark on with a line')
+  }
+  await p.mouse.move(0, 0); await quiet(chat, true)
+  await chat.click()
+  const closed = p.getByRole('button', { name: 'Show chat', exact: true })
+  await expect(closed).toHaveAttribute('aria-pressed', 'false')
+  await p.mouse.move(0, 0); await quiet(closed, false)
+  await closed.click(); await p.mouse.move(0, 0)
+  if (width === 390) {
+    const more = p.getByRole('button', { name: 'More', exact: true })
+    await expect(more).toBeVisible()
+    await expect(p.locator(`.${styles.navigation}`)).toBeHidden()
+    await expect(right.locator(`.${styles.sideOnly}`)).toHaveCount(2)
+    for (const side of await right.locator(`.${styles.sideOnly}`).all()) await expect(side).toBeHidden()
+    const boxes = await Promise.all([center.getByRole('button').first(), volume, center.getByRole('button').last(), chat, more].map(el => el.boundingBox()))
+    assert(Math.max(...boxes.map(b => b.y + b.height / 2)) - Math.min(...boxes.map(b => b.y + b.height / 2)) < 1, 'phone toolbar is one row')
+    await more.click()
+    await expect(p.getByRole('menuitem')).toHaveText(['Hide users', 'Personal settings', 'Files of the desktop', 'Room settings', 'Home'])
+    await p.keyboard.press('Escape')
+  } else {
+    assert.deepEqual(await p.locator(`.${styles.navigation}`).locator('a,button').evaluateAll(els => els.map(el => el.getAttribute('aria-label'))), ['Home', 'Files of the desktop', 'Room settings'])
+    assert.deepEqual(await right.getByRole('button').evaluateAll(els => els.map(el => el.getAttribute('aria-label'))), ['Personal settings', 'Hide Users', 'Hide chat'])
+    await expect(p.getByRole('button', { name: 'Files of the desktop', exact: true }).locator('img')).toHaveAttribute('src', '/svg/folder.svg')
+    const users = p.getByRole('button', { name: 'Hide Users', exact: true })
+    await expect(users).toHaveAttribute('aria-pressed', 'true'); await quiet(users, true)
+    await users.click()
+    const hidden = p.getByRole('button', { name: 'Show Users', exact: true })
+    await expect(hidden).toHaveAttribute('aria-pressed', 'false')
+    await p.mouse.move(0, 0); await quiet(hidden, false)
+    await hidden.click(); await p.mouse.move(0, 0)
+    for (const label of ['Personal settings', 'Files of the desktop', 'Room settings']) await quiet(p.getByRole('button', { name: label, exact: true }), false)
+    const bounds = () => center.locator('button:not([aria-label="Drop and center Remote"]),input').evaluateAll(els => els.map(el => { const r = el.getBoundingClientRect(); return [r.x, r.y, r.width, r.height] }))
+    const before = await bounds()
+    h.sendNeko({ event: 'control/host', payload: { has_host: true, host_id: 'tab' } })
+    const drop = p.getByRole('button', { name: 'Drop and center Remote', exact: true })
+    await expect(drop).toBeVisible()
+    assert.deepEqual(await bounds(), before, 'drop and center does not shift playback controls')
+    const dropBox = await drop.boundingBox(), groupBox = await center.boundingBox()
+    assert(dropBox.x + dropBox.width <= groupBox.x, 'drop and center sits beside playback group')
+    h.sendNeko({ event: 'control/host', payload: { has_host: false } })
+    await expect(drop).toHaveCount(0)
+  }
 }
 
 // Resolve CSS colour functions in the browser, then composite alpha and each
@@ -198,6 +264,7 @@ async function run() {
       h.signIn(true); await p.goto(`${base}/room/default`)
       await p.getByLabel('Chat message', { exact: true }).waitFor()
       await expect.poll(() => p.locator('video').first().evaluate(el => el.readyState)).toBeGreaterThanOrEqual(2)
+      await toolbar(h, width)
       for (const chatStyle of ['classic', 'modern', 'compact']) {
         await p.evaluate(async chatStyle => (await import('/src/app/state.ts')).updatePreferences({ chatStyle }), chatStyle)
         await shot(p, `room-${chatStyle}`, theme, width)

@@ -1,12 +1,20 @@
 .controls { min-height: 3em; display: flex; justify-content: space-between; align-items: center; background: var(--color-menu) var(--noise); }
 .group { display: flex; gap: 0.5em; margin: 0.5em; align-items: center; min-width: 0; }
 .remote { display: flex; }
+/* Shown only while holding the remote: beside the group, so that the other
+   buttons stay where they are. */
+.center { position: relative; }
+.dropCenter { position: absolute; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 0.5em; }
 .home { display: flex; align-items: center; justify-content: center; min-width: 2em; width: 2.25em; height: 2em; border-radius: 0.2em; }
 .home:hover { background: var(--color-button-accent); }
 .home img { height: 24px; width: 24px; filter: var(--icon-invert); }
-.volume { appearance: none; min-width: 4em; width: 100px; height: 5px; margin: auto; background: linear-gradient(to right, var(--color-button) var(--fill), var(--color-scrollbar) var(--fill)); }
-.volume:focus { outline-offset: 0.7em; }
-.volume::-webkit-slider-thumb { appearance: none; width: 20px; height: 20px; background: var(--color-scroll-thumb); border: 1px solid var(--color-high-contrast); border-radius: 50%; cursor: pointer; }
+/* The input is taller than the line, so a click near the line lands on it;
+   the line itself is drawn on the track. */
+.volume { appearance: none; min-width: 4em; width: 100px; height: 25px; margin: auto; background: transparent; cursor: pointer; }
+.volume::-webkit-slider-runnable-track { height: 5px; background: linear-gradient(to right, var(--color-button) var(--fill), var(--color-scrollbar) var(--fill)); }
+.volume::-moz-range-track { height: 5px; background: linear-gradient(to right, var(--color-button) var(--fill), var(--color-scrollbar) var(--fill)); }
+.volume:focus { outline-offset: 0.2em; }
+.volume::-webkit-slider-thumb { appearance: none; width: 20px; height: 20px; background: var(--color-scroll-thumb); border: 1px solid var(--color-high-contrast); border-radius: 50%; cursor: pointer; margin-top: -7.5px; }
 .volume::-moz-range-thumb { width: 20px; height: 20px; background: var(--color-scroll-thumb); border: 1px solid var(--color-high-contrast); border-radius: 50%; cursor: pointer; }
 .fullscreen { background: transparent; }
 /* The side groups are quieter than the playback buttons in the middle; a

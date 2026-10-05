@@ -41,14 +41,13 @@ export function Controls({ fullscreen, userlistHidden, chatOpen, unreadChat, win
           aria-haspopup="dialog" onClick={() => onWindow('settings')} />}
       </div>}
       <div class={`${styles.group} ${styles.center}`}>
-        {host && <IconButton class={styles.desktopAction} icon="crosshair" label="Drop and center Remote" onClick={() => store.dropRemote(true)} />}
+        {host && <IconButton class={`${styles.desktopAction} ${styles.dropCenter}`} icon="crosshair" label="Drop and center Remote" onClick={() => store.dropRemote(true)} />}
         <RoomTooltip label={remoteTooltip}><span class={styles.remote}>
           <IconButton icon="remoteAlpha" label={remoteLabel} tooltip={false} active={host} disabled={!host && disabled}
             onClick={() => host ? store.dropRemote() : store.takeRemote()} />
         </span></RoomTooltip>
         <IconButton shortcut="playback" icon={store.paused.value ? 'play_button' : 'pause_button'} label={store.paused.value ? 'Play' : 'Pause'}
           active={store.paused.value} onClick={() => store.paused.value ? store.resume() : store.pause()} />
-        <IconButton shortcut="fullscreen" icon={fullscreen ? 'fullscreen-exit' : 'fullscreen_button'} label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} active={fullscreen} onClick={onFullscreen} />
         <IconButton shortcut="mute" icon={muted || volume === 0 ? 'sound-mute' : volume < 50 ? 'sound-low' : 'sound-max'} label={muted ? 'Unmute' : 'Mute'} active={muted}
           onClick={() => updatePreferences({ muted: !muted })} />
         <input aria-label="Volume" aria-keyshortcuts={preferences.value.shortcuts ? [...shortcutKeys('volumeUp'), ...shortcutKeys('volumeDown')].join(' ') : undefined} class={styles.volume} type="range" min="0" max="100" value={muted ? 0 : volume} style={{ '--fill': `${muted ? 0 : volume}%` }}
@@ -58,6 +57,7 @@ export function Controls({ fullscreen, userlistHidden, chatOpen, unreadChat, win
             const value = Number(e.currentTarget.value)
             updatePreferences(value === 0 ? { muted: true } : { volume: value, muted: false })
           }} />
+        <IconButton shortcut="fullscreen" icon={fullscreen ? 'fullscreen-exit' : 'fullscreen_button'} label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} active={fullscreen} onClick={onFullscreen} />
       </div>
       {!(fullscreen && host) && <div class={`${styles.group} ${styles.right}`}>
         <IconButton class={`${styles.quiet} ${styles.sideOnly}`} icon="settings" label="Personal settings" onClick={onPersonalSettings} />

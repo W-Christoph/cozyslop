@@ -2,12 +2,14 @@
 .subMessage { position: relative; padding: 0.15em 1em; font-size: 0.9em; }
 .subMessage.last { padding-bottom: 0.5em; }
 .subMessage:hover { background: var(--color-message-hover); }
-.deleteButton { z-index: 2; position: absolute; color: var(--color-text); font-weight: bold; border: 0; background: var(--color-button); border-radius: 0.2em; top: 0.1em; right: 0.1em; width: 1.25em; height: 1.25em; visibility: hidden; text-align: center; padding: 0; }
-.subMessage:hover > .deleteButton, .subMessage:focus-within > .deleteButton { visibility: visible; }
-.deleteButton:focus-visible { visibility: visible; }
-.deleteButton:hover { background: var(--color-orange); }
-.editButton { right: 1.5em; }
-.editButton img { padding: 15%; width: 100%; height: 100%; filter: var(--icon-invert); }
+/* Edit and delete: one small bar in the look of the room's tooltips. */
+.actions { z-index: 2; position: absolute; top: 0.1em; right: 0.3em; display: flex; gap: 1px; padding: 1px; background: var(--color-accent); border-radius: 0.3em; box-shadow: 0 1px 4px var(--color-shadow); visibility: hidden; }
+.subMessage:hover > .actions, .subMessage:focus-within > .actions { visibility: visible; }
+.action { display: flex; align-items: center; justify-content: center; min-width: 1.7em; height: 1.7em; padding: 0; border: 0; border-radius: 0.2em; background: transparent; color: var(--color-text); font: inherit; }
+.action img { width: 1.1em; height: 1.1em; filter: var(--icon-invert); }
+/* Deleting is red, not the orange that marks what is switched on. */
+.delete:hover:not(:disabled), .confirm, .confirm:hover:not(:disabled) { background: var(--danger); }
+.confirm { padding: 0 0.5em; color: var(--on-danger); font-size: 0.85em; font-weight: bold; }
 .username { color: var(--readable-name-colour, var(--name-colour)); font-weight: 600; padding-left: 0.5em; position: relative; word-break: normal; overflow: hidden; }
 .realUsername { opacity: 0; position: absolute; background: var(--color-menu); border-radius: 0.2em; color: var(--color-text); user-select: none; pointer-events: none; top: -0.2em; right: 0.4em; min-width: 3em; text-align: right; }
 .username:hover .realUsername { opacity: 1; }
@@ -44,9 +46,9 @@
 
 /* Tapping a message reveals its touch actions. */
 @media (hover: none) {
-  .deleteButton { visibility: hidden; width: 32px; height: 32px; top: 2px; right: 2px; }
-  .editButton { right: 38px; }
-  .subMessage:hover > .deleteButton { visibility: hidden; }
-  .subMessage.actionsShown > .deleteButton, .subMessage:focus-within > .deleteButton { visibility: visible; }
-  .subMessage.withActions.actionsShown, .subMessage.withActions:focus-within { min-height: 36px; padding-right: 74px; }
+  .subMessage:hover > .actions { visibility: hidden; }
+  .subMessage.actionsShown > .actions, .subMessage:focus-within > .actions { visibility: visible; }
+  .action { min-width: 36px; height: 36px; }
+  .action img { width: 20px; height: 20px; }
+  .subMessage.withActions.actionsShown, .subMessage.withActions:focus-within { min-height: 42px; padding-right: 88px; }
 }

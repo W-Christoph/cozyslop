@@ -9,6 +9,7 @@ import { MessageEditor } from './MessageEditor'
 import { MessageText } from './MessageText'
 import { messageTime } from './parseMessage'
 import { applyNameColors } from './nameColor'
+import { RoomTooltip } from '../room/RoomTooltip'
 import styles from './MessageGroup.module.css'
 
 export function MessageGroup({ messages, editing, onEdit, onEndEdit, onMedia, onLoad }: {
@@ -22,6 +23,13 @@ export function MessageGroup({ messages, editing, onEdit, onEndEdit, onMedia, on
   const store = useRoomStore()
   const bubble = useRef<HTMLDivElement>(null)
   const [actions, setActions] = useState<number | null>(null)
+  // Deleting takes a second click on the same button within three seconds.
+  const [confirming, setConfirming] = useState<number | null>(null)
+  useEffect(() => {
+    if (confirming === null) return
+    const timeout = window.setTimeout(() => setConfirming(null), 3000)
+    return () => window.clearTimeout(timeout)
+  }, [confirming])
   const activeMessage = useRef<HTMLElement | null>(null)
   useEffect(() => {
     if (actions === null) return
@@ -70,12 +78,17 @@ export function MessageGroup({ messages, editing, onEdit, onEndEdit, onMedia, on
         if (event.pointerType !== 'touch' || message.id <= 0 || (!own && !store.rights.value.admin)) return
         // A picture or link still opens; the actions show as well, since such
         // a message may have nothing else to tap.
-        if ((event.target as Element).closest(`input, textarea, .${styles.deleteButton}`)) return
+        if ((event.target as Element).closest(`input, textarea, .${styles.actions}`)) return
         activeMessage.current = event.currentTarget
         setActions(message.id)
       }} tabIndex={message.id > 0 && (own || store.rights.value.admin) ? 0 : undefined}>
-        {message.id > 0 && (own || store.rights.value.admin) && <button type="button" class={styles.deleteButton} aria-label="Delete message" onClick={() => store.deleteChat(message.id)}>X</button>}
-        {own && message.type === 'text' && message.id > 0 && <button type="button" class={`${styles.deleteButton} ${styles.editButton}`} aria-label="Edit message" onClick={() => onEdit(message.id)}><img src="/svg/edit.svg" alt="" /></button>}
+        {message.id > 0 && (own || store.rights.value.admin) && <div class={styles.actions}>
+          {own && message.type === 'text' && <RoomTooltip label="Edit"><button type="button" class={styles.action} aria-label="Edit message" onClick={() => onEdit(message.id)}><img src="/svg/edit.svg" alt="" /></button></RoomTooltip>}
+          <RoomTooltip label={confirming === message.id ? 'Click again to delete' : 'Delete'}><button type="button" class={`${styles.action} ${styles.delete} ${confirming === message.id ? styles.confirm : ''}`} aria-label="Delete message"
+            onClick={() => { if (confirming === message.id) { setConfirming(null); store.deleteChat(message.id) } else setConfirming(message.id) }}>
+            {confirming === message.id ? 'Delete?' : <img src="/svg/trash.svg" alt="" />}
+          </button></RoomTooltip>
+        </div>}
         {index > 0 && <div class={styles.hoverTime}>{messageTime(message.time)}</div>}
         {message.type === 'image' || message.type === 'video'
           ? <InlineMedia media={{ type: message.type, url: message.mediaUrl ?? '' }} onOpen={() => onMedia(message.id)} onLoad={onLoad} />

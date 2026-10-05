@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -98,6 +99,12 @@ func (c *Client) Login(ctx context.Context, id, password string) (string, error)
 	return res.Token, nil
 }
 
+// DeleteFile removes a file from the desktop's Downloads folder (neko's file
+// transfer plugin). ErrNotFound if there is no such file.
+func (c *Client) DeleteFile(ctx context.Context, name string) error {
+	return c.do(ctx, http.MethodDelete, "/api/filetransfer?filename="+url.QueryEscape(name), nil, nil, true)
+}
+
 func (c *Client) Healthy(ctx context.Context) bool {
 	return c.do(ctx, http.MethodGet, "/health", nil, nil, false) == nil
 }
@@ -112,7 +119,10 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any, admin
 		body = bytes.NewReader(b)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.base.JoinPath(path).String(), body)
+	path, query, _ := strings.Cut(path, "?")
+	u := c.base.JoinPath(path)
+	u.RawQuery = query
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		return err
 	}

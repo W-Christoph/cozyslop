@@ -117,6 +117,14 @@ type remoteMsg struct {
 	Holder *string `json:"holder"` // identity key, nil = nobody
 }
 
+// Answer to file_delete and file_play, to the tab that asked.
+type fileResultMsg struct {
+	Type   string `json:"type"`   // "file_result"
+	Action string `json:"action"` // "delete" | "play"
+	Name   string `json:"name"`
+	Error  string `json:"error"` // "" if it worked
+}
+
 // The room's desktop is restarting; streams come back by themselves.
 type restartingMsg struct {
 	Type string `json:"type"` // "restarting"
@@ -147,4 +155,5 @@ type ClientMsg struct {
 	Active bool   `json:"active"` // activity
 	Muted  bool   `json:"muted"`  // muted
 	To     string `json:"to"`     // whisper: identity key
+	Name   string `json:"name"`   // file_delete, file_play: a file in the desktop's Downloads
 }

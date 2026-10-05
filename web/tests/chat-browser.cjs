@@ -177,7 +177,7 @@ const checks = [], errors = []
 
     h.send({ type: 'user_updated', user: { ...bob, active: false, muted: true } })
     h.send({ type: 'remote', holder: bob.key })
-    const avatar = p.locator('[aria-label="Room users"] [tabindex="0"]').filter({ has: p.locator('[title="Away"]') })
+    const avatar = p.locator('[aria-label="Room users"] [tabindex="0"][aria-label*="away since"]')
     await avatar.hover()
     const card = p.getByRole('tooltip')
     await expect(card).toContainText('Away since'); await expect(card).toContainText('Has the remote'); await expect(card).toContainText('Sound off')
@@ -188,11 +188,10 @@ const checks = [], errors = []
     await input.focus(); await expect(card).toHaveCount(0)
     await p.evaluate(async () => (await import('/src/app/state.ts')).updatePreferences({ smallPfp: true, showIfMuted: false }))
     await avatar.hover(); await expect(card).not.toContainText('Sound off')
-    assert.deepEqual(await avatar.locator('[title="Away"]').evaluate(el => { const s = getComputedStyle(el); return [s.width, s.height, s.borderTopWidth] }), ['12px', '12px', '2px'])
     await p.evaluate(async () => (await import('/src/app/state.ts')).updatePreferences({ smallPfp: false, showIfMuted: true }))
     h.send({ type: 'user_updated', user: bob }); h.send({ type: 'remote', holder: null }); await p.mouse.move(0, 0)
     await expect(p.getByRole('list', { name: 'Room users' }).getByRole('listitem')).toHaveCount(3)
-    checks.push('user card hover/focus, state labels and semantic time, muted preference, small away dot, accessible user list')
+    checks.push('user card hover/focus, state labels and semantic time, muted preference, accessible user list')
 
     for (let id = 51; id < 100; id++) h.send({ type: 'chat', message: msg(id, bob, `Long chat line ${id}\nAnother line`) })
     const list = p.getByRole('region', { name: 'Chat messages' })

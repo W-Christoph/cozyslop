@@ -44,7 +44,7 @@ export function ChatInput({ inputRef, onEdit }: { inputRef: RefObject<HTMLTextAr
   return <div class={styles.chatbox}>
     <div data-chat-input data-has-text={!!text} class={styles.uploader}>
       <div data-chat-input-wrapper class={styles.wrapper}>
-        <textarea aria-label="Chat message" placeholder={connected ? 'Message' : 'Reconnecting…'} ref={inputRef} value={text} rows={1} maxLength={anonymous ? 250 : undefined}
+        <textarea aria-label="Chat message" placeholder={connected ? undefined : 'Reconnecting…'} ref={inputRef} value={text} rows={1} maxLength={anonymous ? 250 : undefined}
           class={`${styles.textarea} ${!text && store.rights.value.image ? styles.withUploads : ''}`}
           onBlur={stopTyping}
           onInput={(e) => {

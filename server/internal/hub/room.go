@@ -67,6 +67,8 @@ type Room struct {
 
 	titleURL string // set before run
 	title    string // of the window in front on the desktop
+
+	playURL, playToken string // the desktop's helper that plays files; set before run
 }
 
 // member is one person in the room, with all their tabs.

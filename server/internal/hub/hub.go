@@ -38,6 +38,11 @@ type RoomConfig struct {
 	// TitleURL answers with the title of the window in front on the room's
 	// desktop (worker/window-title.py); "" if the room has no such helper.
 	TitleURL string
+	// PlayURL plays a file of the room desktop's Downloads folder on the
+	// desktop (worker/play.py), for requests that carry PlayToken; "" if
+	// the room has no such helper.
+	PlayURL   string
+	PlayToken string
 }
 
 func New(s *store.Store, mediaDir string, rooms []RoomConfig) *Hub {
@@ -47,6 +52,7 @@ func New(s *store.Store, mediaDir string, rooms []RoomConfig) *Hub {
 		r.restart = rc.Restart
 		r.defaultScreen = rc.DefaultScreen
 		r.titleURL = rc.TitleURL
+		r.playURL, r.playToken = rc.PlayURL, rc.PlayToken
 		h.rooms[rc.Name] = r
 	}
 	return h

@@ -30,11 +30,13 @@ export function Button({ variant, size, icon, block, class: className, type = 'b
 export function ButtonLink({ variant, size, icon, block, class: className, children, ...props }: Look & {
   href: string
   download?: string
+  title?: string
+  'aria-label'?: string
   class?: string
   children?: ComponentChildren
 }) {
   return (
-    <a {...props} class={look({ variant, size, block }, className)}>
+    <a {...props} class={look({ variant, size, block }, className, !!icon && children == null)}>
       {icon && <Icon name={icon} size={16} />}
       {children}
     </a>

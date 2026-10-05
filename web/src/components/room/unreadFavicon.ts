@@ -35,15 +35,22 @@ export function unreadFavicon() {
       context.textBaseline = 'middle'
       context.fillText('C', 28, 31)
     }
-    context.fillStyle = tokens.getPropertyValue('--color-orange').trim()
+    // The badge of the old CozyCast (favico.js): the lower right 60% of the
+    // icon, widening to the left for two and for three digits.
+    const text = unread > 999 ? `${unread > 9999 ? 9 : Math.floor(unread / 1000)}k+` : String(unread)
+    const digits = String(unread).length
+    const h = 64 * 0.6, y = 64 * 0.4
+    const w = h * (digits === 1 ? 1 : digits === 2 ? 1.4 : 1.65), x = 64 - w
+    context.fillStyle = tokens.getPropertyValue('--color-unread').trim()
     context.beginPath()
-    context.arc(45, 45, 19, 0, Math.PI * 2)
+    context.arc(x + h / 2, y + h / 2, h / 2, Math.PI / 2, Math.PI * 1.5)
+    context.arc(x + w - h / 2, y + h / 2, h / 2, Math.PI * 1.5, Math.PI / 2)
     context.fill()
-    context.fillStyle = tokens.getPropertyValue('--color-on-orange').trim()
-    context.font = 'bold 20px Arial'
+    context.fillStyle = tokens.getPropertyValue('--color-crop-white').trim()
+    context.font = `bold ${Math.floor(h * (unread > 99 ? 0.85 : 1))}px sans-serif`
     context.textAlign = 'center'
-    context.textBaseline = 'middle'
-    context.fillText(unread > 99 ? '99+' : String(unread), 45, 45)
+    context.textBaseline = 'alphabetic'
+    context.fillText(text, Math.floor(x + w / 2), Math.floor(y + h - h * (unread > 999 ? 0.2 : 0.15)))
     icon.href = canvas.toDataURL('image/png')
   }
   logo.onload = draw

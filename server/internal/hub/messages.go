@@ -59,6 +59,9 @@ func (r *Room) Handle(ctx context.Context, c *Client, msg ClientMsg) {
 		r.sendNekoToken(ctx, c)
 	case "restart":
 		err = r.Restart(c)
+	case "file_delete", "file_play":
+		r.fileAction(ctx, c, strings.TrimPrefix(msg.Type, "file_"), msg.Name)
+		return
 	default:
 		c.send(errorMsg{Type: "error", Message: "Unknown message type."})
 		return

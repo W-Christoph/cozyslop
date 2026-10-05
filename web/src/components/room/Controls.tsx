@@ -31,11 +31,14 @@ export function Controls({ fullscreen, userlistHidden, chatOpen, unreadChat, win
   const remoteTooltip = !store.rights.value.remote ? 'You are not allowed to use the remote'
     : ownershipLocked ? `${holderName} owns the remote` : remoteLabel
   const { muted, volume } = preferences.value
+  const upload = store.desktopUpload.value
+  const uploading = upload.state === 'uploading'
   return (
     <div class={`${styles.controls} ${fullscreen ? styles.fullscreen : ''} ${fullscreen && host ? styles.host : ''}`}>
       {!(fullscreen && host) && <div class={`${styles.group} ${styles.navigation}`}>
         <RoomTooltip label="Home"><a class={styles.home} href="/" aria-label="Home"><img src="/svg/home.svg" alt="" /></a></RoomTooltip>
-        {store.rights.value.upload && <IconButton class={`${styles.quiet} ${window === 'files' ? styles.on : ''}`} icon="folder" label="Files of the desktop"
+        {store.rights.value.upload && <IconButton class={`${styles.quiet} ${window === 'files' ? styles.on : uploading ? styles.uploading : ''}`} icon="folder" label="Files of the desktop"
+          tooltip={uploading ? upload.message : undefined} style={uploading ? { '--fill': `${Math.round(upload.progress * 100)}%` } : undefined}
           aria-haspopup="dialog" onClick={() => onWindow('files')} />}
         {store.rights.value.admin && <IconButton class={`${styles.quiet} ${window === 'settings' ? styles.on : ''}`} icon="room-settings" label="Room settings"
           aria-haspopup="dialog" onClick={() => onWindow('settings')} />}
@@ -48,7 +51,7 @@ export function Controls({ fullscreen, userlistHidden, chatOpen, unreadChat, win
         </span></RoomTooltip>
         <IconButton shortcut="playback" icon={store.paused.value ? 'play_button' : 'pause_button'} label={store.paused.value ? 'Play' : 'Pause'}
           active={store.paused.value} onClick={() => store.paused.value ? store.resume() : store.pause()} />
-        <IconButton shortcut="mute" icon={muted || volume === 0 ? 'sound-mute' : volume < 50 ? 'sound-low' : 'sound-max'} label={muted ? 'Unmute' : 'Mute'} active={muted}
+        <IconButton shortcut="mute" icon={muted || volume === 0 ? 'sound-mute' : 'sound-max'} label={muted ? 'Unmute' : 'Mute'} active={muted}
           onClick={() => updatePreferences({ muted: !muted })} />
         <input aria-label="Volume" aria-keyshortcuts={preferences.value.shortcuts ? [...shortcutKeys('volumeUp'), ...shortcutKeys('volumeDown')].join(' ') : undefined} class={styles.volume} type="range" min="0" max="100" value={muted ? 0 : volume} style={{ '--fill': `${muted ? 0 : volume}%` }}
           onInput={(e) => {
@@ -57,7 +60,7 @@ export function Controls({ fullscreen, userlistHidden, chatOpen, unreadChat, win
             const value = Number(e.currentTarget.value)
             updatePreferences(value === 0 ? { muted: true } : { volume: value, muted: false })
           }} />
-        <IconButton shortcut="fullscreen" icon={fullscreen ? 'fullscreen-exit' : 'fullscreen_button'} label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} active={fullscreen} onClick={onFullscreen} />
+        <IconButton shortcut="fullscreen" icon="fullscreen_button" label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} active={fullscreen} onClick={onFullscreen} />
       </div>
       {!(fullscreen && host) && <div class={`${styles.group} ${styles.right}`}>
         <IconButton class={`${styles.quiet} ${styles.sideOnly}`} icon="settings" label="Personal settings" onClick={onPersonalSettings} />

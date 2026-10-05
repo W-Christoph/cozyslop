@@ -165,7 +165,7 @@ successful room join, using the WebSocket `access` query parameter.
 | `POST /api/rooms/{room}/media` | Identity currently joined through the room WebSocket with image rights | Multipart form field `file`; PNG, JPEG, GIF, WebP, MP4 or WebM | 204; stores the original file and broadcasts an image/video chat message | 404 `"Unknown room."`; 403 `"Join the room first."` / `"You are not allowed to post images."`; 415 `"Unsupported file type."`; 413 `"File is too large."`; 400 malformed multipart or missing/duplicate field |
 | `GET /neko/{room}/api/ws?token=<neko token>` | A tab currently in the room, with the neko token the room WebSocket issued to it | WebSocket upgrade; messages follow neko's protocol, except that requests for a capture pipeline (`signal/request`, `signal/video`) always get the room's stream, and the list of the desktop's Downloads folder (`filetransfer/update`) is only passed on, or asked for, with upload rights | neko's messages | 404 unknown room or disallowed path; 403 for a token the server did not issue or whose tab has left; 502 if neko is unavailable; closed when the tab leaves or is kicked |
 | `GET /neko/{room}/api/filetransfer?token=<neko token>&filename=<name>` | Holder of a per-tab neko token with upload rights | A file in the desktop's Downloads folder | The file, always as a download (`Content-Disposition: attachment`, `application/octet-stream`, `nosniff`, `Content-Security-Policy: sandbox`): it is never displayed as a page of this site | 403 `"You are not allowed to download files from the room."` without upload rights; 403 for a token the server did not issue or whose tab has left; upstream errors; 502 if upstream unavailable |
-| `POST /neko/{room}/api/filetransfer` | Holder of a per-tab neko token with upload rights | Query and body follow neko's file-transfer plugin (an upload); its `DELETE` and subpaths are not proxied | Upstream response | Upstream auth/permission errors; 404 unknown room or disallowed path; 403 for a token the server did not issue or whose tab has left; 502 if upstream unavailable |
+| `POST /neko/{room}/api/filetransfer` | Holder of a per-tab neko token with upload rights | Query and body follow neko's file-transfer plugin (an upload); its `DELETE` and subpaths are not proxied (the server deletes for a tab, see `file_delete` below) | Upstream response | Upstream auth/permission errors; 404 unknown room or disallowed path; 403 for a token the server did not issue or whose tab has left; 502 if upstream unavailable |
 
 The proxy accepts exactly these three requests and removes `Origin` before
 forwarding. Other neko APIs are inaccessible, and so are neko members the
@@ -183,6 +183,13 @@ always allowed and trusted users are allowed once per hour per room. The
 server broadcasts `{"type":"restarting","by":"<nickname>"}` to everyone
 before restarting. Disabled, unauthorized and cooldown requests receive an
 `error` message through the usual room protocol.
+Clients with the upload right send `{"type":"file_delete","name":"<file>"}`
+to delete a file of the desktop's Downloads folder, and
+`{"type":"file_play","name":"<file>"}` to play one on the desktop (in VLC,
+fullscreen); playing also needs the remote right, and with remote ownership
+nobody else may hold the remote. The tab that asked gets
+`{"type":"file_result","action":"delete"|"play","name":"<file>","error":"…"}`,
+with `error` `""` if it worked (see `docs/architecture.md`).
 An unknown room upgrades successfully, sends
 `{"type":"kicked","reason":"not_found"}`, then closes with code 4000.
 Other `kicked.reason` values are `banned`, `account`, `verified`, `invite`,

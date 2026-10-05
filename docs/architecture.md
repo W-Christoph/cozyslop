@@ -241,6 +241,28 @@ window or opening a page; the server cuts it to one line of 200 characters
 and browsers show it as text. A neko without the helper has no title, and
 the tab shows the room's name.
 
+## Deleting and playing files
+
+The Files window lists, uploads and downloads through neko's file transfer,
+which browsers reach with their own neko token. Deleting and playing are
+asked of the server over the room WebSocket (`file_delete`, `file_play`,
+answered with `file_result`), so that the server decides who may:
+
+- **Delete** needs the upload right. The server uses neko's own
+  `DELETE /api/filetransfer` as neko's admin; browsers cannot reach it.
+- **Play** needs the upload and the remote right, and with remote ownership
+  nobody else may hold the remote: it changes what everyone watches. The
+  room image runs a second helper (`worker/play.py`, port 8082) that
+  answers `POST /play?name=<file>` by opening the file in VLC, fullscreen,
+  and closing the VLC it started before.
+
+The play helper runs as the desktop's user, because VLC opens on their
+desktop; whoever holds the remote can start VLC by hand anyway. Its port is
+not published either, but pages open in the room's browser reach it, so
+every request must carry the room's neko admin token, which the server and
+the desktop's user know. It only plays plain files directly in Downloads. A
+room image from before the helper answers nothing, and the person is told.
+
 ## Changes from CozyCast
 
 - Sessions expire and can be revoked; logout works.

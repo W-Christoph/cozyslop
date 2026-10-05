@@ -8,13 +8,9 @@
 .muted { left: 0; background: var(--color-button); }
 .remote { right: 0; background: var(--color-orange); }
 .muted img, .remote img { width: 100%; height: 100%; filter: var(--icon-invert); }
-.presence { position: absolute; right: 0; top: 0; height: 17px; width: 17px; border-radius: 50%; border: var(--color-menu) 3px solid; }
-.inactive { background: var(--color-away); }
 .small { width: 30px; height: 30px; }
 .small .muted, .small .remote { width: 12px; height: 12px; }
-.small .presence { width: 12px; height: 12px; border-width: 2px; }
 @media (max-width: 780px) {
   .container { width: 30px; height: 30px; }
   .muted, .remote { width: 12px; height: 12px; }
-  .presence { width: 12px; height: 12px; border-width: 2px; }
 }

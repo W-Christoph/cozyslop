@@ -70,6 +70,8 @@ export class RoomStore {
   private nekoRetry?: number
   private uploadReset?: number
   private uploadController?: AbortController
+  // Deletions and plays the server has not answered yet, oldest first.
+  private fileActions: { action: 'delete' | 'play'; name: string; done: (error: string) => void }[] = []
   private nekoRetryMs = NEKO_RETRY_MS
   private nekoFailures = 0
   private typingTimers = new Map<string, number>()
@@ -87,6 +89,7 @@ export class RoomStore {
       this.socket.on('close', () => {
         this.server.value = 'connecting'
         window.clearTimeout(this.nekoRetry)
+        this.failFileActions()
         // The server drops our neko member with the socket; a new token
         // comes after reconnecting.
         neko.disconnect()
@@ -116,6 +119,7 @@ export class RoomStore {
 
   dispose() {
     this.cancelDesktopUpload()
+    this.failFileActions()
     window.clearTimeout(this.nekoRetry)
     window.clearTimeout(this.uploadReset)
     this.typingTimers.forEach((t) => window.clearTimeout(t))
@@ -252,6 +256,20 @@ export class RoomStore {
     return this.neko.fileUrl(name)
   }
 
+  // Delete a file of the Downloads folder, or play it on the desktop (in
+  // VLC, fullscreen). Resolves with what went wrong; '' if nothing did.
+  desktopFileAction(action: 'delete' | 'play', name: string): Promise<string> {
+    if (this.server.value !== 'connected') return Promise.resolve('Not connected to the room.')
+    return new Promise((done) => {
+      this.fileActions.push({ action, name, done })
+      this.socket.send({ type: `file_${action}`, name })
+    })
+  }
+
+  private failFileActions() {
+    for (const { done } of this.fileActions.splice(0)) done('Connection lost.')
+  }
+
   private setRights(rights: Rights) {
     const had = this.rights.value.upload
     this.rights.value = rights
@@ -365,6 +383,16 @@ export class RoomStore {
       case 'restarting':
         this.restarting.value = msg.by
         break
+      case 'file_result': {
+        const at = this.fileActions.findIndex((a) => a.action === msg.action && a.name === msg.name)
+        if (at < 0) break
+        if (msg.action === 'delete' && !msg.error) {
+          this.desktopFiles.value = this.desktopFiles.value.filter((f) => f.name !== msg.name)
+          this.neko.requestFiles()
+        }
+        this.fileActions.splice(at, 1)[0].done(msg.error)
+        break
+      }
       case 'kicked':
         this.kicked.value = { reason: msg.reason, bannedUntil: msg.bannedUntil }
         window.clearTimeout(this.nekoRetry)

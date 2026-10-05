@@ -57,6 +57,8 @@
   --color-online: #199239;
   --color-away: #e6c714;
   --color-ping-other: rgb(74, 149, 173);
+  /* The favicon's unread badge, the red of the old CozyCast. */
+  --color-unread: #d00;
   --color-chat-overlay-bg: rgba(0, 0, 0, 0.45);
   --color-chat-overlay-border: rgba(255, 255, 255, 0.45);
 

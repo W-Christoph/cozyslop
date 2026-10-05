@@ -135,7 +135,8 @@ func run(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		room := hub.RoomConfig{Name: rc.Name, Neko: nc, DefaultScreen: cfg.DefaultScreen, TitleURL: titleURL(nc)}
+		room := hub.RoomConfig{Name: rc.Name, Neko: nc, DefaultScreen: cfg.DefaultScreen, TitleURL: titleURL(nc),
+			PlayURL: playURL(nc), PlayToken: cfg.NekoToken(rc.Name)}
 		if dc != nil {
 			u, err := url.Parse(rc.NekoURL)
 			if err != nil {
@@ -221,6 +222,12 @@ func run(args []string, out io.Writer) error {
 // helper just never answers there.
 func titleURL(nc *neko.Client) string {
 	return "http://" + net.JoinHostPort(nc.BaseURL().Hostname(), "8081") + "/title"
+}
+
+// playURL is where the room's container plays a file of its desktop's
+// Downloads folder: worker/play.py, next to neko.
+func playURL(nc *neko.Client) string {
+	return "http://" + net.JoinHostPort(nc.BaseURL().Hostname(), "8082") + "/play"
 }
 
 func shutdown(ctx context.Context, servers []*http.Server, api *httpapi.Server) error {

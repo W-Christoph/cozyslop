@@ -80,6 +80,7 @@ export type ServerMessage =
   | { type: 'remote'; holder: string | null }
   | { type: 'window_title'; title: string }
   | { type: 'restarting'; by: string }
+  | { type: 'file_result'; action: 'delete' | 'play'; name: string; error: string } // error "" if it worked
   | { type: 'kicked'; reason: KickReason; bannedUntil?: number | null }
   | { type: 'error'; message: string }
 
@@ -94,3 +95,4 @@ export type ClientMessage =
   | { type: 'remote_reset' }
   | { type: 'restart' }
   | { type: 'neko_token' }
+  | { type: 'file_delete' | 'file_play'; name: string } // a file in the desktop's Downloads

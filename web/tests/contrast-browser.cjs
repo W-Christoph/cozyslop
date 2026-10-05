@@ -65,10 +65,10 @@ const output = process.env.UX_OUTPUT || '/tmp/cozycast-ux'
       const chatInput = (await import('/src/components/chat/ChatInput.module.css')).default
       for (const theme of ['default', 'dark', 'legacy', 'light']) {
         document.documentElement.dataset.theme = theme
-        probe.innerHTML = `<div class="${chatInput.wrapper}"><textarea class="${chatInput.textarea}" placeholder="Message"></textarea></div>`
+        probe.innerHTML = `<div class="${chatInput.wrapper}"><textarea class="${chatInput.textarea}" placeholder="Reconnecting…"></textarea></div>`
         const input = probe.querySelector('textarea'), placeholder = getComputedStyle(input, '::placeholder')
         const background = rgba(getComputedStyle(input.parentElement).backgroundColor)
-        rows.push({ theme, kind: 'chat placeholder', variant: 'Message', ratio: +ratio(blend(rgba(placeholder.color), background), background.slice(0, 3)).toFixed(2), required: 4.5 })
+        rows.push({ theme, kind: 'chat placeholder', variant: 'Reconnecting…', ratio: +ratio(blend(rgba(placeholder.color), background), background.slice(0, 3)).toFixed(2), required: 4.5 })
       }
       probe.remove()
       return rows

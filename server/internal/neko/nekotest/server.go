@@ -45,12 +45,13 @@ type Server struct {
 	sockets           map[string][]*websocket.Conn
 	nextToken         uint64
 	calls             []Call
+	files             map[string]bool // the desktop's Downloads folder
 	changed           chan struct{}
 }
 
 func New(t testing.TB, apiToken string) *Server {
 	t.Helper()
-	s := &Server{apiToken: apiToken, healthy: true, members: make(map[string]member), tokens: make(map[string]string), observers: make(map[*observer]bool), received: make(map[string][]string), sockets: make(map[string][]*websocket.Conn), changed: make(chan struct{})}
+	s := &Server{apiToken: apiToken, healthy: true, members: make(map[string]member), tokens: make(map[string]string), observers: make(map[*observer]bool), received: make(map[string][]string), sockets: make(map[string][]*websocket.Conn), files: make(map[string]bool), changed: make(chan struct{})}
 	s.http = httptest.NewServer(http.HandlerFunc(s.serveHTTP))
 	t.Cleanup(func() { s.Restart(); s.http.Close() })
 	return s
@@ -89,6 +90,12 @@ var Streams = []string{"b2500-s100-veryfast", "b1000-s100-veryfast", "b1000-s50-
 
 // Screens are the resolutions the fake desktop supports.
 var Screens = []neko.ScreenSize{{Width: 1920, Height: 1080, Rate: 30}, {Width: 1280, Height: 720, Rate: 30}, {Width: 800, Height: 600, Rate: 30}}
+
+// AddFile puts a file into the desktop's Downloads folder.
+func (s *Server) AddFile(name string) { s.mu.Lock(); defer s.mu.Unlock(); s.files[name] = true }
+
+// HasFile reports whether the Downloads folder has the file.
+func (s *Server) HasFile(name string) bool { s.mu.Lock(); defer s.mu.Unlock(); return s.files[name] }
 
 func (s *Server) SetHealthy(healthy bool) { s.mu.Lock(); defer s.mu.Unlock(); s.healthy = healthy }
 func (s *Server) Calls() []Call {
@@ -352,6 +359,16 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/room/screen/configurations" && r.Method == http.MethodGet:
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(Screens)
+	case r.URL.Path == "/api/filetransfer" && r.Method == http.MethodDelete:
+		name := r.URL.Query().Get("filename")
+		switch {
+		case name == "" || strings.Contains(name, "/"):
+			http.Error(w, "bad filename", http.StatusBadRequest)
+		case !s.files[name]:
+			http.Error(w, "file not found", http.StatusNotFound)
+		default:
+			delete(s.files, name)
+		}
 	case r.URL.Path == "/api/room/control/reset" && r.Method == http.MethodPost:
 		s.setHostLocked("")
 	default:

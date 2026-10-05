@@ -23,7 +23,6 @@ export function UserAvatar({ user, small = false }: { user: User; small?: boolea
         : <div class={`${styles.avatar} ${user.active ? '' : styles.away}`} style={user.anonymous ? { backgroundColor: user.nameColor } : undefined}>{content}</div>}
       {remote && <><span class={styles.ring} /><span class={styles.remote} title="Remote holder"><img src="/svg/remoteAlpha.svg" alt="Remote holder" /></span></>}
       {preferences.value.showIfMuted && user.muted && <span class={styles.muted} title="Muted"><img src="/svg/headphone-slash.svg" alt="Muted" /></span>}
-      {!user.active && <span class={`${styles.presence} ${styles.inactive}`} title="Away" />}
     </div>
   )
 }

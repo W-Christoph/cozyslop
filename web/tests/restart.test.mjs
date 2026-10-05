@@ -293,3 +293,28 @@ test('generic errors do not initiate desktop recovery during an announced restar
   tick()
   assert.deepEqual(room.sent, [])
 })
+
+test('desktop file actions resolve with their own answer and fail when the connection drops', async (t) => {
+  const { store, room } = fixture(t)
+  let listed = 0
+  store.neko.requestFiles = () => { listed++ }
+  store.desktopFiles.value = [{ name: 'a.mp4', type: 'file', size: 1 }, { name: 'b.mp4', type: 'file', size: 2 }]
+  const gone = store.desktopFileAction('delete', 'a.mp4')
+  const played = store.desktopFileAction('play', 'b.mp4')
+  assert.deepEqual(room.sent.slice(-2), [{ type: 'file_delete', name: 'a.mp4' }, { type: 'file_play', name: 'b.mp4' }])
+  room.message({ type: 'file_result', action: 'play', name: 'b.mp4', error: 'Bob owns the remote.' })
+  assert.equal(await played, 'Bob owns the remote.')
+  assert.equal(store.desktopFiles.value.length, 2)
+  room.message({ type: 'file_result', action: 'delete', name: 'a.mp4', error: '' })
+  assert.equal(await gone, '')
+  assert.deepEqual(store.desktopFiles.value.map((f) => f.name), ['b.mp4'])
+  assert.equal(listed, 1)
+  // An answer nobody waits for changes nothing.
+  room.message({ type: 'file_result', action: 'delete', name: 'b.mp4', error: '' })
+  assert.equal(store.desktopFiles.value.length, 1)
+
+  const lost = store.desktopFileAction('delete', 'b.mp4')
+  room.onclose({ code: 1006 })
+  assert.equal(await lost, 'Connection lost.')
+  assert.equal(await store.desktopFileAction('play', 'b.mp4'), 'Not connected to the room.')
+})

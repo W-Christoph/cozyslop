@@ -22,8 +22,9 @@ come. The app still calls itself CozyCast.
   per-user remote, chat image and desktop upload rights; invites with use
   limits; kicks and bans (anonymous viewers by cookie and IP).
 - **Files**: drag files onto the stream or use the Files tab; they land in
-  the desktop's Downloads folder. The tab also lists that folder and
-  downloads from it (needs the upload right).
+  the desktop's Downloads folder. The tab also lists that folder, downloads
+  and deletes from it (needs the upload right), and plays a file on the
+  desktop in VLC (needs the remote right too).
 - **Stream settings per room**: resolution, frame rate, bitrate, stream size
   and encoder speed, changed live from the room settings (see
   [Stream settings](#stream-settings)).

@@ -22,6 +22,9 @@
 .quiet { background: transparent; }
 .fullscreen .quiet, .fullscreen .home { background: var(--color-overlay); }
 .on::after { content: ''; position: absolute; left: 25%; right: 25%; bottom: 1px; height: 2px; border-radius: 1px; background: var(--color-orange); }
+/* An upload running with the Files window closed: its progress as a line
+   under the folder. */
+.uploading::after { content: ''; position: absolute; left: 2px; right: 2px; bottom: 0; height: 3px; border-radius: 1px; background: linear-gradient(to right, var(--color-orange) var(--fill), var(--color-scrollbar) var(--fill)); }
 .host { justify-content: center; }
 @media (max-width: 780px) {
   .controls { flex-wrap: wrap; justify-content: center; }

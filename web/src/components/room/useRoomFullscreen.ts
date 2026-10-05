@@ -25,6 +25,11 @@ export function useRoomFullscreen(page: RefObject<HTMLDivElement | null>) {
       window.clearTimeout(timer.current)
     }
   }, [page, wake])
+  useEffect(() => {
+    if (!error) return
+    const timeout = window.setTimeout(() => setError(''), 5000)
+    return () => window.clearTimeout(timeout)
+  }, [error])
   const toggle = async () => {
     setError('')
     try {

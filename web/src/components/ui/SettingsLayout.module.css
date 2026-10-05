@@ -62,7 +62,8 @@
   .window { height: calc(100dvh - 2 * var(--space-4)); }
   .layout { flex-direction: column; }
   .nav { flex: none; padding: var(--space-2); border-right: 0; border-bottom: 1px solid var(--border); }
-  .navHeader, .navFooter, .groupLabel { display: none; }
+  .navHeader, .groupLabel { display: none; }
+  .navFooter { margin-top: var(--space-1); padding: var(--space-1) var(--space-2) 0; border: 0; }
   .groups { flex-direction: row; gap: var(--space-1); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
   .group { flex-direction: row; gap: var(--space-1); }
   .group + .group { margin: 0; padding: 0; border: 0; }

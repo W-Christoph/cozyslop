@@ -4,7 +4,7 @@ import { preferences } from '../../app/state'
 import { useRoomStore } from './RoomContext'
 import styles from './UserAvatar.module.css'
 
-export function UserAvatar({ user, small = false, presence = false }: { user: User; small?: boolean; presence?: boolean }) {
+export function UserAvatar({ user, small = false }: { user: User; small?: boolean }) {
   const store = useRoomStore()
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null)
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
@@ -23,7 +23,7 @@ export function UserAvatar({ user, small = false, presence = false }: { user: Us
         : <div class={`${styles.avatar} ${user.active ? '' : styles.away}`} style={user.anonymous ? { backgroundColor: user.nameColor } : undefined}>{content}</div>}
       {remote && <><span class={styles.ring} /><span class={styles.remote} title="Remote holder"><img src="/svg/remoteAlpha.svg" alt="Remote holder" /></span></>}
       {preferences.value.showIfMuted && user.muted && <span class={styles.muted} title="Muted"><img src="/svg/headphone-slash.svg" alt="Muted" /></span>}
-      {presence && <span class={`${styles.presence} ${user.active ? styles.online : styles.inactive}`} title={user.active ? 'Online' : 'Away'} />}
+      {!user.active && <span class={`${styles.presence} ${styles.inactive}`} title="Away" />}
     </div>
   )
 }

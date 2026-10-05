@@ -74,6 +74,24 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
   close on Escape and on backdrop click.
 - Keep components small; split when a file passes ~200 lines.
 
+- Room keyboard shortcuts are defined in `components/room/shortcuts.ts`;
+  `useRoomShortcuts` matches keys and pauses them while typing, holding the
+  remote or opening a window. Personal settings has a Shortcuts page.
+  `room/RoomTooltip` supplies toolbar and upload tooltips, sharing the room
+  surface and arrow styles with `UserCard` in `ui/RoomTooltipSurface.module.css`.
+
+- Stream states share a picture, sentence-case title and optional detail on
+  black. Connection loss stays inside the stream; chat is readable with sending
+  disabled until reconnecting. Fullscreen errors clear after five seconds.
+- Portrait phones use one playback/chat toolbar row and a keyboard-accessible
+  More menu for secondary actions. The stream follows the desktop aspect ratio,
+  capped at 55% of the viewport; remote controls keep their own row. Touch message
+  actions appear on tap and dismiss outside, reserving space only when visible.
+  Personal settings carries the license footer, including on phones.
+- The room sidebar contains only chat; its toolbar button shows unread messages
+  while closed. Avatar cards show identity, away time, remote and sound state
+  on hover, focus or tap. The volume track shows its current level.
+
 ## Old -> new names
 
 ### CSS variables (old `styles.css` -> `tokens.css`)

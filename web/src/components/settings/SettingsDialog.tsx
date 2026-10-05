@@ -10,6 +10,7 @@ import { AccountSection } from './AccountSection'
 import { AppearanceSection } from './AppearanceSection'
 import { ChatSection } from './ChatSection'
 import { NotificationsSection } from './NotificationsSection'
+import { ShortcutsSection } from './ShortcutsSection'
 import { RoomSection } from './RoomSection'
 import styles from './SettingsDialog.module.css'
 
@@ -40,6 +41,7 @@ export function SettingsDialog({ onClose }: { onClose?: () => void }) {
         { id: 'appearance', label: 'Appearance', icon: 'palette' },
         { id: 'chat', label: 'Chat', icon: 'message' },
         { id: 'room', label: 'Room', icon: 'monitor' },
+        { id: 'shortcuts', label: 'Shortcuts', icon: 'keyboard' },
         { id: 'notifications', label: 'Notifications', icon: 'bell' },
       ],
     },
@@ -62,6 +64,7 @@ export function SettingsDialog({ onClose }: { onClose?: () => void }) {
   return (
     <>
       <SettingsWindow nav={nav} current={section} onSelect={(id) => { if (id !== section) leave(() => { void select(id) }) }} onClose={() => leave(close)}
+        navFooter={<a class={styles.copyright} href="/license" target="_blank" rel="noopener">Copyright (C) 2024 Vorlent</a>}
         navHeader={
           <div class={styles.user}>
             <Avatar src={user?.avatarUrl} size={40} />
@@ -77,6 +80,7 @@ export function SettingsDialog({ onClose }: { onClose?: () => void }) {
         {section === 'appearance' && <AppearanceSection />}
         {section === 'chat' && <ChatSection />}
         {section === 'room' && <RoomSection room={room} />}
+        {section === 'shortcuts' && <ShortcutsSection />}
         {section === 'notifications' && <NotificationsSection />}
       </SettingsWindow>
       {pending && <Modal size="sm" title="Discard profile changes?" onClose={() => setPending(null)} footer={<>

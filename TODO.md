@@ -38,9 +38,8 @@ Frontend
 UI: left over after the redesign follow-up of 2026-10-05
 - [ ] The type scale in `tokens.css` names the sizes in use (13 steps,
       several a pixel apart); it does not yet reduce them.
-- [ ] Phones: a message's edit/delete buttons are always shown at 32px with
-      room kept free beside the text, so own messages (all of them for
-      admins) are at least 36px high. Alternative: show them on tap.
+- [x] Phones: a message's edit/delete buttons appear on tap at 32px;
+      hidden buttons reserve no space. Tapping elsewhere hides them.
 - [ ] Fullscreen chat over the stream is not measured for contrast (there is
       no one background); only names too dark for a dark picture are
       lightened. A darker bubble (0.65) and white timestamps were tried and

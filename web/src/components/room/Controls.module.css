@@ -1,16 +1,29 @@
 .controls { min-height: 3em; display: flex; justify-content: space-between; align-items: center; background: var(--color-menu) var(--noise); }
 .group { display: flex; gap: 0.5em; margin: 0.5em; align-items: center; min-width: 0; }
 .remote { display: flex; }
-.home { display: flex; align-items: center; justify-content: center; min-width: 2em; width: 2.25em; height: 2em; background: var(--color-button); border-radius: 0.2em; }
+.home { display: flex; align-items: center; justify-content: center; min-width: 2em; width: 2.25em; height: 2em; border-radius: 0.2em; }
 .home:hover { background: var(--color-button-accent); }
-.home img { height: 25px; width: 25px; filter: var(--icon-invert); }
-.volume { appearance: none; min-width: 4em; width: 100px; height: 5px; margin: auto; background: var(--color-scrollbar); opacity: 0.7; }
+.home img { height: 24px; width: 24px; filter: var(--icon-invert); }
+.volume { appearance: none; min-width: 4em; width: 100px; height: 5px; margin: auto; background: linear-gradient(to right, var(--color-button) var(--fill), var(--color-scrollbar) var(--fill)); }
 .volume:focus { outline-offset: 0.7em; }
 .volume::-webkit-slider-thumb { appearance: none; width: 20px; height: 20px; background: var(--color-scroll-thumb); border: 1px solid var(--color-high-contrast); border-radius: 50%; cursor: pointer; }
 .volume::-moz-range-thumb { width: 20px; height: 20px; background: var(--color-scroll-thumb); border: 1px solid var(--color-high-contrast); border-radius: 50%; cursor: pointer; }
 .fullscreen { background: transparent; }
+/* The side groups are quieter than the playback buttons in the middle; a
+   line under the picture marks what is switched on. */
+.quiet { background: transparent; }
+.fullscreen .quiet, .fullscreen .home { background: var(--color-overlay); }
+.on::after { content: ''; position: absolute; left: 25%; right: 25%; bottom: 1px; height: 2px; border-radius: 1px; background: var(--color-orange); }
 .host { justify-content: center; }
 @media (max-width: 780px) {
   .controls { flex-wrap: wrap; justify-content: center; }
   .group { gap: var(--space-1); margin: var(--space-1); }
+}
+
+@media (max-width: 780px) and (orientation: portrait) {
+  .controls:not(.fullscreen) { flex-wrap: nowrap; justify-content: space-between; }
+  .controls:not(.fullscreen) .navigation, .controls:not(.fullscreen) .desktopAction, .controls:not(.fullscreen) .sideOnly { display: none; }
+  .controls:not(.fullscreen) .center { flex: 1; }
+  .controls:not(.fullscreen) .volume { flex: 1; width: auto; min-width: 3em; max-width: 12em; margin: 0 var(--space-2); }
+  .controls:not(.fullscreen) .right { margin-left: auto; }
 }

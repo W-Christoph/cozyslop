@@ -62,6 +62,14 @@ const output = process.env.UX_OUTPUT || '/tmp/cozycast-ux'
           ['selected radio', '--accent-text', '--bg-surface'], ['focus', '--accent-text', '--bg-raised'],
         ]) rows.push({ theme, accent, kind: 'boundary', variant: label, ratio: +ratio(rgba(style.getPropertyValue(token)).slice(0, 3), rgba(style.getPropertyValue(surface)).slice(0, 3)).toFixed(2), required: 3 })
       }
+      const chatInput = (await import('/src/components/chat/ChatInput.module.css')).default
+      for (const theme of ['default', 'dark', 'legacy', 'light']) {
+        document.documentElement.dataset.theme = theme
+        probe.innerHTML = `<div class="${chatInput.wrapper}"><textarea class="${chatInput.textarea}" placeholder="Message"></textarea></div>`
+        const input = probe.querySelector('textarea'), placeholder = getComputedStyle(input, '::placeholder')
+        const background = rgba(getComputedStyle(input.parentElement).backgroundColor)
+        rows.push({ theme, kind: 'chat placeholder', variant: 'Message', ratio: +ratio(blend(rgba(placeholder.color), background), background.slice(0, 3)).toFixed(2), required: 4.5 })
+      }
       probe.remove()
       return rows
     })

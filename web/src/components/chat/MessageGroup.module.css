@@ -42,9 +42,11 @@
 [data-chat-style='compact'] .subMessage { padding: 0 0.2em 0 0; border-radius: 0.2em; }
 [data-chat-style='compact'] .subMessage.last { padding-bottom: 0; }
 
-/* Touch buttons get their own space in all three chat styles. */
+/* Tapping a message reveals its touch actions. */
 @media (hover: none) {
-  .deleteButton { visibility: visible; width: 32px; height: 32px; top: 2px; right: 2px; }
+  .deleteButton { visibility: hidden; width: 32px; height: 32px; top: 2px; right: 2px; }
   .editButton { right: 38px; }
-  .subMessage.withActions { min-height: 36px; padding-right: 74px; }
+  .subMessage:hover > .deleteButton { visibility: hidden; }
+  .subMessage.actionsShown > .deleteButton, .subMessage:focus-within > .deleteButton { visibility: visible; }
+  .subMessage.withActions.actionsShown, .subMessage.withActions:focus-within { min-height: 36px; padding-right: 74px; }
 }

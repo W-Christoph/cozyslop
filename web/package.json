@@ -9,6 +9,7 @@
     "test:chat": "node --test tests/chat.test.mjs",
     "test:frontend": "node --test tests/frontend.test.mjs",
     "test:restart": "node --test tests/restart.test.mjs",
+    "test:shortcuts": "node --test tests/shortcuts.test.mjs",
     "test:stream": "node --test tests/streamOptions.test.mjs"
   },
   "dependencies": {

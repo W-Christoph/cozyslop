@@ -8,17 +8,16 @@
 .page[data-chat-width='wider'] { --chat-size: max(22%, 25em); }
 /* The stream, the buttons and the user icons are not text: dragging over them selects nothing. */
 .videoWrapper { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; position: relative; -webkit-user-select: none; user-select: none; }
-.toolbar { flex-shrink: 0; }
+.toolbar { flex-shrink: 0; transition: opacity 0.2s linear; }
 .fullscreen .toolbar { position: absolute; bottom: 0; width: 100%; z-index: 4; }
 .idle, .idle main, .idle main * { cursor: none; }
-.idle .toolbar { opacity: 0; pointer-events: none; transition: opacity 0.2s linear; }
-.disconnected { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--color-backdrop); color: var(--color-crop-white); font-size: 6vw; text-align: center; }
-.disconnected span { font-size: 1rem; margin: var(--space-3); }
-.copyright { position: absolute; left: 3px; bottom: 3px; z-index: 3; font-size: 0.5em; color: var(--color-text-misc); }
-.leftCopyright { font-size: 0.3em; }
-.error { position: absolute; top: var(--space-3); left: var(--space-3); padding: var(--space-2); background: var(--color-menu); color: var(--color-text); z-index: 4; }
+.idle .toolbar { opacity: 0; pointer-events: none; }
 @media (max-width: 780px) and (orientation: portrait) {
   .page { flex-direction: column; height: 100dvh; }
-  .videoWrapper { flex: 0 0 55%; }
-  .copyright { left: auto; right: 3px; }
+  .page:not(.fullscreen) .videoWrapper { flex: none; }
+  .fullscreen .videoWrapper { flex: 0 0 55%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toolbar { transition: none; }
 }

@@ -31,6 +31,7 @@ export interface Preferences {
   userlistOnLeft: boolean
   smallPfp: boolean
   manualLoadMedia: boolean
+  shortcuts: boolean
   audioOnly: boolean
 }
 
@@ -52,6 +53,7 @@ const defaultPreferences: Preferences = {
   userlistOnLeft: false,
   smallPfp: false,
   manualLoadMedia: false,
+  shortcuts: true,
   audioOnly: false,
 }
 
@@ -105,7 +107,7 @@ effect(() => {
 })
 
 // The settings window, opened from the header and from inside a room.
-export type SettingsSection = 'account' | 'appearance' | 'chat' | 'room' | 'notifications'
+export type SettingsSection = 'account' | 'appearance' | 'chat' | 'room' | 'notifications' | 'shortcuts'
 export const settingsOpen = signal<SettingsSection | null>(null)
 
 effect(() => {

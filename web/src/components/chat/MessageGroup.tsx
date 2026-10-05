@@ -1,5 +1,5 @@
 import type { ChatMessage } from '../../room/protocol'
-import { useLayoutEffect, useRef } from 'preact/hooks'
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { preferences } from '../../app/state'
 import { useRoomStore } from '../room/RoomContext'
 import { userIdentity } from '../room/UserHoverName'
@@ -21,6 +21,18 @@ export function MessageGroup({ messages, editing, onEdit, onEndEdit, onMedia, on
 }) {
   const store = useRoomStore()
   const bubble = useRef<HTMLDivElement>(null)
+  const [actions, setActions] = useState<number | null>(null)
+  const activeMessage = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    if (actions === null) return
+    const outside = (event: PointerEvent) => {
+      // The preview a tapped picture opens is not "elsewhere".
+      if ((event.target as Element).closest('[role="dialog"]')) return
+      if (!activeMessage.current?.contains(event.target as Node)) setActions(null)
+    }
+    document.addEventListener('pointerdown', outside)
+    return () => document.removeEventListener('pointerdown', outside)
+  }, [actions])
   useLayoutEffect(() => {
     // A new submessage must reveal the entire bubble again in fullscreen.
     const element = bubble.current
@@ -54,7 +66,14 @@ export function MessageGroup({ messages, editing, onEdit, onEndEdit, onMedia, on
       </div>
       : editing === message.id
       ? <MessageEditor key={message.id} message={message} onClose={onEndEdit} />
-      : <div class={`${styles.subMessage} ${index === messages.length - 1 ? styles.last : ''} ${message.id > 0 && (own || store.rights.value.admin) ? styles.withActions : ''}`} key={message.id} tabIndex={message.id > 0 && (own || store.rights.value.admin) ? 0 : undefined}>
+      : <div class={`${styles.subMessage} ${index === messages.length - 1 ? styles.last : ''} ${message.id > 0 && (own || store.rights.value.admin) ? styles.withActions : ''} ${actions === message.id ? styles.actionsShown : ''}`} key={message.id} onPointerUp={(event) => {
+        if (event.pointerType !== 'touch' || message.id <= 0 || (!own && !store.rights.value.admin)) return
+        // A picture or link still opens; the actions show as well, since such
+        // a message may have nothing else to tap.
+        if ((event.target as Element).closest(`input, textarea, .${styles.deleteButton}`)) return
+        activeMessage.current = event.currentTarget
+        setActions(message.id)
+      }} tabIndex={message.id > 0 && (own || store.rights.value.admin) ? 0 : undefined}>
         {message.id > 0 && (own || store.rights.value.admin) && <button type="button" class={styles.deleteButton} aria-label="Delete message" onClick={() => store.deleteChat(message.id)}>X</button>}
         {own && message.type === 'text' && message.id > 0 && <button type="button" class={`${styles.deleteButton} ${styles.editButton}`} aria-label="Edit message" onClick={() => onEdit(message.id)}><img src="/svg/edit.svg" alt="" /></button>}
         {index > 0 && <div class={styles.hoverTime}>{messageTime(message.time)}</div>}

@@ -1,0 +1,6 @@
+.surface { position: fixed; background: var(--color-accent); color: var(--color-text); padding: 0.15em 0.3em; border-radius: 0.2em; z-index: 5; pointer-events: none; font-family: var(--font-sans); width: max-content; max-width: calc(100vw - 1em); box-sizing: border-box; }
+.surface::before { content: ''; position: absolute; border: 0.3em solid; }
+.top { transform: translate(-50%, -100%); }
+.right { transform: translateY(-50%); }
+.top::before { left: var(--arrow-x, 50%); top: 100%; transform: translateX(-50%); border-color: var(--color-accent) transparent transparent; }
+.right::before { right: 100%; top: 50%; transform: translateY(-50%); border-color: transparent var(--color-accent) transparent transparent; }

@@ -58,6 +58,9 @@ async function setup(browser, theme, width) {
   await page.routeWebSocket('**/neko/**', ws => ws.onMessage(data => {
     const event = JSON.parse(data).event
     if (event === 'signal/request') {
+      // neko's heartbeat: the client drops a connection silent for 25s.
+      const beat = setInterval(() => ws.send(JSON.stringify({ event: 'system/heartbeat' })), 10_000)
+      ws.onClose(() => clearInterval(beat))
       ws.send(JSON.stringify({ event: 'system/init', payload: { session_id: 'tab', sessions: { tab: { profile: { can_host: true } } }, screen_size: { width: 640, height: 360, rate: 30 }, control_host: { has_host: false } } }))
       ws.send(JSON.stringify({ event: 'signal/provide', payload: { sdp: 'test' } }))
     }
@@ -205,8 +208,12 @@ async function run() {
         await shot(p, `room-overlay-${chatStyle}`, theme, width)
       }
       await p.getByRole('button', { name: 'Exit fullscreen', exact: true }).click()
-      const personal = p.getByRole('button', { name: 'Personal settings', exact: true })
-      await personal.click()
+      const personal = p.getByRole('button', { name: width <= 780 ? 'More' : 'Personal settings', exact: true })
+      const openPersonal = async () => {
+        await personal.click()
+        if (width <= 780) await p.getByRole('menuitem', { name: 'Personal settings', exact: true }).click()
+      }
+      await openPersonal()
       for (const section of ['My account', 'Appearance', 'Chat', 'Room', 'Notifications']) {
         await p.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: section, exact: true }).click()
         await shot(p, `personal-${section.toLowerCase().replaceAll(' ', '-')}`, theme, width)
@@ -218,10 +225,14 @@ async function run() {
           await shot(p, 'personal-colour-picker-focus', theme, width)
         }
         await trap(p, `personal ${section} ${theme} ${width}`, personal)
-        if (section !== 'Notifications') await personal.click()
+        if (section !== 'Notifications') await openPersonal()
       }
-      const roomSettings = p.getByRole('button', { name: 'Room settings', exact: true })
-      await roomSettings.click()
+      const roomSettings = p.getByRole('button', { name: width <= 780 ? 'More' : 'Room settings', exact: true })
+      const openRoomSettings = async () => {
+        await roomSettings.click()
+        if (width <= 780) await p.getByRole('menuitem', { name: 'Room settings', exact: true }).click()
+      }
+      await openRoomSettings()
       for (const section of ['Access', 'Stream', 'Tools', 'In the room', 'Permissions', 'Invites', 'Anonymous bans']) {
         await p.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: section, exact: true }).click()
         await shot(p, `room-settings-${section.toLowerCase().replaceAll(' ', '-')}`, theme, width)
@@ -241,10 +252,12 @@ async function run() {
           await trap(p, `ban ${theme} ${width}`, ban, 2)
         }
         await trap(p, `room settings ${section} ${theme} ${width}`, roomSettings)
-        if (section !== 'Anonymous bans') await roomSettings.click()
+        if (section !== 'Anonymous bans') await openRoomSettings()
       }
-      const files = p.getByRole('button', { name: 'Files of the desktop', exact: true })
-      await files.click(); await p.getByRole('dialog').getByRole('button', { name: 'Refresh', exact: true }).click(); await shot(p, 'files', theme, width); await trap(p, `files ${theme} ${width}`, files)
+      const files = p.getByRole('button', { name: width <= 780 ? 'More' : 'Files of the desktop', exact: true })
+      await files.click()
+      if (width <= 780) await p.getByRole('menuitem', { name: 'Files of the desktop', exact: true }).click()
+      await p.getByRole('dialog').getByRole('button', { name: 'Refresh', exact: true }).click(); await shot(p, 'files', theme, width); await trap(p, `files ${theme} ${width}`, files)
       const screenshot = p.getByRole('button', { name: 'Screenshot video', exact: true })
       await screenshot.click(); await expect(p.getByRole('button', { name: 'Crop', exact: true })).toBeEnabled()
       const cropArea = p.getByRole('group', { name: 'Crop area: arrow keys move, Shift and arrow keys resize' })
@@ -259,7 +272,7 @@ async function run() {
       await shot(p, 'upload-confirm', theme, width)
       await trap(p, `upload confirm ${theme} ${width}`, p.getByRole('button', { name: 'Crop', exact: true }).first(), 2)
       await trap(p, `screenshot ${theme} ${width}`, screenshot)
-      await personal.click()
+      await openPersonal()
       await p.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'My account', exact: true }).click()
       const avatar = p.getByRole('button', { name: 'Change avatar', exact: true }).last()
       await avatar.focus()

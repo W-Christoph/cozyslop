@@ -66,7 +66,7 @@ try {
   ;({ ProfileEditor } = await server.ssrLoadModule('/src/components/profile/ProfileEditor.tsx'))
   ;({ SettingsDialog } = await server.ssrLoadModule('/src/components/settings/SettingsDialog.tsx'))
   ;({ profileChanged } = await server.ssrLoadModule('/src/components/profile/profileChanges.ts'))
-  ;({ userIdentity } = await server.ssrLoadModule('/src/components/room/UserHoverName.tsx'))
+  ;({ userIdentity } = await server.ssrLoadModule('/src/components/room/UserHoverName.ts'))
   ;({ ChatPanel } = await server.ssrLoadModule('/src/components/chat/ChatPanel.tsx'))
   ;({ MessageGroup } = await server.ssrLoadModule('/src/components/chat/MessageGroup.tsx'))
   ;({ MessageList } = await server.ssrLoadModule('/src/components/chat/MessageList.tsx'))

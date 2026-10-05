@@ -13,7 +13,7 @@
   overflow: hidden;
   background: var(--color-bg);
 }
-.play, .loading, .audio {
+.play, .state {
   position: absolute;
   inset: 0;
   display: flex;
@@ -34,12 +34,18 @@
   border-radius: 50%;
   box-shadow: 0 0 60px var(--color-scrollbar);
 }
-.loading { pointer-events: none; text-align: center; padding: var(--space-4); }
-.loading img { width: 160px; max-width: 100%; max-height: 50%; }
-.audio { pointer-events: none; background: var(--color-backdrop); font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
-.audio img { width: 48px; height: 48px; opacity: 0.8; }
+.state { pointer-events: none; text-align: center; padding: var(--space-4); }
+.state img { width: 160px; max-width: 100%; max-height: 50%; }
+.title { font-size: 1.05em; font-weight: 600; }
+.detail { font-size: 0.85em; color: var(--color-crop-white); opacity: 0.7; }
+.disconnected img { opacity: 0.45; }
+.state.audio img { width: 48px; height: 48px; opacity: 0.8; }
 @media (max-width: 780px) and (orientation: portrait) {
   .area { flex-direction: column; }
+  .fitted { flex: none; }
+  .fitted .screen { flex: none; height: min(calc(100vw / var(--screen-ratio)), 55dvh); }
 }
 
 .status { position: absolute; top: var(--space-2); left: var(--space-2); padding: var(--space-1) var(--space-2); background: var(--color-overlay); color: var(--color-crop-white); border-radius: var(--radius); font-size: 0.75em; pointer-events: none; }
+
+.error { position: absolute; top: var(--space-2); left: 50%; transform: translateX(-50%); z-index: 5; max-width: calc(100% - 2 * var(--space-3)); width: max-content; padding: var(--space-1) var(--space-3); border-radius: var(--radius); background: var(--color-orange); color: var(--color-on-orange); box-shadow: 0 0 6px var(--color-shadow); font-size: 0.9em; text-align: center; }

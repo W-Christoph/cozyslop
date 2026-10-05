@@ -3,3 +3,6 @@
 .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .username { font-size: var(--text-xs); color: var(--text-muted); }
 .error { margin-bottom: var(--space-5); }
+
+.copyright { font-size: var(--text-xs); color: var(--text-muted); text-decoration: none; }
+.copyright:hover { color: var(--text); }

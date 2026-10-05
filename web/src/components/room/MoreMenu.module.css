@@ -1,0 +1,8 @@
+.more { display: none; position: relative; }
+.menu { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; position: absolute; top: calc(100% + var(--space-2)); right: 0; z-index: 6; width: max-content; max-width: calc(100vw - 2 * var(--space-2)); padding: var(--space-1); background: var(--color-accent); color: var(--color-text); border-radius: var(--radius); box-shadow: 0 2px 8px var(--color-shadow); }
+.item { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 44px; padding: var(--space-2) var(--space-3); background: transparent; color: inherit; border-radius: 0.2em; font: inherit; text-align: left; text-decoration: none; }
+.item img { width: 24px; height: 24px; filter: var(--icon-invert); }
+.item:hover, .item:active, .item:focus { background: var(--color-button-accent); }
+@media (max-width: 780px) and (orientation: portrait) {
+  .more { display: block; }
+}

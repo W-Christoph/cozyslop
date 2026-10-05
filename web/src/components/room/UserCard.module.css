@@ -1,0 +1,5 @@
+.tooltip { overflow-wrap: anywhere; font-size: 1.1em; display: flex; flex-direction: column; }
+.tooltip span { font-size: 0.7em; color: var(--color-text-muted); }
+.tooltip::after { content: ''; position: absolute; right: -0.15em; height: 100%; width: 0.3em; top: 0; border-radius: 0 0.2em 0.2em 0; }
+.online::after { background: var(--color-online); }
+.away::after { background: var(--color-away); }

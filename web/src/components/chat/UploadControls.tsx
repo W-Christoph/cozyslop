@@ -1,6 +1,7 @@
 import type { RefObject } from 'preact'
 import { useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { useRoomStore } from '../room/RoomContext'
+import { RoomTooltip } from '../room/RoomTooltip'
 import { ConfirmUpload } from './ConfirmUpload'
 import { ScreenshotModal } from './ScreenshotModal'
 import styles from './UploadControls.module.css'
@@ -66,8 +67,8 @@ export function UploadControls({ visible, receiveFile }: {
     <div class={styles.controls} ref={controls} hidden={!visible}>
       <input ref={chooser} type="file" aria-label="Choose chat media" class={styles.file} accept={accepted.join(',')}
         onChange={(e) => { const chosen = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (chosen) select(chosen) }} />
-      <button type="button" aria-label="Screenshot video" onClick={capture}><img src="/svg/screen_shot.svg" alt="" /></button>
-      <button type="button" aria-label="Upload image or video" onClick={() => chooser.current?.click()}><img src="/svg/imageupload.svg" alt="" /></button>
+      <RoomTooltip label="Screenshot video"><button type="button" aria-label="Screenshot video" onClick={capture}><img src="/svg/screen_shot.svg" alt="" /></button></RoomTooltip>
+      <RoomTooltip label="Upload image or video"><button type="button" aria-label="Upload image or video" onClick={() => chooser.current?.click()}><img src="/svg/image.svg" alt="" /></button></RoomTooltip>
     </div>
     {error && <div class={styles.error} role="alert">{error}</div>}
     {screenshot && <ScreenshotModal source={screenshot} onClose={() => setScreenshot(null)} onCrop={(blob) => {

@@ -8,7 +8,7 @@ import styles from './VideoArea.module.css'
 // Match CozyCast's device test, including tablet browsers.
 const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 
-export function VideoArea() {
+export function VideoArea({ disconnected, error, fullscreen }: { disconnected: boolean; error: string; fullscreen: boolean }) {
   const store = useRoomStore()
   const drop = useDesktopDrop()
   const pointer = useRef({ x: store.neko.screen.width / 2, y: store.neko.screen.height / 2 })
@@ -18,7 +18,9 @@ export function VideoArea() {
   const paused = store.paused.value
   const restarting = store.restarting.value
   const loading = restarting !== null || store.server.value !== 'connected' || store.video.value !== 'connected'
-  const status = paused ? 'Paused' : store.server.value !== 'connected' ? 'Connecting to server…' : store.video.value !== 'connected' ? 'Connecting to desktop…' : ''
+  const title = disconnected ? 'Connection lost' : restarting !== null ? `${restarting} restarted the room`
+    : store.server.value !== 'connected' ? 'Connecting to server…' : 'Connecting to the desktop…'
+  const detail = store.error.value ?? (disconnected || restarting !== null ? 'Reconnecting…' : '')
   const play = () => {
     if (store.paused.value) {
       store.resume()
@@ -29,24 +31,27 @@ export function VideoArea() {
     void video.current?.play().then(() => setBlocked(false)).catch(() => setBlocked(true))
   }
   return (
-    <div class={styles.area}>
+    <div class={`${styles.area} ${fullscreen ? '' : styles.fitted}`}>
       <main class={styles.screen} aria-label="Room screen" {...drop}>
         <DesktopUploadStatus />
+        {error && <div role="alert" class={styles.error}>{error}</div>}
         <RemoteScreen mobile={mobile} pointer={pointer} video={video} onPlaybackBlocked={onPlaybackBlocked} />
-        {status && <span class={styles.status} role="status">{status}</span>}
-        {paused || blocked ? (
+        {paused && <span class={styles.status} role="status">Paused</span>}
+        {!disconnected && (paused || blocked) ? (
           <button class={styles.play} aria-label={blocked ? 'Play stream' : 'Resume stream'} onClick={play}>
             <img src="/svg/initial_play_button.svg" alt="" />
           </button>
         ) : loading ? (
-          <div class={styles.loading} role="status">
+          <div class={`${styles.state} ${disconnected ? styles.disconnected : ''}`} role="status">
             <img src="/svg/loading-cozy.svg" alt="" />
-            <span>{restarting !== null ? `${restarting} restarted the room. Reconnecting…` : store.error.value ?? 'LOADING…'}</span>
+            <span class={styles.title}>{title}</span>
+            {detail && <span class={styles.detail}>{detail}</span>}
           </div>
         ) : store.audioOnly.value ? (
-          <div class={styles.audio} role="status">
+          <div class={`${styles.state} ${styles.audio}`} role="status">
             <img src="/svg/volume-up.svg" alt="" />
-            <span>Audio Only Stream Running</span>
+            <span class={styles.title}>Sound only</span>
+            <span class={styles.detail}>The picture is off. Turn it back on in Settings › Room.</span>
           </div>
         ) : null}
       </main>

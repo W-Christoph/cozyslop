@@ -26,6 +26,13 @@
    under the folder. */
 .uploading::after { content: ''; position: absolute; left: 2px; right: 2px; bottom: 0; height: 3px; border-radius: 1px; background: linear-gradient(to right, var(--color-orange) var(--fill), var(--color-scrollbar) var(--fill)); }
 .host { justify-content: center; }
+/* The side groups share the room left of and right of the middle one
+   equally, however many buttons each has: the playback buttons stay in the
+   centre of the bar. */
+@media (min-width: 781px) {
+  .navigation, .right { flex: 1 1 0; min-width: max-content; }
+  .right { justify-content: flex-end; }
+}
 @media (max-width: 780px) {
   .controls { flex-wrap: wrap; justify-content: center; }
   .group { gap: var(--space-1); margin: var(--space-1); }

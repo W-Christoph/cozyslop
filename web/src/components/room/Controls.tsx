@@ -51,6 +51,7 @@ export function Controls({ fullscreen, userlistHidden, chatOpen, unreadChat, win
         </span></RoomTooltip>
         <IconButton shortcut="playback" icon={store.paused.value ? 'play_button' : 'pause_button'} label={store.paused.value ? 'Play' : 'Pause'}
           active={store.paused.value} onClick={() => store.paused.value ? store.resume() : store.pause()} />
+        <IconButton shortcut="fullscreen" icon="fullscreen_button" label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} active={fullscreen} onClick={onFullscreen} />
         <IconButton shortcut="mute" icon={muted || volume === 0 ? 'sound-mute' : 'sound-max'} label={muted ? 'Unmute' : 'Mute'} active={muted}
           onClick={() => updatePreferences({ muted: !muted })} />
         <input aria-label="Volume" aria-keyshortcuts={preferences.value.shortcuts ? [...shortcutKeys('volumeUp'), ...shortcutKeys('volumeDown')].join(' ') : undefined} class={styles.volume} type="range" min="0" max="100" value={muted ? 0 : volume} style={{ '--fill': `${muted ? 0 : volume}%` }}
@@ -60,7 +61,6 @@ export function Controls({ fullscreen, userlistHidden, chatOpen, unreadChat, win
             const value = Number(e.currentTarget.value)
             updatePreferences(value === 0 ? { muted: true } : { volume: value, muted: false })
           }} />
-        <IconButton shortcut="fullscreen" icon="fullscreen_button" label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} active={fullscreen} onClick={onFullscreen} />
       </div>
       {!(fullscreen && host) && <div class={`${styles.group} ${styles.right}`}>
         <IconButton class={`${styles.quiet} ${styles.sideOnly}`} icon="settings" label="Personal settings" onClick={onPersonalSettings} />

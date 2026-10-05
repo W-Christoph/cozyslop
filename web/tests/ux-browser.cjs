@@ -77,7 +77,7 @@ async function toolbar(h, width) {
   const styles = await p.evaluate(async () => (await import('/src/components/room/Controls.module.css')).default)
   const buttons = await p.evaluate(async () => (await import('/src/components/room/IconButton.module.css')).default)
   const center = p.locator(`.${styles.center}`), right = p.locator(`.${styles.right}`)
-  assert.deepEqual(await center.locator('button,input').evaluateAll(els => els.map(el => el.getAttribute('aria-label'))), ['Remote', 'Pause', 'Mute', 'Volume', 'Fullscreen'])
+  assert.deepEqual(await center.locator('button,input').evaluateAll(els => els.map(el => el.getAttribute('aria-label'))), ['Remote', 'Pause', 'Fullscreen', 'Mute', 'Volume'])
   const volume = p.getByRole('slider', { name: 'Volume', exact: true })
   await expect(volume).toBeVisible()
   assert.equal((await volume.boundingBox()).height, 25)

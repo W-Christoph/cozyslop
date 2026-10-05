@@ -2,7 +2,7 @@
 .narrow { max-width: 720px; }
 .head { display: flex; align-items: flex-end; gap: var(--space-4); margin-bottom: var(--space-5); }
 .headText { flex: 1; min-width: 0; }
-.title { margin: 0; font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; }
+.title { margin: 0; font-size: var(--text-6xl); font-weight: 700; letter-spacing: -0.02em; }
 .subtitle { margin: var(--space-1) 0 0; color: var(--text-muted); }
 
 .auth {
@@ -27,11 +27,10 @@
   box-shadow: var(--shadow-card);
 }
 .logo { border-radius: var(--radius-lg); margin-bottom: var(--space-4); }
-.authTitle { margin: 0; font-size: 1.4rem; font-weight: 700; letter-spacing: -0.01em; text-align: center; }
+.authTitle { margin: 0; font-size: var(--text-3xl); font-weight: 700; letter-spacing: -0.01em; text-align: center; }
 .authSubtitle { margin: var(--space-1) 0 0; color: var(--text-muted); text-align: center; }
 .authBody { width: 100%; margin-top: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
-.authBody form { display: flex; flex-direction: column; gap: var(--space-4); }
-.authFooter { margin: 0; color: var(--text-muted); font-size: 0.92rem; }
+.authFooter { margin: 0; color: var(--text-muted); font-size: var(--text-md); }
 /* Text links only: a ButtonLink brings its own class and colours. */
 .authFooter a, .authBody a:not([class]) { color: var(--accent-text); font-weight: 600; text-decoration: none; }
 .authFooter a:hover, .authBody a:not([class]):hover { text-decoration: underline; }

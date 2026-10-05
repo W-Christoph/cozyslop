@@ -3,13 +3,13 @@ import { api, type AnonGrant, type Permission } from '../../../api'
 import type { User } from '../../../room/protocol'
 import { AdminTable } from '../../admin/AdminTable'
 import { Button } from '../../Button'
-import { Spinner } from '../../ui/EmptyState'
+import { Spinner } from '../../ui/Spinner'
 import { Notice } from '../../ui/Notice'
 import { useRoomStore } from '../RoomContext'
 import { BanModal } from './BanModal'
 import { CurrentRoomUserRow } from './CurrentRoomUserRow'
 import { RoomDefaultsRow } from './RoomDefaultsRow'
-import styles from './CurrentRoomUserRow.module.css'
+import styles from './CurrentRoomUsers.module.css'
 
 export function CurrentRoomUsers() {
   const store = useRoomStore()
@@ -50,7 +50,7 @@ export function CurrentRoomUsers() {
     <>
       {error && <Notice tone="error">{error}</Notice>}
       <div class={styles.toolbar}>
-        {loading ? <Spinner label="Loading permissions..." /> : <span>{users.length === 1 ? '1 person' : `${users.length} people`} in the room</span>}
+        {loading ? <Spinner inline label="Loading permissions…" /> : <span>{users.length === 1 ? '1 person' : `${users.length} people`} in the room</span>}
         <Button size="sm" variant="ghost" icon="refresh" disabled={loading} onClick={() => setRevision((value) => value + 1)}>Refresh</Button>
       </div>
       <AdminTable headings={['User', 'Trusted', 'Invited', 'Invite name', 'Remote', 'Images', 'Upload', '']}>

@@ -41,7 +41,7 @@ export function VideoArea() {
         ) : loading ? (
           <div class={styles.loading} role="status">
             <img src="/svg/loading-cozy.svg" alt="" />
-            <span>{restarting !== null ? `${restarting} restarted the room. Reconnecting…` : store.error.value ?? 'LOADING...'}</span>
+            <span>{restarting !== null ? `${restarting} restarted the room. Reconnecting…` : store.error.value ?? 'LOADING…'}</span>
           </div>
         ) : store.audioOnly.value ? (
           <div class={styles.audio} role="status">

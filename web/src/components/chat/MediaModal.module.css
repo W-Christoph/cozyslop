@@ -1,3 +1,7 @@
 .backdrop { position: fixed; z-index: 100; inset: 0; display: flex; background: var(--color-backdrop); }
 .media { position: relative; margin: auto; }
 .media img, .media video { display: block; max-width: 80vw; max-height: 80vh; }
+.backdrop:focus { outline: none; }
+
+.media a { display: block; }
+.media :focus-visible { outline: 2px solid var(--color-crop-white); outline-offset: 2px; }

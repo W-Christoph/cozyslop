@@ -1,6 +1,6 @@
 .message { background: var(--color-message-bg); margin-top: 10px; padding-top: 0.5em; border-radius: 0.2em; box-shadow: var(--shadow-message); }
 .subMessage { position: relative; padding: 0.15em 1em; font-size: 0.9em; }
-.subMessage:last-of-type { padding-bottom: 0.5em; }
+.subMessage.last { padding-bottom: 0.5em; }
 .subMessage:hover { background: var(--color-message-hover); }
 .deleteButton { z-index: 2; position: absolute; color: var(--color-text); font-weight: bold; border: 0; background: var(--color-button); border-radius: 0.2em; top: 0.1em; right: 0.1em; width: 1.25em; height: 1.25em; visibility: hidden; text-align: center; padding: 0; }
 .subMessage:hover > .deleteButton, .subMessage:focus-within > .deleteButton { visibility: visible; }
@@ -8,7 +8,7 @@
 .deleteButton:hover { background: var(--color-orange); }
 .editButton { right: 1.5em; }
 .editButton img { padding: 15%; width: 100%; height: 100%; filter: var(--icon-invert); }
-.username { color: var(--name-colour); font-weight: 600; padding-left: 0.5em; position: relative; word-break: normal; overflow: hidden; }
+.username { color: var(--readable-name-colour, var(--name-colour)); font-weight: 600; padding-left: 0.5em; position: relative; word-break: normal; overflow: hidden; }
 .realUsername { opacity: 0; position: absolute; background: var(--color-menu); border-radius: 0.2em; color: var(--color-text); user-select: none; pointer-events: none; top: -0.2em; right: 0.4em; min-width: 3em; text-align: right; }
 .username:hover .realUsername { opacity: 1; }
 .timestamp { font-weight: 300; font-size: 0.8em; color: var(--color-text-misc); margin-right: 0.5em; float: right; }
@@ -18,11 +18,6 @@
 .hoverTime { position: absolute; right: 0.5em; top: -2em; background: var(--color-accent); white-space: nowrap; padding: 0.15em 0.3em; border-radius: 0.2em; visibility: hidden; opacity: 0; z-index: 3; transition: opacity 0.15s ease; pointer-events: none; font-size: 0.6em; user-select: none; }
 .subMessage:hover .hoverTime { visibility: visible; opacity: 1; }
 .hoverTime::before { content: ''; position: absolute; border: 0.3em solid; left: 50%; top: 100%; transform: translateX(-50%); border-color: var(--color-accent) transparent transparent; }
-@media (hover: none) { .deleteButton { visibility: visible; } }
-
-/* On the light theme, name colours picked for dark backgrounds are darkened
-   until they read. Not over the stream, where chat is light on dark. */
-[data-theme='light'] [data-chat-style]:not([data-chat-overlay]) .username { color: color-mix(in oklab, var(--name-colour) 55%, black); }
 
 /* Profile pictures: a column on the left of the group. */
 .withAvatar { position: relative; padding-left: 2.2em; min-height: 2.7em; }
@@ -34,15 +29,22 @@
 [data-chat-style='modern'] .username { display: flex; align-items: baseline; gap: 0.5em; padding-left: 0; overflow: visible; }
 [data-chat-style='modern'] .timestamp { float: none; margin: 0; font-size: 0.7em; }
 [data-chat-style='modern'] .subMessage { padding: 0.1em 0.3em 0.1em 0; border-radius: 0.2em; }
-[data-chat-style='modern'] .subMessage:last-of-type { padding-bottom: 0.1em; }
+[data-chat-style='modern'] .subMessage.last { padding-bottom: 0.1em; }
 [data-chat-style='modern'] .withAvatar { padding-left: 2.9em; min-height: 2.5em; }
 [data-chat-style='modern'] .avatarSlot { left: 0; top: 0.15em; width: 2.3em; height: 2.3em; }
 
-/* Compact: the name in front of the first line, wrapped lines indented under
-   it, nothing else around it. */
-[data-chat-style='compact'] .message { background: transparent; box-shadow: none; margin-top: 0.35em; padding: 0 0 0 0.9em; line-height: 1.35; }
+/* Compact: each message starts with its own time and name; subsequent
+   lines align with the timestamp at the left edge. */
+[data-chat-style='compact'] .message { background: transparent; box-shadow: none; margin-top: 0.35em; padding: 0; line-height: 1.35; }
 [data-chat-style='compact'] .message::after { content: ''; display: block; clear: both; }
-[data-chat-style='compact'] .username { float: left; display: flex; flex-direction: row-reverse; align-items: baseline; gap: 0.4em; margin-left: -0.9em; padding: 0 0.45em 0 0; overflow: visible; font-size: 0.9em; line-height: 1.3; }
+[data-chat-style='compact'] .username { float: left; display: flex; flex-direction: row-reverse; align-items: baseline; gap: 0.4em; padding: 0 0.45em 0 0; overflow: visible; font-size: 0.9em; line-height: 1.3; }
 [data-chat-style='compact'] .timestamp { float: none; margin: 0; font-size: 0.72em; }
 [data-chat-style='compact'] .subMessage { padding: 0 0.2em 0 0; border-radius: 0.2em; }
-[data-chat-style='compact'] .subMessage:last-of-type { padding-bottom: 0; }
+[data-chat-style='compact'] .subMessage.last { padding-bottom: 0; }
+
+/* Touch buttons get their own space in all three chat styles. */
+@media (hover: none) {
+  .deleteButton { visibility: visible; width: 32px; height: 32px; top: 2px; right: 2px; }
+  .editButton { right: 38px; }
+  .subMessage.withActions { min-height: 36px; padding-right: 74px; }
+}

@@ -15,9 +15,9 @@ export function RestartButton() {
     close()
   }
   return <>
-    <Button icon="power" onClick={() => setConfirm(true)}>Restart</Button>
+    <Button variant="danger-outline" icon="power" onClick={() => setConfirm(true)}>Restart</Button>
     {store.error.value && <Notice tone="error">{store.error.value}</Notice>}
-    {confirm && <Modal compact title="Restart room?" onClose={close} footer={<>
+    {confirm && <Modal size="sm" title="Restart room?" onClose={close} footer={<>
       <Button onClick={close}>Cancel</Button>
       <Button variant="danger" onClick={restart}>Restart</Button>
     </>}>

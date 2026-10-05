@@ -5,7 +5,8 @@ import { Button, ButtonLink } from '../components/Button'
 import { PageLayout } from '../components/PageLayout'
 import { InviteModal } from '../components/admin/InviteModal'
 import { Badge } from '../components/ui/Badge'
-import { EmptyState, Spinner } from '../components/ui/EmptyState'
+import { EmptyState } from '../components/ui/EmptyState'
+import { Spinner } from '../components/ui/Spinner'
 import { Icon, type IconName } from '../components/ui/Icon'
 import { Notice } from '../components/ui/Notice'
 import styles from './HomePage.module.css'
@@ -54,7 +55,7 @@ export function HomePage() {
         </div>
       )}
       {error && <Notice tone="error">{error}</Notice>}
-      {loading && rooms.length === 0 && <Spinner label="Loading rooms..." />}
+      {loading && rooms.length === 0 && <Spinner label="Loading rooms…" />}
       {!loading && !error && rooms.length === 0 && (
         <EmptyState icon="monitor" title="No rooms available">
           {me.value ? 'There is no room you can join right now.' : 'Log in to see the rooms you have access to.'}
@@ -83,7 +84,7 @@ export function HomePage() {
                   </Button>
                 )}
                 {room.open ? (
-                  <ButtonLink accent href={`/room/${encodeURIComponent(room.name)}`}>
+                  <ButtonLink variant="primary" href={`/room/${encodeURIComponent(room.name)}`}>
                     Join
                   </ButtonLink>
                 ) : (

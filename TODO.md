@@ -1,7 +1,8 @@
 # TODO
 
 From the full-codebase review on 2026-10-03 (three Codex runs, every file
-read; findings checked against the code). State as of the end of that day.
+read; findings checked against the code). State as of the end of
+2026-10-05.
 
 ## 1. Open: when deploying
 
@@ -34,73 +35,74 @@ Moderation and rights
 Frontend
 - [ ] The chat draft is cleared before the server accepts the message.
 
-UI redesign of 2026-10-04: left over from the design reviews (a visual
-critique, a code audit of the design system, a Codex review; the hands-on UX
-and accessibility test was stopped early)
-- [ ] Not looked at again after the last fixes: no screenshots were taken
-      after the final batch (light-theme name colours, dimmed rows, the ban
-      date width, the colour picker's focus ring).
-- [ ] UX test never finished: keyboard order, focus and Escape in every
-      window, and contrast after the fixes, were not re-measured.
-- [ ] Unsaved profile changes (nickname, colour, new avatar) are dropped
-      without a word when the settings section is switched or the window
-      is closed.
-- [ ] Changing the avatar is only the picture itself (hover text and a
-      small badge); the critique wanted a visible "Change avatar" button.
-- [ ] Permission tables: the row that adds a permission is still a table
-      row (suggested: a toolbar above the table); the ban date is a plain
-      date input (suggested: a chip that opens it).
-- [ ] "Room not found" and the other kick screens have no site header and
-      their own buttons ("Login"/"Home"), unlike the 404 page ("Log
-      in"/"Back to rooms"); `KickedScreen` hand-rolls its links because a
-      unit test looks for plain `<a>` elements.
-- [ ] The Restart button looks neutral although its confirmation is red
-      (suggested: a danger-outline `Button` variant).
-- [ ] Admin "Server settings" has no page title; the other admin pages do.
-- [ ] Messages in table cells and in the header menu are raw
-      `role="alert"`/`role="status"` paragraphs, not `Notice`
-      (`PermissionRow`, `CurrentRoomUserRow`, `RoomDefaultsRow`, `Header`,
-      `AvatarChooser`); a compact `Notice` is missing.
-- [ ] Focus is shown in three ways: `--focus-ring`, an accent border with a
-      soft ring on inputs, and the browser's outline on text links; the
-      ring's gap is always `--bg-surface`, also on other backgrounds.
-- [ ] No type scale (0.82/0.85/0.87/0.9rem all serve as "small text"),
-      radii of 5px and 6px outside the scale (a `--radius-sm` is missing),
-      six different breakpoints (520-780px) with no shared definition.
-- [ ] Duplicated CSS: the red hover of ghost delete buttons (four copies,
-      wants a `Button` variant), the `.actions` module of the two settings
-      forms, `.form`, `.label`, the close button, the spinner, and the
-      cropper styles in `AvatarChooser` and `ScreenshotModal`. Four
-      components import another component's module.
-- [ ] Selectors that lean on another component's markup (`.actions > p`,
-      `.toolbar > div`, `Whisper`'s `.form > label:first-child`,
-      `:last-of-type` in `MessageGroup`); `!important` for the tinted table
-      rows; class overrides on `Button`/`Input` that win only by import
-      order.
-- [ ] Two ways to say the same thing: `Modal` `compact` and `size="sm"`,
-      `Button` `accent` and `variant="primary"`. Unused: `loggedIn`, some
-      legacy tokens (`--color-select`, `--color-disabled`,
-      `--color-orange-ping`), `public/svg/logosymbol.svg`,
-      `image_upload_cat.svg`.
-- [ ] Anonymous users are named five ways (`Anon(xxxx)`, `Anon xxxx`,
-      `Anonymous (xxxx)`); use `userIdentity()` everywhere. "..." and "…"
-      are mixed in loading texts.
-- [ ] `CurrentRoomUserRow` and `BanModal` show the room's `UserAvatar`
-      (legacy tokens) inside a window.
-- [ ] In the room, untouched by the redesign: the chat picture preview
-      (`MediaModal`) sits under the toolbar in fullscreen with see-through
-      chat and has no focus trap; personal and room settings have the same
-      icon in the toolbar; on phones the delete/edit buttons of a message
-      are 18px.
-- [ ] `tests/chat-browser.cjs` (optional browser test) waits for a "Live"
-      label that no longer exists; it failed before the redesign too.
+UI: left over after the redesign follow-up of 2026-10-05
+- [ ] The type scale in `tokens.css` names the sizes in use (13 steps,
+      several a pixel apart); it does not yet reduce them.
+- [ ] Phones: a message's edit/delete buttons are always shown at 32px with
+      room kept free beside the text, so own messages (all of them for
+      admins) are at least 36px high. Alternative: show them on tap.
+- [ ] Fullscreen chat over the stream is not measured for contrast (there is
+      no one background); only names too dark for a dark picture are
+      lightened. A darker bubble (0.65) and white timestamps were tried and
+      taken back as too far from the room's look.
+- [ ] Checked in Chromium only (viewport and touch emulation, mocked
+      server): no real phone, no Firefox or Safari, no screen reader.
 
 Housekeeping
 - [ ] Orphaned media files (crash between rename and insert, failed unlink)
       are never reconciled.
 - [ ] Legacy avatar import cannot resume after a crash.
 
-## 3. Done on 2026-10-04
+## 3. Done on 2026-10-05
+
+Chat
+- [x] A message keeps its author's picture after the author has left; a
+      changed picture reaches the messages already shown.
+- [x] Compact chat is not grouped: every message has its time and name, and
+      wrapped lines start under the time.
+- [x] Room settings are centred like the personal settings.
+
+The leftovers of the UI redesign (four Codex runs, each reviewed)
+- [x] Unsaved profile changes ask before a section switch, closing the
+      window or logging out ("Keep editing" / "Discard").
+- [x] A visible "Change avatar" button.
+- [x] Kick screens have the site header and the 404 page's buttons ("Log
+      in" / "Back to rooms").
+- [x] "Server settings" has a page title; Restart is a `danger-outline`
+      button.
+- [x] Anonymous users are `Anon(xxxx)` everywhere (`userIdentity()`);
+      loading texts use "…".
+- [x] Windows show `ui/Avatar`, not the room's `UserAvatar`.
+- [x] The media preview is above the toolbar in fullscreen, keeps the
+      keyboard inside and gives the focus back (`useDialogFocus`, shared
+      with `Dialog`).
+- [x] Room settings have their own toolbar icon.
+- [x] Permission tables: adding is a form above the table; the ban date is
+      a chip that opens the date field, and picking a date turns the ban on.
+- [x] A compact `Notice` replaces the raw alert paragraphs.
+- [x] One focus outline for pages and windows (`[data-ui]` in `base.css`).
+- [x] `--radius-sm`, type sizes from tokens, three layout breakpoints
+      (560/640/780px).
+- [x] Duplicated CSS moved to shared parts (`danger-ghost` button,
+      `FormActions`, `Form.module.css`, `CloseButton`, `Spinner`,
+      `Cropper.module.css`, `TableActions.module.css`); only `ChatPreview`
+      imports another component's module.
+- [x] No selectors on another component's markup, no `!important` for table
+      rows; `Input` has `quiet`.
+- [x] `Button accent` and `Modal compact` are gone (`variant="primary"`,
+      `size="sm"`); unused state, tokens and SVGs deleted.
+- [x] Screenshots of every page, window and dialog (dark and light, 1280
+      and 390px), keyboard order, focus and Escape in every window, and
+      contrast were checked; what failed is fixed: focus on opening a
+      dialog, Tab in the header menu, keyboard cropping, phone settings
+      that could not be scrolled, a long invite link on phones, muted text,
+      dimmed rows and badges, control borders (`--border-control`), and
+      chat name colours too close to the background (`chat/nameColor.ts`,
+      all themes).
+- [x] `tests/chat-browser.cjs` passes again; new optional browser tests:
+      `design-system-browser.cjs`, `ux-browser.cjs`, `contrast-browser.cjs`.
+
+## 4. Done on 2026-10-04
 
 - [x] Stream settings offer only 16:9 resolutions.
 - [x] Passwords over 72 bytes are refused (400) wherever a password is set,
@@ -165,7 +167,7 @@ Housekeeping
 - Decided: Tab stays with the desktop while holding the remote; a keyboard
   way out is an idea for later (`docs/ideas.md`).
 
-## 4. Done on 2026-10-03
+## 5. Done on 2026-10-03
 
 - [x] Anonymous impersonation: the public `a:<id>` was the `cozy_anon`
       cookie; it is now a hash of it.

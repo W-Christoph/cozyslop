@@ -6,6 +6,7 @@ import { Field, Input, Select } from '../ui/Field'
 import { Notice } from '../ui/Notice'
 import { RadioCards } from '../ui/RadioCards'
 import { ToggleRow } from '../ui/Section'
+import formStyles from '../ui/Form.module.css'
 import styles from './InviteModal.module.css'
 
 export function InviteModal({
@@ -63,13 +64,13 @@ export function InviteModal({
   return (
     <Modal title={`Invite to ${room}`} onClose={onClose} footer={<>
       <Button onClick={onClose}>{link ? 'Done' : 'Cancel'}</Button>
-      <Button accent type="submit" form={form} disabled={busy}>
+      <Button variant="primary" type="submit" form={form} disabled={busy}>
         {link ? 'Generate another' : 'Generate link'}
       </Button>
     </>}>
       <form
         id={form}
-        class={styles.form}
+        class={formStyles.form}
         onSubmit={(e) => {
           e.preventDefault()
           void generate()
@@ -82,7 +83,7 @@ export function InviteModal({
             { value: 'access', label: 'Temporary', description: 'Lets anyone in without an account, for that visit.' },
           ]} />
         <div class={styles.group}>
-          <div class={styles.groupLabel}>Whoever uses it may</div>
+          <div class={formStyles.label}>Whoever uses it may</div>
           <ToggleRow title="Use the remote" checked={remote} onChange={(value) => { setRemote(value); changed() }} />
           <ToggleRow title="Post images in chat" checked={image} onChange={(value) => { setImage(value); changed() }} />
           <ToggleRow title="Upload files to the desktop" checked={upload} onChange={(value) => { setUpload(value); changed() }} />

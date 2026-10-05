@@ -4,6 +4,7 @@ import { login, logout, me, pendingInvite, serverSettings } from '../app/state'
 import { AuthLayout } from '../components/PageLayout'
 import { Button, ButtonLink } from '../components/Button'
 import { Field, Input } from '../components/ui/Field'
+import formStyles from '../components/ui/Form.module.css'
 import { Notice } from '../components/ui/Notice'
 
 export function LoginPage() {
@@ -39,7 +40,7 @@ export function LoginPage() {
   if (me.value)
     return (
       <AuthLayout title="You're logged in" subtitle={`Signed in as ${me.value.username}.`}>
-        <ButtonLink accent size="lg" block href="/">
+        <ButtonLink variant="primary" size="lg" block href="/">
           Go to rooms
         </ButtonLink>
         <Button size="lg" block disabled={busy} onClick={signOut}>
@@ -56,6 +57,7 @@ export function LoginPage() {
       footer={open ? <>No account yet? <a href="/register">Sign up</a></> : undefined}
     >
       <form
+        class={formStyles.form}
         onSubmit={(e) => {
           e.preventDefault()
           void submit()
@@ -84,7 +86,7 @@ export function LoginPage() {
           />
         </Field>
         {error && <Notice tone="error">{error}</Notice>}
-        <Button accent size="lg" block type="submit" disabled={busy}>
+        <Button variant="primary" size="lg" block type="submit" disabled={busy}>
           {busy ? 'Logging in…' : 'Log in'}
         </Button>
       </form>

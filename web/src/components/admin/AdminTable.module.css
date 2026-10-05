@@ -7,11 +7,11 @@
 }
 .table th:first-child, .table td:first-child { padding-left: 14px; }
 .table th:last-child, .table td:last-child { padding-right: 14px; }
-.table { width: 100%; border-collapse: collapse; color: var(--text); font-size: 0.9rem; }
+.table { width: 100%; border-collapse: collapse; color: var(--text); font-size: var(--text-body); }
 .table th {
   padding: 10px 8px;
   text-align: left;
-  font-size: 0.72rem;
+  font-size: var(--text-2xs);
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -20,15 +20,15 @@
   background: var(--bg-sidebar);
   border-bottom: 1px solid var(--border);
 }
-.table td { height: 52px; padding: 6px 8px; vertical-align: middle; border-bottom: 1px solid var(--border); }
+.table td { background: var(--table-row-bg, transparent); height: 52px; padding: 6px 8px; vertical-align: middle; border-bottom: 1px solid var(--border); }
 .table tbody tr:last-child td { border-bottom: 0; }
-.table tbody tr:hover td { background: color-mix(in srgb, var(--text) 5%, var(--bg-surface)); }
+.table tbody tr:hover td { background: var(--table-row-bg, color-mix(in srgb, var(--text) 5%, var(--bg-surface))); }
 /* The actions stay in view when a wide table scrolls sideways. */
 .table td:last-child, .table th:last-child { position: sticky; right: 0; }
-.table td:last-child { background: var(--bg-surface); }
+.table td:last-child { background: var(--table-row-bg, var(--bg-surface)); }
 .scrolls td:last-child, .scrolls th:last-child { box-shadow: -8px 0 8px -8px var(--scrim); }
 /* Phones: each row becomes a card; cells name themselves with data-label. */
-@media (max-width: 760px) {
+@media (max-width: 780px) {
   .frame { overflow: visible; border: 0; background: transparent; }
   .table, .table tbody { display: block; }
   .table thead { display: none; }
@@ -43,9 +43,9 @@
     border-radius: var(--radius-lg);
     background: var(--bg-surface);
   }
-  .table td, .table td:first-child, .table td:last-child { display: flex; align-items: center; gap: var(--space-2); height: auto; padding: 0; border: 0; background: transparent !important; position: static; box-shadow: none; }
-  .table td:first-child { flex: 1 0 100%; }
+  .table tbody tr td, .table tbody tr td:first-child, .table tbody tr td:last-child, .table tbody tr:hover td { display: flex; align-items: center; gap: var(--space-2); height: auto; padding: 0; border: 0; background: var(--table-mobile-cell-bg, transparent); position: static; box-shadow: none; }
+  .table tbody tr td:first-child { flex: 1 0 100%; background: transparent; }
   .table td:last-child { flex: 1 0 100%; justify-content: flex-end; flex-wrap: wrap; }
   .table td:empty { display: none; }
-  .table td[data-label]::before { content: attr(data-label); font-size: 0.8rem; color: var(--text-muted); }
+  .table td[data-label]::before { content: attr(data-label); font-size: var(--text-xs); color: var(--text-muted); }
 }

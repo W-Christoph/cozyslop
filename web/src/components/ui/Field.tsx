@@ -1,5 +1,6 @@
 import type { ComponentChildren, JSX } from 'preact'
 import { Icon } from './Icon'
+import formStyles from './Form.module.css'
 import styles from './Field.module.css'
 
 // A labelled form control, label above.
@@ -11,7 +12,7 @@ export function Field({ label, hint, children, class: className }: {
 }) {
   return (
     <label class={`${styles.field} ${className ?? ''}`}>
-      <span class={styles.label}>{label}</span>
+      <span class={formStyles.label}>{label}</span>
       {children}
       {hint && <span class={styles.hint}>{hint}</span>}
     </label>
@@ -19,8 +20,8 @@ export function Field({ label, hint, children, class: className }: {
 }
 
 // compact: for tables.
-export function Input({ class: className, compact, ...props }: JSX.IntrinsicElements['input'] & { compact?: boolean }) {
-  return <input {...props} class={`${styles.input} ${compact ? styles.compact : ''} ${className ?? ''}`} />
+export function Input({ class: className, compact, quiet, ...props }: JSX.IntrinsicElements['input'] & { compact?: boolean; quiet?: boolean }) {
+  return <input {...props} class={`${styles.input} ${compact ? styles.compact : ''} ${quiet ? styles.quiet : ''} ${className ?? ''}`} />
 }
 
 export function Textarea({ class: className, ...props }: JSX.IntrinsicElements['textarea']) {

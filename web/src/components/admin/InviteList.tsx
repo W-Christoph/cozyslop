@@ -2,7 +2,8 @@ import { useEffect, useState } from 'preact/hooks'
 import { api, type InviteView } from '../../api'
 import { Button } from '../Button'
 import { Badge } from '../ui/Badge'
-import { EmptyState, Spinner } from '../ui/EmptyState'
+import { EmptyState } from '../ui/EmptyState'
+import { Spinner } from '../ui/Spinner'
 import { Notice } from '../ui/Notice'
 import { AdminTable } from './AdminTable'
 import styles from './InviteList.module.css'
@@ -65,7 +66,7 @@ export function InviteList({ room }: { room?: string }) {
     invite.expiresAt === null ? 'Never expires' : `${invite.valid ? 'Expires' : 'Expired'} ${new Date(invite.expiresAt * 1000).toLocaleString()}`
   return (
     <>
-      {loading && <Spinner label="Loading invites..." />}
+      {loading && <Spinner label="Loading invites…" />}
       {error && <Notice tone="error">{error}</Notice>}
       {message && <Notice tone="success">{message}</Notice>}
       {!loading && !error && invites.length === 0 && (
@@ -78,7 +79,7 @@ export function InviteList({ room }: { room?: string }) {
           {invites.map((invite) => (
             <tr key={invite.code} class={invite.valid ? undefined : styles.expired}>
               {!room && <td class={styles.room}>{invite.room}</td>}
-              <td>
+              <td class={styles.linkCell}>
                 <div class={styles.name}>
                   {invite.name || <span class={styles.unnamed}>Unnamed</span>}
                   <Badge icon={invite.temporary ? 'eye' : 'ticket'}>{invite.temporary ? 'Temporary' : 'Invite'}</Badge>
@@ -107,9 +108,9 @@ export function InviteList({ room }: { room?: string }) {
                   <Button size="sm" variant="ghost" icon="copy" onClick={() => copy(invite.path)}>Copy link</Button>
                   <Button
                     size="sm"
-                    variant="ghost"
+                    variant="danger-ghost"
                     icon="trash"
-                    class={styles.delete}
+
                     aria-label={`Delete the ${invite.temporary ? 'temporary link' : 'invite'} ${invite.name || invite.code}`}
                     title="Delete"
                     disabled={busy}

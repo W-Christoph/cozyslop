@@ -35,12 +35,12 @@
 .closed .tile { background: var(--bg-raised); color: var(--text-muted); }
 .info { flex: 1; min-width: 0; }
 .nameLine { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
-.name { font-weight: 600; font-size: 1.05rem; overflow-wrap: anywhere; }
-.count { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 0.87rem; color: var(--text-muted); }
+.name { font-weight: 600; font-size: var(--text-lg); overflow-wrap: anywhere; }
+.count { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: var(--text-sm); color: var(--text-muted); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
 .live { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
 .actions { display: flex; align-items: center; gap: var(--space-2); }
-@media (max-width: 520px) {
+@media (max-width: 560px) {
   .room { flex-wrap: wrap; }
   .actions { width: 100%; justify-content: flex-end; }
 }

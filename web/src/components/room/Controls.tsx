@@ -61,7 +61,7 @@ export function Controls({ fullscreen, userlistHidden, sidebar, window, onToggle
       {!(fullscreen && host) && <div class={styles.group}>
         {store.rights.value.upload && <IconButton icon="imageupload" label="Files of the desktop" active={window === 'files'}
           aria-haspopup="dialog" onClick={() => onWindow('files')} />}
-        {store.rights.value.admin && <IconButton icon="settings" label="Room settings" active={window === 'settings'}
+        {store.rights.value.admin && <IconButton icon="room-settings" label="Room settings" active={window === 'settings'}
           aria-haspopup="dialog" onClick={() => onWindow('settings')} />}
         <IconButton icon="users" label="Users sidebar" active={sidebar === 'USERS'} aria-pressed={sidebar === 'USERS'} onClick={() => toggleSidebar('USERS')} />
         <IconButton icon="message-circle" label="Chat sidebar" active={sidebar === 'CHAT'} aria-pressed={sidebar === 'CHAT'} onClick={() => toggleSidebar('CHAT')} />

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { api, type Permission, type RoomInfo } from '../../api'
 import { Button } from '../Button'
 import { PermissionFields } from './PermissionFields'
+import { Notice } from '../ui/Notice'
 import styles from './PermissionRow.module.css'
 
 export function blankPermission(room = ''): Permission {
@@ -113,8 +114,11 @@ export function PermissionRow({
       setBusy(false)
     }
   }
+  const Container = creating ? 'form' : 'tr'
+  const Actions = creating ? 'div' : 'td'
   return (
-    <tr class={creating ? styles.creating : undefined}>
+    <Container class={creating ? styles.creating : undefined} aria-label={creating ? 'Add permission' : undefined}
+      onSubmit={creating ? (e) => { e.preventDefault(); void save() } : undefined}>
       <PermissionFields
         draft={draft}
         room={room}
@@ -128,9 +132,9 @@ export function PermissionRow({
           setStatus('')
         }}
       />
-      <td>
+      <Actions>
         <div class={styles.actions}>
-          <Button size="sm" variant={dirty ? 'primary' : 'ghost'} disabled={busy || !dirty} onClick={save}>
+          <Button size="sm" variant={dirty ? 'primary' : 'ghost'} disabled={busy || !dirty} type={creating ? 'submit' : 'button'} onClick={creating ? undefined : save}>
             {creating ? 'Add' : 'Save'}
           </Button>
           {creating ? (
@@ -150,9 +154,9 @@ export function PermissionRow({
           ) : (
             <Button
               size="sm"
-              variant="ghost"
+              variant="danger-ghost"
               icon="trash"
-              class={styles.delete}
+
               aria-label={`Delete the permission of ${draft.username}`}
               title="Delete"
               disabled={busy}
@@ -160,9 +164,9 @@ export function PermissionRow({
             />
           )}
         </div>
-        {error && <p class={styles.error} role="alert">{error}</p>}
-        {status && <p class={styles.status} role="status">{status}</p>}
-      </td>
-    </tr>
+        {error && <Notice compact tone="error">{error}</Notice>}
+        {status && <Notice compact tone="success">{status}</Notice>}
+      </Actions>
+    </Container>
   )
 }

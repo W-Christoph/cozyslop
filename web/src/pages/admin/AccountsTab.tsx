@@ -6,7 +6,7 @@ import { Modal } from '../../components/Modal'
 import { AccountRow } from '../../components/admin/AccountRow'
 import { AdminTable } from '../../components/admin/AdminTable'
 import { ResetPasswordModal } from '../../components/admin/ResetPasswordModal'
-import { Spinner } from '../../components/ui/EmptyState'
+import { Spinner } from '../../components/ui/Spinner'
 import { Input } from '../../components/ui/Field'
 import { Notice } from '../../components/ui/Notice'
 import { Section } from '../../components/ui/Section'
@@ -88,7 +88,7 @@ export function AccountsTab() {
       actions={<Input class={styles.search} type="search" placeholder="Search accounts" aria-label="Search accounts"
         value={search} onInput={(e) => setSearch(e.currentTarget.value)} />}
     >
-      {loading && <Spinner label="Loading accounts..." />}
+      {loading && <Spinner label="Loading accounts…" />}
       {error && <Notice tone="error">{error}</Notice>}
       {status && <Notice tone="success">{status}</Notice>}
       {!loading && <AdminTable headings={['Account', 'Verified', 'Admin', 'Enabled', 'Actions']}>
@@ -113,7 +113,7 @@ export function AccountsTab() {
         )}
       </AdminTable>}
       {deleting && (
-        <Modal compact title="Delete account" onClose={() => setDeleting(null)} footer={<>
+        <Modal size="sm" title="Delete account" onClose={() => setDeleting(null)} footer={<>
           <Button disabled={busy} onClick={() => setDeleting(null)}>
             Cancel
           </Button>

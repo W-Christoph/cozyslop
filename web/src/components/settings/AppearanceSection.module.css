@@ -1,6 +1,6 @@
 /* The theme's darkest colour around a little window in its other colours. */
 .preview { height: 84px; padding: 10px 10px 0; background: var(--bg-app); }
-.window { display: flex; height: 100%; border: 1px solid var(--border); border-bottom: 0; border-radius: 6px 6px 0 0; overflow: hidden; }
+.window { display: flex; height: 100%; border: 1px solid var(--border); border-bottom: 0; border-radius: var(--radius-sm) var(--radius-sm) 0 0; overflow: hidden; }
 .previewNav { flex: 0 0 30%; display: flex; flex-direction: column; gap: 4px; padding: 8px 6px; background: var(--bg-sidebar); border-right: 1px solid var(--border); }
 .previewNav span { height: 5px; border-radius: 3px; background: var(--border-strong); }
 .previewNav span:first-child { background: var(--text-muted); width: 70%; }
@@ -17,11 +17,11 @@
   height: 32px;
   padding: 0;
   border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--accent-text);
   background: var(--accent);
   color: var(--on-accent);
   transition: transform 0.12s, box-shadow 0.12s;
 }
 .accent:hover { background: var(--accent); transform: scale(1.1); }
-.chosen { box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--accent); }
-.accent:focus-visible { outline: 2px solid var(--text); outline-offset: 5px; }
-.accentName { margin-left: var(--space-2); font-size: 0.9rem; color: var(--text-secondary); }
+.chosen { box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--accent-text); }
+.accentName { margin-left: var(--space-2); font-size: var(--text-body); color: var(--text-secondary); }

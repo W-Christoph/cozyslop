@@ -1,5 +1,5 @@
 .user { display: flex; align-items: center; gap: var(--space-3); }
 .userText { min-width: 0; }
 .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.username { font-size: 0.82rem; color: var(--text-muted); }
+.username { font-size: var(--text-xs); color: var(--text-muted); }
 .error { margin-bottom: var(--space-5); }

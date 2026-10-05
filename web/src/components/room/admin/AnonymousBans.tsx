@@ -3,7 +3,8 @@ import { api } from '../../../api'
 import { AdminTable } from '../../admin/AdminTable'
 import { Button } from '../../Button'
 import { Badge } from '../../ui/Badge'
-import { EmptyState, Spinner } from '../../ui/EmptyState'
+import { EmptyState } from '../../ui/EmptyState'
+import { Spinner } from '../../ui/Spinner'
 import { Notice } from '../../ui/Notice'
 import { useRoomStore } from '../RoomContext'
 import styles from './AnonymousBans.module.css'
@@ -60,7 +61,7 @@ export function AnonymousBans() {
       </div>
       {error && <Notice tone="error">{error}</Notice>}
       {message && <Notice tone="success">{message}</Notice>}
-      {loading && <Spinner label="Loading anonymous bans..." />}
+      {loading && <Spinner label="Loading anonymous bans…" />}
       {!loading && !error && !bans.length && <EmptyState icon="ban" title="No active anonymous bans">Ban someone from "In the room".</EmptyState>}
       {!loading && bans.length > 0 && <AdminTable headings={['IP', 'Banned until', '']}>
         {bans.map((ban) => <tr key={ban.id}>

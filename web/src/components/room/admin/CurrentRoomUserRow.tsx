@@ -3,10 +3,13 @@ import { api, type AnonGrant, type Permission } from '../../../api'
 import type { User } from '../../../room/protocol'
 import { blankPermission } from '../../admin/PermissionRow'
 import { Button } from '../../Button'
+import { Avatar } from '../../ui/Avatar'
 import { Badge } from '../../ui/Badge'
 import { Checkbox, Input } from '../../ui/Field'
 import { useRoomStore } from '../RoomContext'
-import { UserAvatar } from '../UserAvatar'
+import { userIdentity } from '../UserHoverName'
+import { Notice } from '../../ui/Notice'
+import actionStyles from '../../ui/TableActions.module.css'
 import styles from './CurrentRoomUserRow.module.css'
 
 const checkboxes = [
@@ -99,25 +102,25 @@ export function CurrentRoomUserRow({ user, permission, grant, ready, onSaved, on
     ? given.remote !== (grant?.remote ?? false) || given.upload !== (grant?.upload ?? false)
     : (Object.keys(draft) as (keyof Permission)[]).some((key) => draft[key] !== initial[key])
   const actions = (onSave: () => void) => <td>
-    <div class={styles.actions}>
+    <div class={actionStyles.slots}>
       <Button size="sm" variant={dirty ? 'primary' : 'ghost'} disabled={busy || !ready || !dirty} onClick={onSave}>Save</Button>
-      <Button size="sm" variant="ghost" icon="ban" class={styles.ban} disabled={busy} onClick={onBan}
+      <Button size="sm" variant="danger-ghost" icon="ban" disabled={busy} onClick={onBan}
         aria-label={`Ban or kick ${user.nickname}`} title="Ban or kick" />
     </div>
-    {error && <p class={styles.error} role="alert">{error}</p>}
-    {message && <p class={styles.status} role="status">{message}</p>}
+    {error && <Notice compact tone="error">{error}</Notice>}
+    {message && <Notice compact tone="success">{message}</Notice>}
   </td>
   return (
     <tr>
       <td title={user.key}>
         <div class={styles.user}>
-          <UserAvatar user={user} small />
+          <Avatar src={user.avatarUrl} size={32} />
           <div class={styles.names}>
             <div class={styles.nickname}>
               {user.nickname}
               {user.admin && <Badge tone="accent" icon="shield">Admin</Badge>}
             </div>
-            <div class={styles.username}>{user.anonymous ? `Anonymous (${user.key.slice(2, 6)})` : user.username}</div>
+            <div class={styles.username}>{userIdentity(user)}</div>
           </div>
         </div>
       </td>
@@ -129,7 +132,7 @@ export function CurrentRoomUserRow({ user, permission, grant, ready, onSaved, on
         {actions(() => { void give() })}
       </> : <>
         {checkbox(0)}{checkbox(1)}
-        <td data-label="Invite name"><Input compact placeholder="—" class={`${styles.inviteName} ${styles.quiet}`} aria-label={`Invite name for ${user.username}`}
+        <td data-label="Invite name"><Input compact placeholder="—" quiet class={styles.inviteName} aria-label={`Invite name for ${user.username}`}
           value={draft.inviteName} maxLength={64} disabled={busy || !ready}
           onInput={(e) => change({ inviteName: e.currentTarget.value })} /></td>
         {checkbox(2)}{checkbox(3)}{checkbox(4)}

@@ -1,6 +1,9 @@
+import type { ComponentChildren } from 'preact'
 import type { Permission, RoomInfo } from '../../api'
-import { Checkbox, Input, Select } from '../ui/Field'
-import styles from './PermissionRow.module.css'
+import { Checkbox, Field, Input, Select } from '../ui/Field'
+import { BanDate } from './BanDate'
+import formStyles from '../ui/Form.module.css'
+import styles from './PermissionFields.module.css'
 
 export function PermissionFields({
   draft,
@@ -21,6 +24,9 @@ export function PermissionFields({
   onChange: (update: Partial<Permission>) => void
   onUntil: (value: string) => void
 }) {
+  const cell = (label: string, children: ComponentChildren) => creating
+    ? <Field label={label}>{children}</Field>
+    : <td data-label={label}>{children}</td>
   const checkbox = (
     flag: 'banned' | 'trusted' | 'invited' | 'remote' | 'image' | 'upload',
   ) => (
@@ -32,9 +38,15 @@ export function PermissionFields({
     />
   )
   const name = draft.username || 'new permission'
+  const ban = () => <div class={styles.ban}>
+    {checkbox('banned')}
+    {/* A date only counts with the ban: picking one turns the ban on. */}
+    <BanDate banned={draft.banned} until={until} busy={busy} name={name}
+      onUntil={(value) => { onUntil(value); if (value && !draft.banned) onChange({ banned: true }) }} />
+  </div>
   return (
     <>
-      {!room && <td>
+      {!room && cell('Room', <>
         {creating ? (
           <Select
             compact
@@ -54,8 +66,8 @@ export function PermissionFields({
         ) : (
           draft.room
         )}
-      </td>}
-      <td>
+      </>)}
+      {cell('User', <>
         {creating ? (
           <Input
             compact
@@ -70,16 +82,16 @@ export function PermissionFields({
         ) : (
           <strong>{draft.username}</strong>
         )}
-      </td>
-      <td data-label="Remote">{checkbox('remote')}</td>
-      <td data-label="Images">{checkbox('image')}</td>
-      <td data-label="Upload">{checkbox('upload')}</td>
-      <td data-label="Trusted">{checkbox('trusted')}</td>
-      <td data-label="Invited">{checkbox('invited')}</td>
-      <td data-label="Invite name">
+      </>)}
+      {cell('Remote', checkbox('remote'))}
+      {cell('Images', checkbox('image'))}
+      {cell('Upload', checkbox('upload'))}
+      {cell('Trusted', checkbox('trusted'))}
+      {cell('Invited', checkbox('invited'))}
+      {cell('Invite name',
         <Input
           compact
-          class={`${styles.inviteName} ${styles.quiet}`}
+          quiet class={styles.inviteName}
           placeholder="—"
           aria-label={`Invite name for ${name}`}
           maxLength={64}
@@ -87,24 +99,8 @@ export function PermissionFields({
           disabled={busy}
           onInput={(e) => onChange({ inviteName: e.currentTarget.value })}
         />
-      </td>
-      <td data-label="Banned">
-        <div class={styles.ban}>
-          {checkbox('banned')}
-          {draft.banned && (
-            <Input
-              compact
-              class={styles.until}
-              type="datetime-local"
-              aria-label={`Banned until for ${name} (empty means forever)`}
-              title="Until when. Empty = banned forever"
-              value={until}
-              disabled={busy}
-              onInput={(e) => onUntil(e.currentTarget.value)}
-            />
-          )}
-        </div>
-      </td>
+      )}
+      {creating ? <div class={styles.banField}><span class={formStyles.label}>Banned</span>{ban()}</div> : <td data-label="Banned">{ban()}</td>}
     </>
   )
 }

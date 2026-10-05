@@ -2,8 +2,10 @@ import type { User } from '../../room/protocol'
 import { useRoomStore } from './RoomContext'
 import styles from './UserHoverName.module.css'
 
-export function userIdentity(user: User): string {
-  return user.anonymous ? `Anon(${user.key.replace(/^a:/, '').slice(0, 4)})` : user.username
+export function userIdentity(user: Pick<User, 'key' | 'anonymous' | 'username'> | string): string {
+  const key = typeof user === 'string' ? user : user.key
+  const anonymous = typeof user === 'string' ? key.startsWith('a:') : user.anonymous
+  return anonymous ? `Anon(${key.replace(/^a:/, '').slice(0, 4)})` : typeof user === 'string' ? key : user.username
 }
 
 export interface HoverName { user: User; x: number; y: number; left: boolean }

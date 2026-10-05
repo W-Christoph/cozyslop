@@ -1,19 +1,6 @@
 .user { display: flex; align-items: center; gap: var(--space-3); min-width: 150px; }
 .names { min-width: 0; }
 .nickname { display: flex; align-items: center; gap: var(--space-2); font-weight: 600; white-space: nowrap; }
-.username { font-size: 0.82rem; color: var(--text-muted); }
-.inviteName { width: 8.5em; }
-/* The icon's slot is kept in rows without one, so that Save lines up. */
-.actions { display: grid; grid-template-columns: auto 30px; justify-content: end; align-items: center; gap: var(--space-1); }
-.quiet:not(:focus):not(:hover) { background: transparent; border-color: transparent; }
-tr:hover .quiet { background: var(--bg-input); border-color: var(--border); }
-.ban:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger-text); }
-.note { font-size: 0.85rem; color: var(--text-muted); }
-.error, .status { margin: var(--space-1) 0 0; font-size: 0.82rem; text-align: right; white-space: pre-wrap; }
-.error { color: var(--danger-text); }
-.status { color: var(--success-text); }
-.defaults td, .defaults td:last-child, .defaults:hover td { background: var(--bg-sidebar) !important; }
-.defaultsLabel { font-weight: 600; }
-.defaultsLabel span { display: block; font-size: 0.82rem; font-weight: 400; color: var(--text-muted); }
-.toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: 0.87rem; color: var(--text-muted); }
-.toolbar > div { padding: 0; }
+.username { font-size: var(--text-xs); color: var(--text-muted); }
+.inviteName.inviteName { width: 8.5em; }
+.note { font-size: var(--text-sm); color: var(--text-muted); }

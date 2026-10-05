@@ -23,8 +23,8 @@ export function RadioCards<T extends string>({ name, label, value, options, onCh
     <div class={`${styles.cards} ${columns ? styles.fixed : ''}`} role="radiogroup" aria-label={label}
       style={columns ? { '--columns': columns, '--mobile-columns': mobileColumns } : undefined}>
       {options.map((option) => (
-        <label key={option.value} class={`${styles.card} ${option.value === value ? styles.selected : ''}`}>
-          <input type="radio" name={name} value={option.value} checked={option.value === value} disabled={disabled}
+        <label data-focus-ring key={option.value} class={`${styles.card} ${option.value === value ? styles.selected : ''}`}>
+          <input data-focus-proxy type="radio" name={name} value={option.value} checked={option.value === value} disabled={disabled}
             onChange={() => onChange(option.value)} />
           {option.preview && <div class={styles.preview}>{option.preview}</div>}
           <div class={styles.text}>

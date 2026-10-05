@@ -14,7 +14,24 @@
   --font-sans: Arial, sans-serif;
   --font-ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
+  /* Application layout breakpoints: 560px (small), 640px (fullscreen
+     windows), 780px (stacked layouts and room controls).
+     Cropper.js keeps its vendor handle steps at 768px, 992px and 1200px. */
+  --text-2xs: 0.75rem;
+  --text-xs: 0.8125rem;
+  --text-sm: 0.875rem;
+  --text-body: 0.9rem;
+  --text-md: 0.9375rem;
+  --text-base: 1rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.125rem;
+  --text-2xl: 1.25rem;
+  --text-3xl: 1.375rem;
+  --text-4xl: 1.5rem;
+  --text-5xl: 1.625rem;
+  --text-6xl: 1.75rem;
   --radius: 4px;
+  --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
@@ -37,10 +54,8 @@
   --color-shadow: rgba(0, 0, 0, 0.5);
   --color-backdrop: rgba(0, 0, 0, 0.7);
   --color-overlay: rgba(0, 0, 0, 0.5);
-  --color-disabled: gray;
   --color-online: #199239;
   --color-away: #e6c714;
-  --color-orange-ping: #df9e3e;
   --color-ping-other: rgb(74, 149, 173);
   --color-chat-overlay-bg: rgba(0, 0, 0, 0.45);
   --color-chat-overlay-border: rgba(255, 255, 255, 0.45);
@@ -55,7 +70,7 @@
   --on-danger: #fff;
   --success: #3ecf8e;
   --warning: #f5b83d;
-  --focus-ring: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--accent-text);
+  --focus-outline: 2px solid var(--accent-text);
 }
 
 /* ---- accent colours ------------------------------------------------------ */
@@ -118,7 +133,6 @@
   --color-scrollbar: #346;
   --color-scroll-thumb: #235;
   --color-high-contrast: #5566aa;
-  --color-select: #337ab7;
 
   --color-text: #fff;
   --color-text-muted: rgba(255, 255, 255, 0.7);
@@ -141,10 +155,11 @@
   --bg-active: rgba(255, 255, 255, 0.1);
   --border: #213449;
   --border-strong: #31496a;
+  --border-control: #758ba5;
   --text: #f2f5f9;
   --text-secondary: #b6c2d2;
   --text-muted: #8496ab;
-  --accent-text: color-mix(in srgb, var(--accent) 72%, white);
+  --accent-text: color-mix(in srgb, var(--accent) 68%, white);
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --danger-text: #ff7b80;
   --danger-soft: rgba(229, 72, 77, 0.16);
@@ -170,7 +185,6 @@
   --color-scrollbar: #40434b;
   --color-scroll-thumb: #1e2024;
   --color-high-contrast: #9aa0aa;
-  --color-select: #4a4e57;
 
   --color-text: #fff;
   --color-text-muted: rgba(255, 255, 255, 0.7);
@@ -192,10 +206,11 @@
   --bg-active: rgba(255, 255, 255, 0.1);
   --border: #2e3037;
   --border-strong: #454851;
+  --border-control: #838995;
   --text: #f2f3f5;
   --text-secondary: #b9bdc5;
-  --text-muted: #8b909a;
-  --accent-text: color-mix(in srgb, var(--accent) 72%, white);
+  --text-muted: #9196a0;
+  --accent-text: color-mix(in srgb, var(--accent) 68%, white);
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --danger-text: #ff7b80;
   --danger-soft: rgba(229, 72, 77, 0.16);
@@ -221,7 +236,6 @@
   --color-scrollbar: #353e4f;
   --color-scroll-thumb: #1f2530;
   --color-high-contrast: #a6afbf;
-  --color-select: #686d78;
 
   --color-text: #fff;
   --color-text-muted: rgba(255, 255, 255, 0.7);
@@ -244,10 +258,11 @@
   --bg-active: rgba(255, 255, 255, 0.1);
   --border: #232733;
   --border-strong: #394052;
+  --border-control: #7f8798;
   --text: #f1f3f6;
   --text-secondary: #b3b9c6;
   --text-muted: #7f8798;
-  --accent-text: color-mix(in srgb, var(--accent) 72%, white);
+  --accent-text: color-mix(in srgb, var(--accent) 68%, white);
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --danger-text: #ff7b80;
   --danger-soft: rgba(229, 72, 77, 0.16);
@@ -273,7 +288,6 @@
   --color-scrollbar: #b9b9b9;
   --color-scroll-thumb: #fff;
   --color-high-contrast: #333;
-  --color-select: #fff;
 
   --color-text: black;
   --color-text-muted: rgba(34, 22, 22, 0.97);
@@ -295,14 +309,15 @@
   --bg-active: rgba(15, 23, 42, 0.09);
   --border: #dcdfe6;
   --border-strong: #b9beca;
+  --border-control: #777f90;
   --text: #14171c;
   --text-secondary: #454c5a;
-  --text-muted: #6b7382;
-  --accent-text: color-mix(in srgb, var(--accent) 62%, black);
+  --text-muted: #606877;
+  --accent-text: color-mix(in srgb, var(--accent) 58%, black);
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --danger-text: #c4262c;
   --danger-soft: rgba(229, 72, 77, 0.1);
-  --success-text: #13794a;
+  --success-text: #107346;
   --success-soft: rgba(62, 207, 142, 0.16);
   --warning-text: #8a5a00;
   --warning-soft: rgba(245, 184, 61, 0.2);

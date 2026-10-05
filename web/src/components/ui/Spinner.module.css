@@ -1,0 +1,5 @@
+.loading { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) 0; color: var(--text-muted); font-size: var(--text-body); }
+.inline { padding: 0; }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+.large { width: 36px; height: 36px; margin-bottom: var(--space-5); border-width: 3px; animation-duration: 0.8s; }
+@keyframes spin { to { transform: rotate(360deg); } }

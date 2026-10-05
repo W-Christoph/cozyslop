@@ -1,5 +1,7 @@
 import { useContext, useState } from 'preact/hooks'
 import { logout, me, settingsOpen, type SettingsSection } from '../../app/state'
+import { Button } from '../Button'
+import { Modal } from '../Modal'
 import { RoomContext } from '../room/RoomContext'
 import { Avatar } from '../ui/Avatar'
 import { Notice } from '../ui/Notice'
@@ -17,11 +19,18 @@ export function SettingsDialog({ onClose }: { onClose?: () => void }) {
   const section = settingsOpen.value
   const room = useContext(RoomContext)
   const [error, setError] = useState('')
+  const [dirty, setDirty] = useState(false)
+  const [pending, setPending] = useState<(() => void) | null>(null)
+  const [profileVersion, setProfileVersion] = useState(0)
   if (!section) return null
   const user = me.value
   const close = () => {
     settingsOpen.value = null
     onClose?.()
+  }
+  function leave(action: () => void) {
+    if (section === 'account' && dirty) setPending(() => action)
+    else action()
   }
   const nav: NavGroup[] = [
     { label: 'User', items: [{ id: 'account', label: 'My account', icon: 'user' }] },
@@ -51,23 +60,36 @@ export function SettingsDialog({ onClose }: { onClose?: () => void }) {
     }
   }
   return (
-    <SettingsWindow nav={nav} current={section} onSelect={(id) => { void select(id) }} onClose={close}
-      navHeader={
-        <div class={styles.user}>
-          <Avatar src={user?.avatarUrl} size={40} />
-          <div class={styles.userText}>
-            <div class={styles.name}>{user ? user.nickname : 'Guest'}</div>
-            <div class={styles.username}>{user ? user.username : 'Not logged in'}</div>
+    <>
+      <SettingsWindow nav={nav} current={section} onSelect={(id) => { if (id !== section) leave(() => { void select(id) }) }} onClose={() => leave(close)}
+        navHeader={
+          <div class={styles.user}>
+            <Avatar src={user?.avatarUrl} size={40} />
+            <div class={styles.userText}>
+              <div class={styles.name}>{user ? user.nickname : 'Guest'}</div>
+              <div class={styles.username}>{user ? user.username : 'Not logged in'}</div>
+            </div>
           </div>
-        </div>
-      }
->
-      {error && <div class={styles.error}><Notice tone="error">{error}</Notice></div>}
-      {section === 'account' && <AccountSection />}
-      {section === 'appearance' && <AppearanceSection />}
-      {section === 'chat' && <ChatSection />}
-      {section === 'room' && <RoomSection room={room} />}
-      {section === 'notifications' && <NotificationsSection />}
-    </SettingsWindow>
+        }
+      >
+        {error && <div class={styles.error}><Notice tone="error">{error}</Notice></div>}
+        {section === 'account' && <AccountSection onDirtyChange={setDirty} profileVersion={profileVersion} />}
+        {section === 'appearance' && <AppearanceSection />}
+        {section === 'chat' && <ChatSection />}
+        {section === 'room' && <RoomSection room={room} />}
+        {section === 'notifications' && <NotificationsSection />}
+      </SettingsWindow>
+      {pending && <Modal size="sm" title="Discard profile changes?" onClose={() => setPending(null)} footer={<>
+        <Button onClick={() => setPending(null)}>Keep editing</Button>
+        <Button variant="danger" onClick={() => {
+          setPending(null)
+          setDirty(false)
+          setProfileVersion((version) => version + 1)
+          pending()
+        }}>Discard</Button>
+      </>}>
+        <p>Your nickname, name colour and new avatar have not been saved.</p>
+      </Modal>}
+    </>
   )
 }

@@ -78,9 +78,9 @@ export function AccountRow({
           />
           <Button
             size="sm"
-            variant="ghost"
+            variant="danger-ghost"
             icon="trash"
-            class={styles.delete}
+
             aria-label={`Delete ${user.username}`}
             title={user.admin ? 'Remove admin first' : 'Delete'}
             disabled={busy || self || user.admin}

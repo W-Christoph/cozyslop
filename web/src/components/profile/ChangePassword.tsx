@@ -3,6 +3,7 @@ import { api } from '../../api'
 import { Button } from '../Button'
 import { Field, Input } from '../ui/Field'
 import { Notice } from '../ui/Notice'
+import formStyles from '../ui/Form.module.css'
 import styles from './ChangePassword.module.css'
 
 export function ChangePassword() {
@@ -34,7 +35,7 @@ export function ChangePassword() {
   }
   return (
     <form
-      class={styles.form}
+      class={formStyles.form}
       onSubmit={(e) => {
         e.preventDefault()
         void save()

@@ -5,7 +5,7 @@
   margin: 0;
   padding: 9px 12px;
   border-radius: var(--radius-md);
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -13,3 +13,4 @@
 .error { background: var(--danger-soft); color: var(--danger-text); }
 .success { background: var(--success-soft); color: var(--success-text); }
 .info { background: var(--bg-raised); color: var(--text-secondary); }
+.compact { gap: var(--space-1); margin-top: var(--space-1); padding: var(--space-1) var(--space-2); font-size: var(--text-xs); }

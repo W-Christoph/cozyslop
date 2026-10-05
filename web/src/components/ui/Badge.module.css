@@ -4,7 +4,7 @@
   gap: 4px;
   padding: 2px 8px;
   border-radius: 999px;
-  font: 600 0.75rem/1.4 var(--font-ui);
+  font: 600 var(--text-2xs)/1.4 var(--font-ui);
   white-space: nowrap;
 }
 .neutral { background: var(--bg-raised); color: var(--text-secondary); }

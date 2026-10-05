@@ -1,11 +1,10 @@
 import { Button } from '../../Button'
 import type { Access, RoomSettings } from '../../../room/protocol'
-import { Spinner } from '../../ui/EmptyState'
-import { Notice } from '../../ui/Notice'
+import { Spinner } from '../../ui/Spinner'
+import { FormActions } from '../../ui/FormActions'
 import { RadioCards, type RadioOption } from '../../ui/RadioCards'
 import { Section, ToggleRow } from '../../ui/Section'
 import { useRoomSettingsForm } from './useRoomSettingsForm'
-import styles from './RoomAccessSettings.module.css'
 
 const accessOptions: RadioOption<Access>[] = [
   { value: 'public', label: 'Public', description: 'Anyone with the link, account or not.' },
@@ -22,7 +21,7 @@ const fields = ['access', 'hidden', 'remoteOwnership', ...defaults.map(([key]) =
 
 export function RoomAccessSettings() {
   const { draft, change, save, busy, error, message } = useRoomSettingsForm(fields)
-  if (!draft) return <Spinner label="Loading room settings..." />
+  if (!draft) return <Spinner label="Loading room settings…" />
   return (
     <form onSubmit={(e) => { e.preventDefault(); void save() }}>
       <Section title="Who can join">
@@ -41,11 +40,9 @@ export function RoomAccessSettings() {
         <ToggleRow title="Remote ownership" description="Whoever holds the remote keeps it until they drop it; others cannot take it away."
           checked={draft.remoteOwnership} disabled={busy} onChange={(value) => change('remoteOwnership', value)} />
       </Section>
-      <div class={styles.actions}>
-        {error && <Notice tone="error">{error}</Notice>}
-        {message && <Notice tone="success">{message}</Notice>}
-        <Button accent type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</Button>
-      </div>
+      <FormActions error={error} message={message}>
+        <Button variant="primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</Button>
+      </FormActions>
     </form>
   )
 }

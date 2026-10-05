@@ -1,14 +1,1 @@
-.link {
-  display: inline-block;
-  padding: 11px 18px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-raised);
-  color: var(--text);
-  font-weight: 600;
-  text-decoration: none;
-}
-.link:hover { border-color: var(--border-strong); }
-.link:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.primary, .primary:hover { background: var(--accent); border-color: transparent; color: var(--on-accent); }
-.primary:hover { background: var(--accent-hover); }
+.page { --page-min: calc(100dvh - var(--header-height)); min-height: 100%; font: 15px/1.45 var(--font-ui); -webkit-font-smoothing: antialiased; }

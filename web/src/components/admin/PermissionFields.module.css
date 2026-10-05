@@ -1,0 +1,5 @@
+.room { min-width: 8em; }
+.username.username { width: 8em; }
+.inviteName.inviteName { width: 8em; }
+.ban { display: flex; align-items: center; gap: var(--space-2); min-height: 30px; }
+.banField { display: flex; flex-direction: column; gap: 6px; }

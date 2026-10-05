@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact'
 import { useId } from 'preact/hooks'
 import { Switch } from './Switch'
+import formStyles from './Form.module.css'
 import styles from './Section.module.css'
 
 // A titled block of settings; blocks are separated by a line.
@@ -26,7 +27,7 @@ export function Section({ title, description, actions, children }: {
 
 // A small heading inside a section.
 export function SectionLabel({ children }: { children: ComponentChildren }) {
-  return <div class={styles.label}>{children}</div>
+  return <div class={formStyles.label}>{children}</div>
 }
 
 // One setting: what it is on the left, its control on the right.

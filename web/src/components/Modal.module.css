@@ -10,19 +10,7 @@
   padding: var(--space-4) var(--space-4) var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--border);
 }
-.title { flex: 1; min-width: 0; margin: 0; font-size: 1.1rem; font-weight: 600; overflow-wrap: anywhere; }
-.close {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--text-muted);
-}
-.close:hover { background: var(--bg-hover); color: var(--text); }
-.close:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.title { flex: 1; min-width: 0; margin: 0; font-size: var(--text-xl); font-weight: 600; overflow-wrap: anywhere; }
 .body { padding: var(--space-5); overflow: auto; min-height: 0; }
 .body > p:not([class]) { white-space: pre-wrap; color: var(--text-secondary); }
 .body > p:not([class]):first-child { margin-top: 0; }

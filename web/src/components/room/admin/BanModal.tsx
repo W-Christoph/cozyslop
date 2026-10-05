@@ -3,10 +3,12 @@ import { api } from '../../../api'
 import type { User } from '../../../room/protocol'
 import { Button } from '../../Button'
 import { Modal } from '../../Modal'
+import { Avatar } from '../../ui/Avatar'
 import { Field, Select } from '../../ui/Field'
 import { Notice } from '../../ui/Notice'
 import { useRoomStore } from '../RoomContext'
-import { UserAvatar } from '../UserAvatar'
+import { userIdentity } from '../UserHoverName'
+import formStyles from '../../ui/Form.module.css'
 import styles from './BanModal.module.css'
 
 const durations = [
@@ -43,16 +45,16 @@ export function BanModal({ user, onClose, onBanned }: {
   if (!store.rights.value.admin) return null
   const kick = duration === '0'
   return (
-    <Modal title={`${kick ? 'Kick' : 'Ban'} ${user.nickname}`} onClose={onClose} compact footer={<>
+    <Modal title={`${kick ? 'Kick' : 'Ban'} ${user.nickname}`} onClose={onClose} size="sm" footer={<>
       <Button onClick={onClose}>Cancel</Button>
       <Button variant="danger" type="submit" form={form} disabled={busy || !present}>{kick ? 'Kick user' : 'Ban user'}</Button>
     </>}>
-      <form id={form} class={styles.form} onSubmit={(e) => { e.preventDefault(); void ban() }}>
+      <form id={form} class={formStyles.form} onSubmit={(e) => { e.preventDefault(); void ban() }}>
         <div class={styles.user}>
-          <UserAvatar user={user} small />
+          <Avatar src={user.avatarUrl} size={32} />
           <div>
             <strong>{user.nickname}</strong>
-            <span>{user.username || `Anonymous (${user.key.slice(2, 6)})`}</span>
+            <span>{userIdentity(user)}</span>
           </div>
         </div>
         <Field label="Keep them out for" hint={kick ? 'They are removed from the room and can come straight back.' : user.anonymous ? 'Bans their address; other anonymous visitors on it are removed too.' : undefined}>

@@ -3,9 +3,8 @@ import { api, type ServerSettings } from '../../api'
 import { refreshServerSettings, serverSettings } from '../../app/state'
 import { Button } from '../../components/Button'
 import { Field, Textarea } from '../../components/ui/Field'
-import { Notice } from '../../components/ui/Notice'
+import { FormActions } from '../../components/ui/FormActions'
 import { Section, ToggleRow } from '../../components/ui/Section'
-import styles from './ServerSettingsTab.module.css'
 
 export function ServerSettingsTab() {
   const settings = serverSettings.value
@@ -36,33 +35,33 @@ export function ServerSettingsTab() {
     }
   }
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault()
-        void save()
-      }}
-    >
-      <Section title="Announcement" description="Shown to everyone above the list of rooms.">
-        <Field label="Message" hint="Leave empty to show nothing.">
-          <Textarea
-            rows={4}
-            maxLength={4096}
-            value={message}
-            onInput={(e) => { setMessage(e.currentTarget.value); setStatus('') }}
-          />
-        </Field>
-      </Section>
-      <Section title="Registration">
-        <ToggleRow title="Invite required to register" description="Only people with an invite link can create an account."
-          checked={inviteOnly} onChange={(value) => { setInviteOnly(value); setStatus('') }} />
-      </Section>
-      <div class={styles.actions}>
-        {error && <Notice tone="error">{error}</Notice>}
-        {status && <Notice tone="success">{status}</Notice>}
-        <Button accent type="submit" disabled={busy}>
-          {busy ? 'Saving…' : 'Save changes'}
-        </Button>
-      </div>
-    </form>
+    <Section title="Server settings">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          void save()
+        }}
+      >
+        <Section title="Announcement" description="Shown to everyone above the list of rooms.">
+          <Field label="Message" hint="Leave empty to show nothing.">
+            <Textarea
+              rows={4}
+              maxLength={4096}
+              value={message}
+              onInput={(e) => { setMessage(e.currentTarget.value); setStatus('') }}
+            />
+          </Field>
+        </Section>
+        <Section title="Registration">
+          <ToggleRow title="Invite required to register" description="Only people with an invite link can create an account."
+            checked={inviteOnly} onChange={(value) => { setInviteOnly(value); setStatus('') }} />
+        </Section>
+        <FormActions error={error} message={status}>
+          <Button variant="primary" type="submit" disabled={busy}>
+            {busy ? 'Saving…' : 'Save changes'}
+          </Button>
+        </FormActions>
+      </form>
+    </Section>
   )
 }

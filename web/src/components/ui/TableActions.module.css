@@ -1,0 +1,2 @@
+/* Keep the icon slot in rows without one, so Save lines up. */
+.slots { display: grid; grid-template-columns: auto 30px; justify-content: end; align-items: center; gap: var(--space-1); }

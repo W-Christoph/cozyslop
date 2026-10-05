@@ -1,4 +1,4 @@
 .frame { display: grid; place-items: center; min-height: 160px; padding: var(--space-3); border-radius: var(--radius-md); background: var(--bg-input); }
 .preview { display: block; max-width: 100%; max-height: 50vh; object-fit: contain; border-radius: var(--radius); }
-.file { display: flex; justify-content: space-between; gap: var(--space-3); margin: var(--space-3) 0; font-size: 0.87rem; color: var(--text-muted); }
+.file { display: flex; justify-content: space-between; gap: var(--space-3); margin: var(--space-3) 0; font-size: var(--text-sm); color: var(--text-muted); }
 .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }

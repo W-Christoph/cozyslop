@@ -1,19 +1,18 @@
-[data-page] .section:first-child .title { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+[data-page] .section:first-child:not(.section .section) > .head .title { font-size: var(--text-4xl); font-weight: 700; letter-spacing: -0.02em; }
 .section { display: flex; flex-direction: column; gap: var(--space-4); }
 .section + .section { margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border); }
 .head { display: flex; align-items: flex-start; gap: var(--space-4); }
 .headText { flex: 1; min-width: 0; }
-.title { margin: 0; font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; }
-.description { margin: var(--space-1) 0 0; color: var(--text-muted); font-size: 0.9rem; }
+.title { margin: 0; font-size: var(--text-2xl); font-weight: 600; letter-spacing: -0.01em; }
+.description { margin: var(--space-1) 0 0; color: var(--text-muted); font-size: var(--text-body); }
 .actions { display: flex; gap: var(--space-2); flex-shrink: 0; }
 .row { display: flex; align-items: center; gap: var(--space-5); min-height: 40px; }
 .rowText { flex: 1; min-width: 0; }
 .rowTitle { display: block; font-weight: 500; color: var(--text); }
 .clickable { cursor: pointer; }
-.rowDescription { margin-top: 2px; font-size: 0.87rem; color: var(--text-muted); }
+.rowDescription { margin-top: 2px; font-size: var(--text-sm); color: var(--text-muted); }
 .control { flex-shrink: 0; display: flex; align-items: center; gap: var(--space-2); max-width: 55%; }
 .control > span:has(> select) { width: 220px; }
-.label { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
-@media (max-width: 520px) {
+@media (max-width: 560px) {
   .head { flex-direction: column; }
 }

@@ -42,6 +42,7 @@ export interface ChatMessage {
   author: string // identity key
   nickname: string
   nameColor: string
+  avatarUrl?: string // available even when the author has left the room
   anonymous: boolean
   type: 'text' | 'image' | 'video' | 'whisper'
   body: string

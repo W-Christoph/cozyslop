@@ -51,3 +51,14 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Pages and windows share an outline; its offset leaves the real surface visible.
+   Hidden radio inputs and the colour picker delegate to their visible control. */
+:where([data-ui]) :is(
+  :focus-visible:not([data-focus-proxy], .react-colorful__interactive, [role='dialog']),
+  [data-focus-ring]:has(:focus-visible),
+  .react-colorful__interactive:focus-visible .react-colorful__pointer
+) {
+  outline: var(--focus-outline);
+  outline-offset: 2px;
+}

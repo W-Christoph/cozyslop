@@ -5,17 +5,17 @@ import { ProfileEditor } from '../profile/ProfileEditor'
 import { EmptyState } from '../ui/EmptyState'
 import { Section } from '../ui/Section'
 
-export function AccountSection() {
+export function AccountSection({ onDirtyChange, profileVersion }: { onDirtyChange: (dirty: boolean) => void; profileVersion: number }) {
   if (!me.value)
     return (
       <EmptyState icon="user" title="You are not logged in">
         <p>Log in to choose a nickname, a name colour and a profile picture.</p>
-        <ButtonLink accent href="/login">Log in</ButtonLink>
+        <ButtonLink variant="primary" href="/login">Log in</ButtonLink>
       </EmptyState>
     )
   return <>
     <Section title="Profile" description="How you appear to others in rooms.">
-      <ProfileEditor />
+      <ProfileEditor key={profileVersion} onDirtyChange={onDirtyChange} />
     </Section>
     <Section title="Password">
       <ChangePassword />

@@ -1,5 +1,5 @@
 .form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); }
-.form > label:first-child { flex: 0 1 220px; }
+.target { flex: 0 1 220px; }
 .message { flex: 1 1 220px; }
 .notes { flex: 1 0 100%; display: flex; flex-direction: column; gap: var(--space-2); }
 .notes:empty { display: none; }

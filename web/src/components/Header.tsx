@@ -4,6 +4,7 @@ import { logout, me, serverSettings, settingsOpen } from '../app/state'
 import { ButtonLink } from './Button'
 import { Avatar } from './ui/Avatar'
 import { Icon } from './ui/Icon'
+import { Notice } from './ui/Notice'
 import styles from './Header.module.css'
 
 export function Header() {
@@ -13,7 +14,7 @@ export function Header() {
     <a class={`${styles.link} ${current ? styles.current : ''}`} href={href} aria-current={current ? 'page' : undefined}>{label}</a>
   )
   return (
-    <header class={styles.header}>
+    <header data-ui class={styles.header}>
       <a class={styles.brand} href="/">
         <img src="/png/favicon.png" alt="" width={32} height={32} />
         <span>CozyCast</span>
@@ -29,7 +30,7 @@ export function Header() {
         </button>
         {user ? <UserMenu /> : <>
           <ButtonLink variant="ghost" href="/login">Log in</ButtonLink>
-          {serverSettings.value.registration === 'open' && <ButtonLink accent href="/register">Sign up</ButtonLink>}
+          {serverSettings.value.registration === 'open' && <ButtonLink variant="primary" href="/register">Sign up</ButtonLink>}
         </>}
       </div>
     </header>
@@ -45,15 +46,23 @@ function UserMenu() {
   const menu = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
-    const outside = (e: MouseEvent) => { if (!menu.current?.contains(e.target as Node)) setOpen(false) }
+    const trigger = menu.current?.querySelector<HTMLElement>('button')
+    const close = () => { setOpen(false); trigger?.focus() }
+    const outside = (e: MouseEvent) => { if (!menu.current?.contains(e.target as Node)) close() }
     const items = () => [...(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? [])]
     items()[0]?.focus()
-    // Arrow keys move through the menu; Escape and leaving it close it.
+    // Arrow keys and Tab stay in the menu; Escape returns to its button.
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setOpen(false)
-        menu.current?.querySelector<HTMLElement>('button')?.focus()
-      } else if (e.key === 'Tab') setOpen(false)
+        e.preventDefault()
+        e.stopPropagation()
+        close()
+      } else if (e.key === 'Tab') {
+        e.preventDefault()
+        const all = items()
+        const at = all.indexOf(document.activeElement as HTMLElement)
+        all[(at + (e.shiftKey ? -1 : 1) + all.length) % all.length]?.focus()
+      }
       else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault()
         const all = items()
@@ -82,6 +91,7 @@ function UserMenu() {
     }
   }
   const openSettings = (section: 'account' | 'appearance') => {
+    menu.current?.querySelector<HTMLElement>('button')?.focus()
     setOpen(false)
     settingsOpen.value = section
   }
@@ -114,7 +124,7 @@ function UserMenu() {
           <button type="button" role="menuitem" class={`${styles.menuItem} ${styles.danger}`} disabled={busy} onClick={signOut}>
             <Icon name="logout" />Log out
           </button>
-          {error && <div class={styles.error} role="alert">{error}</div>}
+          {error && <Notice compact tone="error">{error}</Notice>}
         </div>
       )}
     </div>

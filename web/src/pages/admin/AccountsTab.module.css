@@ -1,5 +1,5 @@
-.search { width: 240px; }
-.empty { text-align: center; color: var(--text-muted); padding: var(--space-5) !important; }
-@media (max-width: 520px) {
-  .search { width: 100%; }
+.search.search { width: 240px; }
+.empty.empty.empty { text-align: center; color: var(--text-muted); padding: var(--space-5); }
+@media (max-width: 560px) {
+  .search.search { width: 100%; }
 }

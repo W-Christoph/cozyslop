@@ -46,12 +46,16 @@ export function MessageList({ lines, editing, onEdit, onEndEdit, onMedia }: {
     window.addEventListener('resize', scrollToBottom)
     return () => { observer.disconnect(); window.removeEventListener('resize', scrollToBottom) }
   }, [scrollToBottom])
-  const temporary = preferences.value.showLeaveJoinMsg ? lines : []
+  const { chatStyle, showLeaveJoinMsg } = preferences.value
+  const temporary = showLeaveJoinMsg ? lines : []
   const anchored = new Map<number | null, TemporaryLine[]>()
   for (const line of temporary) anchored.set(line.after, [...(anchored.get(line.after) ?? []), line])
   const entries: (ChatMessage[] | TemporaryLine)[] = []
   let run: ChatMessage[] = []
-  const flush = () => { entries.push(...groupMessages(run)); run = [] }
+  const flush = () => {
+    entries.push(...(chatStyle === 'compact' ? run.map((message) => [message]) : groupMessages(run)))
+    run = []
+  }
   entries.push(...(anchored.get(null) ?? []))
   for (const message of chat) {
     run.push(message)

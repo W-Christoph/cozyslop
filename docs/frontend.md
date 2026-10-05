@@ -39,8 +39,9 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
   after the component (`ChatInput.tsx`).
 - **Styles**: every component that needs styling has a sibling CSS module
   (`ChatInput.module.css`) imported as `styles`. Class names camelCase. Only
-  `tokens.css` and `base.css` are global. Use tokens (below) instead of raw
-  colours; spacing via `--space-*` where it fits. When porting, copy the
+  `tokens.css` and `base.css` are global. Shared style modules live in
+  `components/ui/`; only `settings/ChatPreview` borrows component modules.
+  Use tokens (below) instead of raw colours; spacing via `--space-*` where it fits. When porting, copy the
   relevant rules from the old `styles.css` into the module, drop dead rules,
   and keep the visual result identical.
 - **Two sets of tokens**: the room uses the `--color-*` tokens carried over
@@ -50,11 +51,11 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
   sets; the accent (`<html data-accent>`) is also the room's highlight
   colour (`--color-orange`).
 - **Menus are windows**: anything with more than a couple of controls opens
-  as a `Modal` or, with several sections, a `SettingsWindow`, not in the chat
-  sidebar. Buttons are `Button` (`accent` for the one main action, `variant`
-  `ghost`/`danger` otherwise); messages are `Notice`. Personal preferences
-  apply as they are changed; forms that write to the server have a save
-  button.
+  as a `Modal` (sizes `sm`, `md`, `lg`, `xl`) or, with several sections, a
+  `SettingsWindow`, not in the chat sidebar. Buttons are `Button` (`variant="primary"` for the one main action,
+  `ghost`/`danger`/`danger-outline`/`danger-ghost` otherwise); messages are `Notice`.
+  Personal preferences apply as they are changed; forms that write to the
+  server have a save button.
 - **Chat display**: `preferences.chatStyle` (`classic`, `modern`, `compact`)
   is set as `data-chat-style` on the chat panel and styled in the chat's own
   modules; `settings/ChatPreview` draws with those same modules.
@@ -86,8 +87,7 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
 | `--cozyButtonAccent` | `--color-button-accent` |
 | `--cozyScrollbar` / `--cozyScrollThumb` | `--color-scrollbar` / `--color-scroll-thumb` |
 | `--cozyHighContrast` | `--color-high-contrast` |
-| `--cozySelect` | `--color-select` |
-| `--cozyOrange` / `--cozyOrangePing` | `--color-orange` / `--color-orange-ping` |
+| `--cozyOrange` | `--color-orange` |
 | `--cozyTextColor` / `--cozyTextColor70` / `--cozyTextMisc` | `--color-text` / `--color-text-muted` / `--color-text-misc` |
 | `--cozyMessageBackground` / `--cozyMessageShadow` / `--cozyMessageHover` | `--color-message-bg` / `--shadow-message` / `--color-message-hover` |
 | `--cozySvgFilter` / `--cozyIconChange` | `--icon-filter` / `--icon-invert` |

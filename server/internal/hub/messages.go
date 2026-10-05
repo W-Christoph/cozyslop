@@ -182,6 +182,7 @@ func (r *Room) post(ctx context.Context, key, typ, body, media string) error {
 	}
 	if m.user != nil {
 		msg.UserID = &m.user.ID
+		msg.Avatar = m.user.Avatar
 	}
 	// Insert and broadcast under the lock so every tab sees messages in id
 	// order and joins cannot miss one (see Join).
@@ -262,6 +263,7 @@ func (r *Room) whisper(c *Client, to, body string) error {
 		Author:    c.m.key,
 		Nickname:  "Mod Whisper",
 		NameColor: "#fff",
+		AvatarURL: r.userLocked(c.m).AvatarURL,
 		Type:      "whisper",
 		Body:      body,
 		Time:      time.Now().UnixMilli(),
@@ -285,11 +287,15 @@ func (r *Room) toChat(msgs []store.ChatMessage) []ChatMessage {
 			Author:    m.Identity,
 			Nickname:  m.Nickname,
 			NameColor: m.NameColor,
+			AvatarURL: avatarURL(&store.User{Avatar: m.Avatar}),
 			Anonymous: m.Anonymous,
 			Type:      m.Type,
 			Body:      m.Body,
 			Edited:    m.Edited,
 			Time:      m.CreatedAtMs,
+		}
+		if m.Anonymous {
+			out[i].AvatarURL = "/png/default_avatar_on_alpha.png"
 		}
 		if m.Media != "" {
 			out[i].MediaURL = "/media/chat/" + m.Media

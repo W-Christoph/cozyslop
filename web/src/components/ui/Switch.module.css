@@ -5,15 +5,15 @@
   height: 24px;
   padding: 0;
   border-radius: 12px;
-  background: var(--border-strong);
+  box-shadow: 0 0 0 1px var(--border-control);
+  background: var(--border-control);
   transition: background-color 0.15s;
 }
-.switch:hover:not(:disabled) { background: var(--border-strong); filter: brightness(1.15); }
+.switch:hover:not(:disabled) { background: var(--border-control); }
 .switch[aria-checked='true'], .switch[aria-checked='true']:hover:not(:disabled) { background: var(--accent); }
 .switch:disabled { opacity: 1; background: var(--bg-raised); cursor: not-allowed; }
-.switch:disabled[aria-checked='true'] { background: var(--border-strong); }
+.switch:disabled[aria-checked='true'] { background: var(--border-control); }
 .switch:disabled .thumb { background: var(--text-muted); box-shadow: none; }
-.switch:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .thumb {
   position: absolute;
   top: 3px;
@@ -26,3 +26,4 @@
   transition: transform 0.15s;
 }
 .switch[aria-checked='true'] .thumb { transform: translateX(16px); }
+.switch[aria-checked='true']:not(:disabled) .thumb { background: var(--on-accent); }

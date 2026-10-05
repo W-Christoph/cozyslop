@@ -31,6 +31,7 @@ type ChatMessage struct {
 	Author    string `json:"author"` // identity key
 	Nickname  string `json:"nickname"`
 	NameColor string `json:"nameColor"`
+	AvatarURL string `json:"avatarUrl"`
 	Anonymous bool   `json:"anonymous"`
 	Type      string `json:"type"` // text | image | video | whisper
 	Body      string `json:"body"`

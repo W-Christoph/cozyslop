@@ -51,7 +51,10 @@ export function RoomPage() {
   useEffect(() => { setHover(null) }, [fullscreen, left, userlistHidden, idle])
   const overlay = personalSettings || roomWindow !== null
   const closeWindow = () => { setRoomWindow(null); wake() }
-  if (store.kicked.value) return <KickedScreen />
+  if (store.kicked.value) return <>
+    <KickedScreen />
+    {personalSettings && <SettingsDialog />}
+  </>
   return (
     <div ref={page} class={`${styles.page} ${fullscreen ? styles.fullscreen : ''} ${fullscreen && idle && !overlay ? styles.idle : ''}`}
       data-chat-width={chatWidth}

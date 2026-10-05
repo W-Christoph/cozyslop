@@ -1,7 +1,7 @@
 // App-wide state: who is logged in, server settings and per-browser
 // preferences. One instance, imported directly.
 
-import { computed, effect, signal } from '@preact/signals'
+import { effect, signal } from '@preact/signals'
 import { api, ApiError, setUnauthorizedHandler, type Me, type ServerSettings } from '../api'
 
 // 'system' follows the device: light, or the default dark theme.
@@ -68,7 +68,6 @@ function loadPreferences(): Preferences {
 
 export const me = signal<Me | null>(null)
 export const meLoaded = signal(false)
-export const loggedIn = computed(() => me.value !== null)
 export const serverSettings = signal<ServerSettings>({
   message: '',
   registration: 'invite',

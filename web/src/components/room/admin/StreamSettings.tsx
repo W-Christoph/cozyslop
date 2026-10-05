@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import { api } from '../../../api'
 import { Button } from '../../Button'
-import { Spinner } from '../../ui/EmptyState'
+import { Spinner } from '../../ui/Spinner'
 import { Select } from '../../ui/Field'
+import { FormActions } from '../../ui/FormActions'
 import { Notice } from '../../ui/Notice'
 import { Section, SettingRow } from '../../ui/Section'
 import { useRoomStore } from '../RoomContext'
@@ -23,7 +24,6 @@ import {
   type Stream,
 } from './streamOptions'
 import { useRoomSettingsForm } from './useRoomSettingsForm'
-import styles from './RoomAccessSettings.module.css'
 
 const fields = ['screen', 'stream'] as const
 
@@ -153,11 +153,9 @@ export function StreamSettings() {
           </>
         )}
       </Section>
-      <div class={styles.actions}>
-        {error && <Notice tone="error">{error}</Notice>}
-        {message && <Notice tone="success">{message}</Notice>}
-        <Button accent type="submit" disabled={busy || !draft || !choices}>{busy ? 'Saving…' : 'Save changes'}</Button>
-      </div>
+      <FormActions error={error} message={message}>
+        <Button variant="primary" type="submit" disabled={busy || !draft || !choices}>{busy ? 'Saving…' : 'Save changes'}</Button>
+      </FormActions>
     </form>
   )
 }

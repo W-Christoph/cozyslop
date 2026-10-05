@@ -5,12 +5,15 @@ import { createServer } from 'vite'
 // Exercise component handlers and effect cleanup with browser APIs supplied
 // by each fixture, using the same Vite transform as the other Node tests.
 const mocks = {
+  'preact/compat': `export const createPortal = (node, container) => { globalThis.frontendFixture.portal = container; return node }`,
   'preact/hooks': `
     export const useState = (...args) => globalThis.frontendFixture.state(...args)
     export const useRef = (...args) => globalThis.frontendFixture.ref(...args)
     export const useEffect = (...args) => globalThis.frontendFixture.effect(...args)
     export const useLayoutEffect = useEffect
     export const useCallback = fn => fn
+    export const useContext = () => globalThis.frontendFixture.store ?? null
+    export const useMemo = (...args) => globalThis.frontendFixture.memo(...args)
     export const useId = () => 'test-dialog'
   `,
   'cropperjs': `export default class {
@@ -18,8 +21,17 @@ const mocks = {
     getCroppedCanvas() { return globalThis.frontendFixture.canvas }
     destroy() {}
   }`,
-  '/app/state': `export const preferences = { value: { volume: 100, muted: false } }`,
-  '/RoomContext': `export const useRoomStore = () => globalThis.frontendFixture.store`,
+  '/app/state': `
+    export const preferences = { get value() { return globalThis.frontendFixture?.preferences ?? { volume: 100, muted: false } } }
+    export const me = { get value() { return globalThis.frontendFixture?.me ?? null }, set value(user) { globalThis.frontendFixture.me = user } }
+    export const settingsOpen = { get value() { return globalThis.frontendFixture.settingsOpen }, set value(section) { globalThis.frontendFixture.settingsOpen = section } }
+    export const logout = async () => globalThis.frontendFixture.logout()
+    export const serverSettings = { value: { registration: 'open' } }
+    export const resolveTheme = theme => theme
+    export const updatePreferences = () => {}
+  `,
+  '/RoomContext': `export const useRoomStore = () => globalThis.frontendFixture.store; export const RoomContext = {}`,
+  'react-colorful': `export function HexColorInput() {}; export function HexColorPicker() {}`,
   '/useTouchTrackpad': `export const useTouchTrackpad = () => {}`,
   '/useChatEvents': `export const useChatEvents = () => []`,
   '/guacamole-keyboard.js': `export default class { listenTo() {} reset() {} }`,
@@ -41,12 +53,30 @@ const server = await createServer({
     load(id) { if (id.startsWith('\0fixture:')) return mocks[id.slice(9)] },
   }],
 })
-let AvatarChooser, ChatPanel, MessageGroup, MediaModal, RemoteScreen, AccountRow, NekoClient, KickedScreen, DesktopUploadStatus, config
+let readableNameColor, cropKeyboard, useDialogFocus, Button, ButtonLink, Modal, Input, FormActions, AvatarChooser, ProfileEditor, SettingsDialog, profileChanged, userIdentity, ChatPanel, MessageGroup, MessageList, ChatPreview, MediaModal, RemoteScreen, AccountRow, NekoClient, KickedScreen, DesktopUploadStatus, PermissionRow, PermissionFields, PermissionTable, BanDate, Notice, blankPermission, config
 try {
+  ;({ readableNameColor } = await server.ssrLoadModule('/src/components/chat/nameColor.ts'))
+  ;({ cropKeyboard } = await server.ssrLoadModule('/src/components/ui/cropKeyboard.ts'))
+  ;({ useDialogFocus } = await server.ssrLoadModule('/src/components/ui/useDialogFocus.ts'))
+  ;({ Button, ButtonLink } = await server.ssrLoadModule('/src/components/Button.tsx'))
+  ;({ Modal } = await server.ssrLoadModule('/src/components/Modal.tsx'))
+  ;({ Input } = await server.ssrLoadModule('/src/components/ui/Field.tsx'))
+  ;({ FormActions } = await server.ssrLoadModule('/src/components/ui/FormActions.tsx'))
   ;({ AvatarChooser } = await server.ssrLoadModule('/src/components/profile/AvatarChooser.tsx'))
+  ;({ ProfileEditor } = await server.ssrLoadModule('/src/components/profile/ProfileEditor.tsx'))
+  ;({ SettingsDialog } = await server.ssrLoadModule('/src/components/settings/SettingsDialog.tsx'))
+  ;({ profileChanged } = await server.ssrLoadModule('/src/components/profile/profileChanges.ts'))
+  ;({ userIdentity } = await server.ssrLoadModule('/src/components/room/UserHoverName.tsx'))
   ;({ ChatPanel } = await server.ssrLoadModule('/src/components/chat/ChatPanel.tsx'))
   ;({ MessageGroup } = await server.ssrLoadModule('/src/components/chat/MessageGroup.tsx'))
+  ;({ MessageList } = await server.ssrLoadModule('/src/components/chat/MessageList.tsx'))
+  ;({ ChatPreview } = await server.ssrLoadModule('/src/components/settings/ChatPreview.tsx'))
   ;({ MediaModal } = await server.ssrLoadModule('/src/components/chat/MediaModal.tsx'))
+  ;({ PermissionRow, blankPermission } = await server.ssrLoadModule('/src/components/admin/PermissionRow.tsx'))
+  ;({ PermissionFields } = await server.ssrLoadModule('/src/components/admin/PermissionFields.tsx'))
+  ;({ PermissionTable } = await server.ssrLoadModule('/src/components/admin/PermissionTable.tsx'))
+  ;({ BanDate } = await server.ssrLoadModule('/src/components/admin/BanDate.tsx'))
+  ;({ Notice } = await server.ssrLoadModule('/src/components/ui/Notice.tsx'))
   ;({ RemoteScreen } = await server.ssrLoadModule('/src/components/room/RemoteScreen.tsx'))
   ;({ AccountRow } = await server.ssrLoadModule('/src/components/admin/AccountRow.tsx'))
   ;({ NekoClient } = await server.ssrLoadModule('/src/neko/client.ts'))
@@ -61,8 +91,13 @@ function fixture(t) {
   const f = {
     state(value) {
       const i = index++
-      slots[i] ??= { value }
+      slots[i] ??= { value: typeof value === 'function' ? value() : value }
       return [slots[i].value, (next) => { slots[i].value = typeof next === 'function' ? next(slots[i].value) : next }]
+    },
+    memo(fn, deps) {
+      const i = index++
+      if (!slots[i] || deps.some((dep, j) => dep !== slots[i].deps[j])) slots[i] = { value: fn(), deps }
+      return slots[i].value
     },
     ref(value) {
       const i = index++
@@ -71,7 +106,7 @@ function fixture(t) {
     },
     effect(fn, deps) {
       const i = index++
-      if (!slots[i] || deps.some((dep, j) => dep !== slots[i].deps[j])) {
+      if (!slots[i] || !deps || deps.some((dep, j) => dep !== slots[i].deps[j])) {
         effects.push(() => {
           slots[i]?.cleanup?.()
           slots[i] = { deps, cleanup: fn() }
@@ -115,6 +150,233 @@ function globals(t, values) {
     }
   })
 }
+
+test('profile dirtiness compares nickname, colour and a pending avatar', () => {
+  const user = { nickname: 'Alice', nameColor: '#FF9900' }
+  assert.equal(profileChanged(user, 'Alice', '#ff9900', null), false)
+  assert.equal(profileChanged(user, 'Alice', '#f90', null), false)
+  assert.equal(profileChanged(user, 'Alicia', '#ff9900', null), true)
+  assert.equal(profileChanged(user, 'Alice', '#ffffff', null), true)
+  assert.equal(profileChanged(user, 'Alice', '#ff9900', new Blob(['avatar'])), true)
+})
+
+for (const action of ['section', 'close', 'logout']) {
+  test(`personal settings guard ${action} only while the profile is dirty`, async (t) => {
+    const f = fixture(t)
+    f.settingsOpen = 'account'
+    f.me = { username: 'alice', nickname: 'Alice' }
+    let closed = 0, loggedOut = 0
+    f.logout = () => { loggedOut++ }
+    const render = () => f.render(SettingsDialog, { onClose: () => closed++ })
+    const request = () => {
+      const window = named(render(), 'SettingsWindow')
+      if (action === 'close') window.props.onClose()
+      else window.props.onSelect(action === 'logout' ? 'logout' : 'appearance')
+    }
+    const dirty = (value) => named(render(), 'AccountSection').props.onDirtyChange(value)
+    dirty(true)
+    named(render(), 'SettingsWindow').props.onSelect('account')
+    assert.equal(named(render(), 'Modal'), undefined, 'the current section keeps editing')
+    request()
+    assert.equal(f.settingsOpen, 'account')
+    assert.equal(closed + loggedOut, 0)
+    let modal = named(render(), 'Modal')
+    assert.equal(modal.props.title, 'Discard profile changes?')
+    button(modal.props.footer, 'Keep editing').props.onClick()
+    assert.equal(named(render(), 'Modal'), undefined)
+    request()
+    named(render(), 'Modal').props.onClose()
+    assert.equal(f.settingsOpen, 'account', 'Escape/backdrop on the question keeps editing')
+    request()
+    modal = named(render(), 'Modal')
+    button(modal.props.footer, 'Discard').props.onClick()
+    await Promise.resolve()
+    assert.equal(named(render(), 'Modal'), undefined)
+    assert.equal(f.settingsOpen, action === 'section' ? 'appearance' : action === 'close' ? null : 'account')
+    assert.equal(closed, action === 'close' ? 1 : 0)
+    assert.equal(loggedOut, action === 'logout' ? 1 : 0)
+
+    f.settingsOpen = 'account'
+    dirty(false)
+    request()
+    await Promise.resolve()
+    assert.equal(named(render(), 'Modal'), undefined, 'clean or saved profiles leave immediately')
+    assert.equal(closed, action === 'close' ? 2 : 0)
+    assert.equal(loggedOut, action === 'logout' ? 2 : 0)
+  })
+}
+
+test('profile edits, reset and successful saves report the current dirty state', async (t) => {
+  const f = fixture(t), changes = [], requests = []
+  f.me = { username: 'alice', nickname: 'Alice', nameColor: '#f90', avatarUrl: '' }
+  globals(t, { fetch: async (path, init) => {
+    requests.push([path, init.method])
+    const user = path.endsWith('/avatar') ? { ...f.me, avatarUrl: '/media/avatars/alice.png' }
+      : { ...f.me, nickname: JSON.parse(init.body).nickname.trim(), nameColor: '#ff9900' }
+    return { ok: true, status: 200, json: async () => ({ user }) }
+  } })
+  const props = { onDirtyChange: (dirty) => changes.push(dirty) }
+  const render = () => f.render(ProfileEditor, props)
+  render()
+  render()
+  assert.equal(changes.at(-1), false)
+  nodes(render()).find((n) => n.type?.name === 'Input').props.onInput({ currentTarget: { value: ' Alicia ' } })
+  render()
+  assert.equal(changes.at(-1), true)
+  button(render(), 'Reset').props.onClick()
+  render()
+  assert.equal(changes.at(-1), false)
+  nodes(render()).find((n) => n.type?.name === 'Input').props.onInput({ currentTarget: { value: ' Alicia ' } })
+  named(render(), 'AvatarChooser').props.onCrop(new Blob(['avatar']))
+  render()
+  assert.equal(changes.at(-1), true)
+  render().props.onSubmit({ preventDefault() {} })
+  await new Promise((resolve) => setImmediate(resolve))
+  const saved = render()
+  assert.equal(changes.at(-1), false)
+  assert.equal(f.me.nickname, 'Alicia', 'the form adopts the saved nickname')
+  assert.equal(button(saved, 'Save changes').props.disabled, true)
+  assert.deepEqual(requests, [['/api/me', 'PATCH'], ['/api/me/avatar', 'POST']])
+})
+
+test('edits made during a profile save stay dirty afterwards', async (t) => {
+  const f = fixture(t), changes = []
+  f.me = { username: 'alice', nickname: 'Alice', nameColor: '#f90', avatarUrl: '' }
+  let finish
+  globals(t, { fetch: () => new Promise((resolve) => { finish = resolve }) })
+  const render = () => f.render(ProfileEditor, { onDirtyChange: (dirty) => changes.push(dirty) })
+  const input = () => named(render(), 'Input')
+  render()
+  render()
+  input().props.onInput({ currentTarget: { value: 'Alicia' } })
+  render().props.onSubmit({ preventDefault() {} })
+  input().props.onInput({ currentTarget: { value: 'Ally' } })
+  finish({ ok: true, status: 200, json: async () => ({ user: { ...f.me, nickname: 'Alicia' } }) })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(input().props.value, 'Ally')
+  assert.equal(changes.at(-1), true)
+})
+
+for (const failed of ['/api/me', '/api/me/avatar']) {
+  test(`a failed ${failed} save keeps the profile dirty`, async (t) => {
+    const f = fixture(t), changes = []
+    f.me = { username: 'alice', nickname: 'Alice', nameColor: '#f90', avatarUrl: '' }
+    globals(t, { fetch: async (path, init) => path === failed
+      ? { ok: false, status: 500, json: async () => ({ error: 'Save failed.' }) }
+      : { ok: true, status: 200, json: async () => ({ user: { ...f.me, nickname: JSON.parse(init.body).nickname } }) }
+    })
+    const props = { onDirtyChange: (dirty) => changes.push(dirty) }
+    const render = () => f.render(ProfileEditor, props)
+    render()
+    render()
+    named(render(), 'Input').props.onInput({ currentTarget: { value: 'Alicia' } })
+    named(render(), 'AvatarChooser').props.onCrop(new Blob(['avatar']))
+    render().props.onSubmit({ preventDefault() {} })
+    await new Promise((resolve) => setImmediate(resolve))
+    const node = render()
+    assert.equal(changes.at(-1), true)
+    assert.equal(button(node, 'Save changes').props.disabled, false)
+    assert.equal(named(node, 'Notice').props.tone, 'error')
+  })
+}
+
+test('the visible Change avatar button opens the same chooser as the picture', (t) => {
+  const f = fixture(t)
+  let opened = 0
+  f.elements = { input: { click() { opened++ } } }
+  const props = { avatar: '', disabled: false, onCrop() {} }
+  const node = f.render(AvatarChooser, props)
+  const change = button(node, 'Change avatar')
+  assert.equal(change.type.name, 'Button')
+  change.props.onClick()
+  nodes(node).find((n) => n.type === 'button').props.onClick()
+  assert.equal(opened, 2)
+  const disabled = f.render(AvatarChooser, { ...props, disabled: true })
+  assert.equal(button(disabled, 'Change avatar').props.disabled, true)
+  assert.equal(nodes(disabled).find((n) => n.type === 'button').props.disabled, true)
+})
+
+test('anonymous identities use one spelling, including messages after the author leaves', (t) => {
+  const f = fixture(t)
+  const user = { key: 'a:abcd1234', anonymous: true, username: '' }
+  assert.equal(userIdentity(user), 'Anon(abcd)')
+  assert.equal(userIdentity(user.key), userIdentity(user))
+  assert.equal(userIdentity({ key: 'u:1', anonymous: false, username: 'alice' }), 'alice')
+  f.store = { selfKey: { value: 'u:1' }, users: { value: new Map() }, rights: { value: { admin: false } } }
+  f.preferences = { chatStyle: 'modern', chatAvatars: false }
+  const message = { id: 1, author: user.key, anonymous: true, nickname: 'Guest', type: 'text', body: 'Hello', time: 0 }
+  const node = f.render(MessageGroup, { messages: [message], editing: null })
+  assert.ok(nodes(node).find((n) => n.props?.title === userIdentity(user)))
+})
+
+test('compact splits consecutive messages and repeats each message name and timestamp', (t) => {
+  const f = fixture(t)
+  globals(t, { window: new EventTarget(), ResizeObserver: class { observe() {} disconnect() {} } })
+  const messages = [
+    { id: 1, author: 'u:2', nickname: 'Bob', nameColor: '#4aa', type: 'text', body: 'First', time: new Date(2026, 0, 1, 13, 5).getTime() },
+    { id: 2, author: 'u:2', nickname: 'Robert', nameColor: '#fff', type: 'text', body: 'Second', time: new Date(2026, 0, 1, 13, 6).getTime() },
+    { id: 3, author: 'u:2', nickname: 'Robert', nameColor: '#fff', type: 'text', body: 'Third', time: new Date(2026, 0, 1, 13, 7).getTime() },
+  ]
+  const store = {
+    chat: { value: messages }, selfKey: { value: 'u:1' },
+    users: { value: new Map([['u:2', { username: 'bob' }]]) }, rights: { value: { admin: false } },
+  }
+  f.store = store
+  const props = { lines: [{ id: 'join', after: 2, body: 'Pixel joined', time: messages[1].time }], editing: null }
+  let compactGroups
+  for (const chatStyle of ['classic', 'modern', 'compact', 'classic']) {
+    f.preferences = { chatStyle, showLeaveJoinMsg: true }
+    const node = f.render(MessageList, props)
+    const groups = nodes(node).filter((n) => n.type === MessageGroup)
+    assert.deepEqual(groups.map((g) => g.props.messages.map((m) => m.id)), chatStyle === 'compact' ? [[1], [2], [3]] : [[1, 2], [3]])
+    const entries = node.props.children[0].props.children
+    assert.equal(entries[chatStyle === 'compact' ? 2 : 1].props.children[1].props.children, 'Pixel joined', 'join line stays after the second message')
+    if (chatStyle === 'compact') compactGroups = groups
+  }
+  const groupFixture = fixture(t)
+  groupFixture.store = store
+  groupFixture.preferences = { chatStyle: 'compact', chatAvatars: true }
+  for (const [index, group] of compactGroups.entries()) {
+    const node = groupFixture.render(MessageGroup, group.props)
+    const header = nodes(node).find((n) => n.props?.title === 'bob')
+    assert.equal(header.props.children[0], messages[index].nickname)
+    assert.equal(nodes(header).find((n) => n.type === 'span').props.children, ['1:05 PM', '1:06 PM', '1:07 PM'][index])
+    assert.equal(named(node, 'ChatAvatar'), undefined)
+    assert.equal(named(node, 'MessageText').props.body, messages[index].body)
+  }
+})
+
+test('chat keeps message avatars after the author leaves and display preferences change', (t) => {
+  const f = fixture(t)
+  const message = { id: 1, author: 'u:2', nickname: 'Bob', nameColor: '#4aa', type: 'text', body: 'Hello', time: 0, avatarUrl: '/media/avatars/bob.png' }
+  f.store = { selfKey: { value: 'u:1' }, users: { value: new Map([['u:2', { username: 'bob', avatarUrl: message.avatarUrl }]]) }, rights: { value: { admin: false } } }
+  f.preferences = { chatStyle: 'modern', chatAvatars: true }
+  const render = () => f.render(MessageGroup, { messages: [message], editing: null })
+  assert.equal(named(render(), 'ChatAvatar').props.url, message.avatarUrl)
+  f.store.users.value = new Map()
+  assert.equal(named(render(), 'ChatAvatar').props.url, message.avatarUrl)
+  f.preferences.chatStyle = 'compact'
+  assert.equal(named(render(), 'ChatAvatar'), undefined)
+  f.preferences.chatStyle = 'classic'
+  assert.equal(named(render(), 'ChatAvatar').props.url, message.avatarUrl)
+  f.preferences.manualLoadMedia = true
+  assert.equal(named(render(), 'ChatAvatar').props.url, undefined)
+  f.preferences.manualLoadMedia = false
+  assert.equal(named(render(), 'ChatAvatar').props.url, message.avatarUrl)
+  f.store.users.value = new Map([['u:2', { username: 'bob', avatarUrl: '/media/avatars/new.png' }]])
+  assert.equal(named(render(), 'ChatAvatar').props.url, '/media/avatars/new.png', 'online profile updates override the message avatar')
+})
+
+test('the compact preview repeats the name and timestamp for every sample message', (t) => {
+  const f = fixture(t)
+  for (const chatStyle of ['classic', 'modern', 'compact']) {
+    f.preferences = { chatStyle, chatScale: 100, showLeaveJoinMsg: false }
+    const node = ChatPreview({ nickname: 'Alice' })
+    const headers = nodes(node).filter((n) => n.props?.style?.['--name-colour'])
+    assert.deepEqual(headers.map((n) => n.props.children[0]), chatStyle === 'compact' ? ['Mochi', 'Alice', 'Alice'] : ['Mochi', 'Alice'])
+    assert.deepEqual(headers.map((n) => nodes(n).find((child) => child.type === 'span').props.children), chatStyle === 'compact' ? ['8:57 PM', '8:58 PM', '8:58 PM'] : ['8:57 PM', '8:58 PM'])
+  }
+})
 
 test('avatar cancellation discards a pending crop before its blob callback', (t) => {
   const f = fixture(t), applied = []
@@ -204,7 +466,7 @@ test('media clicks select the message ID and the modal reads its current URL', (
 
 test('the media preview is the bare picture or video; a click outside the player closes it', (t) => {
   const f = fixture(t)
-  globals(t, { document: new EventTarget() })
+  focusDom(t, f)
   for (const type of ['image', 'video']) {
     let closed = 0
     const message = { id: 7, author: 'u:2', type, mediaUrl: '/media/chat/current', time: 0 }
@@ -223,6 +485,168 @@ test('the media preview is the bare picture or video; a click outside the player
     globalThis.document.dispatchEvent(Object.assign(new Event('keydown'), { key: 'Escape' }))
     assert.equal(closed, 2)
   }
+})
+
+function focusDom(t, f) {
+  const document = new EventTarget()
+  class Element {
+    offsetParent = {}
+    children = []
+    focus() { document.activeElement = this }
+    querySelectorAll() { return this.children }
+    getAttribute(name) { return this[name] ?? null }
+  }
+  const previous = new Element(), dialog = new Element()
+  previous.focus()
+  document.body = new Element()
+  globals(t, { document, HTMLElement: Element })
+  f.elements = { div: dialog }
+  return { document, Element, previous, dialog }
+}
+
+for (const type of ['image', 'video']) {
+  test(`${type} preview traps Tab in both directions, closes on Escape and restores focus`, (t) => {
+    const f = fixture(t), { document, Element, previous, dialog } = focusDom(t, f)
+    document.fullscreenElement = new Element()
+    const first = new Element(), last = new Element(), hidden = new Element()
+    hidden.offsetParent = null
+    dialog.children = [first, last, hidden]
+    let closed = 0
+    const node = f.render(MediaModal, { message: { type }, onClose: () => closed++ })
+    assert.equal(f.portal, document.fullscreenElement, 'the portal escapes the chat stacking context')
+    assert.equal(node.props['aria-modal'], 'true')
+    assert.equal(document.activeElement, first)
+    dialog.focus()
+    const key = (key, shiftKey = false) => {
+      const event = Object.assign(new Event('keydown', { cancelable: true }), { key, shiftKey })
+      document.dispatchEvent(event)
+      return event
+    }
+    assert.equal(key('Tab').defaultPrevented, true)
+    assert.equal(document.activeElement, first)
+    assert.equal(key('Tab', true).defaultPrevented, true)
+    assert.equal(document.activeElement, last)
+    key('Tab')
+    assert.equal(document.activeElement, first)
+    dialog.focus()
+    key('Tab', true)
+    assert.equal(document.activeElement, last)
+    dialog.children = []
+    dialog.focus()
+    assert.equal(key('Tab').defaultPrevented, true, 'a preview without loaded controls still traps focus')
+    assert.equal(key('Escape').defaultPrevented, true)
+    assert.equal(closed, 1)
+    f.unmount()
+    assert.equal(document.activeElement, previous)
+    key('Escape')
+    assert.equal(closed, 1, 'unmount removes the keyboard listener')
+    // The fixture also unmounts in teardown.
+    f.unmount = () => {}
+  })
+}
+
+test('compact notices preserve announcement roles for all tones', () => {
+  for (const tone of ['error', 'success', 'info']) {
+    for (const compact of [false, true]) {
+      const node = Notice({ tone, compact, children: 'Message' })
+      assert.equal(node.props.role, tone === 'error' ? 'alert' : 'status')
+      assert.equal(node.props.class.includes('compact'), compact)
+      assert.equal(nodes(node).find((n) => n.type === 'span').props.children, 'Message')
+    }
+  }
+})
+
+test('avatar validation uses a compact error notice', (t) => {
+  const f = fixture(t)
+  const render = () => f.render(AvatarChooser, { avatar: '', onCrop() {} })
+  nodes(render()).find((n) => n.type === 'input').props.onChange({ currentTarget: { files: [new Blob([], { type: 'text/plain' })], value: '' } })
+  const notice = named(render(), 'Notice')
+  assert.equal(notice.props.compact, true)
+  assert.equal(notice.props.tone, 'error')
+  assert.match(notice.props.children, /PNG, JPEG or WebP/)
+})
+
+test('permission creation has labelled fields above the table in admin and room settings', async (t) => {
+  for (const room of [undefined, 'default']) {
+    const f = fixture(t)
+    globals(t, { fetch: async (path) => ({ ok: true, status: 200, json: async () => path === '/api/rooms' ? [{ name: 'default' }] : [] }) })
+    const render = () => f.render(PermissionTable, { room })
+    render()
+    await new Promise((resolve) => setImmediate(resolve))
+    const node = render(), create = named(node, 'PermissionRow'), table = named(node, 'AdminTable')
+    assert.equal(create.props.creating, true)
+    assert.equal(named(table, 'PermissionRow'), undefined)
+    assert.ok(nodes(node).indexOf(create) < nodes(node).indexOf(table))
+    const fields = PermissionFields({ draft: blankPermission('default'), room, rooms: [], creating: true, busy: false, until: '', onChange() {}, onUntil() {} })
+    assert.equal(nodes(fields).some((n) => n.type === 'td'), false)
+    const labels = nodes(fields).filter((n) => n.type?.name === 'Field').map((n) => n.props.label)
+    assert.deepEqual(labels, [...(room ? [] : ['Room']), 'User', 'Remote', 'Images', 'Upload', 'Trusted', 'Invited', 'Invite name'])
+  }
+})
+
+test('permission toolbar adds, clears and preserves ban date saving', async (t) => {
+  const f = fixture(t), requests = [], saved = []
+  const permission = blankPermission('default')
+  const props = { permission, room: 'default', rooms: [], creating: true, onSaved: (value) => saved.push(value), onDeleted() {} }
+  globals(t, { fetch: async (path, init) => {
+    const body = JSON.parse(init.body)
+    requests.push({ path, body })
+    return { ok: true, status: 200, json: async () => ({ ...permission, username: 'alice', ...body }) }
+  } })
+  const render = () => f.render(PermissionRow, props)
+  const change = (value) => named(render(), 'PermissionFields').props.onChange(value)
+  assert.equal(render().type, 'form')
+  assert.equal(render().props['aria-label'], 'Add permission')
+  change({ username: 'alice', remote: true })
+  button(render(), 'Clear').props.onClick()
+  assert.equal(named(render(), 'PermissionFields').props.draft.username, '')
+  for (const [banned, until] of [[true, '2026-11-01T12:30'], [true, ''], [false, '2026-11-01T12:30']]) {
+    change({ username: ' alice ', banned, remote: true, inviteName: 'Guest' })
+    named(render(), 'PermissionFields').props.onUntil(until)
+    render().props.onSubmit({ preventDefault() {} })
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(requests.at(-1).path, '/api/admin/permissions/default/alice')
+    assert.equal(requests.at(-1).body.bannedUntil, banned && until ? new Date(until).getTime() / 1000 : null)
+    assert.equal(requests.at(-1).body.remote, true)
+    assert.equal(requests.at(-1).body.inviteName, 'Guest')
+    assert.equal(named(render(), 'PermissionFields').props.draft.username, '')
+    assert.equal(named(render(), 'Notice').props.compact, true)
+    assert.equal(named(render(), 'Notice').props.children, 'Permission added.')
+  }
+  assert.equal(saved.length, 3)
+  render().props.onSubmit({ preventDefault() {} })
+  assert.equal(named(render(), 'Notice').props.tone, 'error')
+})
+
+test('ban date chip reveals a labelled editor and returns focus on Done or Escape', (t) => {
+  const f = fixture(t), updates = []
+  let focused = 0
+  f.elements = { button: { focus() { focused++ } } }
+  const props = { banned: false, until: '', busy: false, name: 'alice', onUntil: (value) => updates.push(value) }
+  const render = () => f.render(BanDate, props)
+  const chip = () => nodes(render()).find((n) => n.type === 'button')
+  assert.equal(chip().props.children, 'No ban')
+  assert.equal(named(render(), 'Input'), undefined)
+  chip().props.onClick()
+  assert.equal(chip().props['aria-expanded'], true)
+  const input = named(render(), 'Input')
+  assert.match(input.props['aria-label'], /Banned until for alice/)
+  assert.equal(input.props.autoFocus, true)
+  input.props.onInput({ currentTarget: { value: '2026-11-01T12:30' } })
+  assert.deepEqual(updates, ['2026-11-01T12:30'])
+  button(render(), 'Done').props.onClick()
+  assert.equal(named(render(), 'Input'), undefined)
+  assert.equal(focused, 1)
+  props.banned = true
+  assert.equal(chip().props.children, 'Forever')
+  props.until = '2026-11-01T12:30'
+  assert.equal(chip().props.children, '2026-11-01 12:30')
+  chip().props.onClick()
+  nodes(render()).find((n) => n.props?.onKeyDown).props.onKeyDown({ key: 'Escape', preventDefault() {}, stopPropagation() {} })
+  assert.equal(named(render(), 'Input'), undefined)
+  assert.equal(focused, 2)
+  props.busy = true
+  assert.equal(chip().props.disabled, true)
 })
 
 function desktop(t) {
@@ -325,15 +749,28 @@ test('media uses the same dev proxy target as the API', () => {
   assert.equal(config.server.proxy['/neko'].ws, true)
 })
 
-test('unknown rooms show Room not found and a home link', (t) => {
+test('kick screens share the site header and page buttons', (t) => {
   const f = fixture(t)
   f.store = { kicked: { value: { reason: 'not_found' } } }
   const node = KickedScreen()
-  assert.equal(node.props.message, 'Room not found')
-  assert.equal(nodes(node).find((n) => n.type === 'a').props.href, '/')
-  f.store.kicked.value.reason = 'session'
-  assert.equal(KickedScreen().props.message, 'Session expired')
-  assert.equal(nodes(KickedScreen()).find((n) => n.props?.href === '/login').props.children, 'Login')
+  assert.ok(named(node, 'Header'))
+  assert.equal(named(node, 'InfoScreen').props.message, 'Room not found')
+  const home = button(node, 'Back to rooms')
+  assert.equal(home.type.name, 'ButtonLink')
+  assert.equal(home.props.href, '/')
+  assert.equal(home.props.variant, 'primary')
+  for (const reason of ['banned', 'account', 'verified', 'invite', 'kicked', 'deleted', 'not_found', 'session']) {
+    f.store.kicked.value.reason = reason
+    const screen = KickedScreen()
+    assert.ok(named(screen, 'Header'))
+    assert.ok(button(screen, 'Back to rooms'))
+    const login = button(screen, 'Log in')
+    if (reason === 'account' || reason === 'session') {
+      assert.equal(login.type.name, 'ButtonLink')
+      assert.equal(login.props.href, '/login')
+    } else assert.equal(login, undefined)
+    if (reason === 'session') assert.equal(named(screen, 'InfoScreen').props.message, 'Session expired')
+  }
 })
 
 test('desktop upload status offers Cancel only while uploading', (t) => {
@@ -605,4 +1042,123 @@ test('becoming visible supersedes an older pending me read', async (t) => {
   reply(0, 200, { user: alice })
   await old
   assert.equal(state.me.value, null)
+})
+
+
+test('shared button variants consume styling props and preserve actions and links', () => {
+  let clicked = 0
+  const node = Button({ variant: 'danger-ghost', size: 'sm', icon: 'trash', children: undefined, onClick: () => clicked++ })
+  assert.equal(node.type, 'button')
+  assert.equal(node.props.type, 'button')
+  assert.equal(node.props.variant, undefined)
+  assert.equal(node.props.size, undefined)
+  node.props.onClick()
+  assert.equal(clicked, 1)
+  assert.equal(Button({ variant: 'primary', type: 'submit', children: 'Save' }).props.type, 'submit')
+  const link = ButtonLink({ variant: 'primary', href: '/room/default', children: 'Join' })
+  assert.equal(link.type, 'a')
+  assert.equal(link.props.href, '/room/default')
+  assert.equal(link.props.children[1], 'Join')
+  assert.equal(link.props.variant, undefined)
+})
+
+test('modal sizes retain the labelled dialog and close action', () => {
+  let closed = 0
+  for (const size of ['sm', 'md', 'lg', 'xl']) {
+    const node = Modal({ title: 'Question', size, onClose: () => closed++, children: 'Content' })
+    assert.equal(node.props.labelledBy, 'test-dialog')
+    const title = nodes(node).find((n) => n.type === 'h2')
+    assert.equal(title.props.id, node.props.labelledBy)
+    assert.equal(title.props.children, 'Question')
+    named(node, 'CloseButton').props.onClick()
+  }
+  assert.equal(closed, 4)
+})
+
+test('quiet inputs consume the appearance prop and retain normal input events', () => {
+  const values = []
+  const node = Input({ compact: true, quiet: true, value: 'Friends', onInput: (e) => values.push(e.currentTarget.value) })
+  assert.equal(node.props.quiet, undefined)
+  assert.equal(node.props.compact, undefined)
+  assert.equal(node.props.value, 'Friends')
+  node.props.onInput({ currentTarget: { value: 'Movie night' } })
+  assert.deepEqual(values, ['Movie night'])
+})
+
+test('settings form feedback keeps both notices and their announcement roles', () => {
+  const node = FormActions({ error: 'Save failed.', message: 'Saved.', children: 'Save button' })
+  const notices = nodes(node).filter((n) => n.type === Notice)
+  assert.deepEqual(notices.map((n) => n.props.children), ['Save failed.', 'Saved.'])
+  assert.deepEqual(notices.map((n) => Notice(n.props).props.role), ['alert', 'status'])
+  assert.equal(nodes(FormActions({ children: 'Save button' })).filter((n) => n.type === Notice).length, 0)
+})
+
+
+test('name colours keep readable choices and meet AA on both bubble and hover surfaces', () => {
+  const rgb = (color) => color.startsWith('#')
+    ? (color.length === 4 ? [...color.slice(1)].map(c => parseInt(c + c, 16)) : [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16)))
+    : color.match(/\d+/g).map(Number)
+  const luminance = (color) => rgb(color).map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0)
+  for (const [base, hover] of [['#1e2024', '#292b2f'], ['#fdfdfd', '#e4e4e4'], ['#595959', '#000']]) {
+    for (const color of ['#000', '#fff', '#f90', '#4aa', '#00f', '#f00', '#080', '#ff0']) {
+      const result = readableNameColor(color, base, hover)
+      for (const bg of [base, hover]) {
+        const a = luminance(result), b = luminance(bg)
+        assert((Math.max(a, b) + .05) / (Math.min(a, b) + .05) >= 4.6, `${color} against ${bg}`)
+      }
+    }
+  }
+  assert.equal(readableNameColor('#f90', '#1e2024'), '#f90')
+  assert.equal(readableNameColor('#000', '#fdfdfd'), '#000')
+  assert.equal(readableNameColor('invalid', '#fff'), 'invalid')
+})
+
+test('crop keyboard moves, resizes, preserves square avatars and leaves Escape to the dialog', () => {
+  let data = { x: 20, y: 30, width: 100, height: 100 }, prevented = 0, stopped = 0
+  const cropper = { getData: () => data, setData: update => { data = { ...data, ...update } } }
+  const key = (key, shiftKey = false, square = false) => cropKeyboard({ key, shiftKey, preventDefault() { prevented++ }, stopPropagation() { stopped++ } }, cropper, square)
+  key('ArrowRight'); key('ArrowUp')
+  assert.deepEqual(data, { x: 30, y: 20, width: 100, height: 100 })
+  key('ArrowRight', true); key('ArrowDown', true)
+  assert.deepEqual(data, { x: 30, y: 20, width: 110, height: 110 })
+  key('ArrowLeft', true, true)
+  assert.deepEqual(data, { x: 30, y: 20, width: 100, height: 100 })
+  data.width = data.height = 1; key('ArrowUp', true, true)
+  assert.equal(data.width, 1); assert.equal(data.height, 1)
+  key('Escape')
+  assert.equal(prevented, 6); assert.equal(stopped, 6)
+})
+
+test('dialog wrapping ignores roving items and unchecked members of a native radio group', (t) => {
+  const f = fixture(t), { document, Element, previous, dialog } = focusDom(t, f)
+  const first = new Element(), selected = new Element(), unchecked = new Element(), roving = new Element()
+  selected.type = unchecked.type = 'radio'; selected.name = unchecked.name = 'theme'; selected.checked = true
+  roving.tabIndex = -1
+  dialog.children = [first, selected, unchecked, roving]
+  f.render(() => ({ type: 'div', ref: useDialogFocus('radio-window', () => {}) }))
+  assert.equal(document.activeElement, first)
+  selected.focus()
+  const tab = Object.assign(new Event('keydown', { cancelable: true }), { key: 'Tab' })
+  document.dispatchEvent(tab)
+  assert(tab.defaultPrevented); assert.equal(document.activeElement, first)
+  const back = Object.assign(new Event('keydown', { cancelable: true }), { key: 'Tab', shiftKey: true })
+  document.dispatchEvent(back)
+  assert(back.defaultPrevented); assert.equal(document.activeElement, selected)
+  f.unmount(); assert.equal(document.activeElement, previous); f.unmount = () => {}
+})
+
+
+test('Escape closes only the top dialog and each close restores its opener', (t) => {
+  const parent = fixture(t), { document, Element, previous, dialog } = focusDom(t, parent)
+  const opener = new Element(); dialog.children = [opener]
+  let parentClosed = 0, childClosed = 0
+  parent.render(() => ({ type: 'div', ref: useDialogFocus('parent', () => parentClosed++) }))
+  const child = fixture(t), childDialog = new Element()
+  child.elements = { div: childDialog }; childDialog.children = [new Element()]
+  child.render(() => ({ type: 'div', ref: useDialogFocus('child', () => childClosed++) }))
+  const escape = () => document.dispatchEvent(Object.assign(new Event('keydown', { cancelable: true }), { key: 'Escape' }))
+  escape(); assert.equal(childClosed, 1); assert.equal(parentClosed, 0)
+  child.unmount(); child.unmount = () => {}; assert.equal(document.activeElement, opener)
+  escape(); assert.equal(childClosed, 1); assert.equal(parentClosed, 1)
+  parent.unmount(); parent.unmount = () => {}; assert.equal(document.activeElement, previous)
 })

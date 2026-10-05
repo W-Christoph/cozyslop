@@ -20,7 +20,7 @@ export function ChatSection() {
         options={[
           { value: 'classic', label: 'Classic', description: 'Each person in a bubble.' },
           { value: 'modern', label: 'Modern', description: 'Flat, with more air.' },
-          { value: 'compact', label: 'Compact', description: 'Fits the most on screen.' },
+          { value: 'compact', label: 'Compact', description: 'Time and name on every message.' },
         ]} />
       <ToggleRow title="Profile pictures" description={prefs.chatStyle === 'compact' ? 'Not shown in the compact display.' : "Show everyone's picture next to their messages."}
         checked={prefs.chatAvatars} disabled={prefs.chatStyle === 'compact'} onChange={(chatAvatars) => updatePreferences({ chatAvatars })} />

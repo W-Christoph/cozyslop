@@ -4,7 +4,7 @@ import { Modal } from '../Modal'
 import { Button } from '../Button'
 import { Field, Input } from '../ui/Field'
 import { Notice } from '../ui/Notice'
-import styles from './ResetPasswordModal.module.css'
+import formStyles from '../ui/Form.module.css'
 
 export function ResetPasswordModal({
   username,
@@ -40,15 +40,15 @@ export function ResetPasswordModal({
     }
   }
   return (
-    <Modal compact title={`Reset password: ${username}`} onClose={onClose} footer={<>
+    <Modal size="sm" title={`Reset password: ${username}`} onClose={onClose} footer={<>
       <Button onClick={onClose}>Cancel</Button>
-      <Button accent type="submit" form={form} disabled={busy}>
+      <Button variant="primary" type="submit" form={form} disabled={busy}>
         Reset password
       </Button>
     </>}>
       <form
         id={form}
-        class={styles.form}
+        class={formStyles.form}
         onSubmit={(e) => {
           e.preventDefault()
           void save()

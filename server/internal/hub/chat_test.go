@@ -40,6 +40,7 @@ func TestChatSendEditDelete(t *testing.T) {
 		requireEqual(t, m.Author, alice.Key())
 		requireEqual(t, m.Nickname, alice.User.Nickname)
 		requireEqual(t, m.NameColor, alice.User.NameColor)
+		requireEqual(t, m.AvatarURL, "/media/avatars/alice.png")
 		requireEqual(t, m.Type, "text")
 		requireEqual(t, m.Anonymous, false)
 		if m.ID <= 0 || m.Time <= 0 {
@@ -91,6 +92,39 @@ func TestChatSendEditDelete(t *testing.T) {
 	}
 	f.r.Handle(f.ctx, c, ClientMsg{Type: "unknown"})
 	expectError(t, a, "Unknown message type.")
+}
+
+func TestChatAvatarsAfterLeaving(t *testing.T) {
+	for _, kind := range []string{"custom", "default", "anonymous"} {
+		t.Run(kind, func(t *testing.T) {
+			f := newFixture(t, store.RoomSettings{})
+			author := anon("author")
+			want := "/png/default_avatar_on_alpha.png"
+			if kind != "anonymous" {
+				author = f.user("alice")
+				want = "/media/avatars/alice.png"
+				if kind == "default" {
+					requireOK(t, f.s.UpdateAvatar(f.ctx, author.User.ID, ""))
+					author.User.Avatar = ""
+					want = "/png/default_avatar.png"
+				}
+			}
+			c, rec := f.join(author)
+			f.r.Handle(f.ctx, c, ClientMsg{Type: "chat_send", Body: "Hello"})
+			requireEqual(t, rec.wait(t, "chat").(chatMsg).Message.AvatarURL, want)
+			f.r.Leave(f.ctx, c)
+			_, watcher := f.join(anon("watcher"))
+			history := watcher.wait(t, "welcome").(welcomeMsg).History
+			requireEqual(t, len(history), 1)
+			requireEqual(t, history[0].AvatarURL, want)
+			if kind != "anonymous" {
+				requireOK(t, f.s.UpdateAvatar(f.ctx, author.User.ID, "updated.png"))
+				_, newcomer := f.join(anon("newcomer"))
+				history = newcomer.wait(t, "welcome").(welcomeMsg).History
+				requireEqual(t, history[0].AvatarURL, "/media/avatars/updated.png")
+			}
+		})
+	}
 }
 
 func TestChatLimitsAndRateLimit(t *testing.T) {
@@ -161,6 +195,7 @@ func TestWhisper(t *testing.T) {
 		requireEqual(t, m.Type, "whisper")
 		requireEqual(t, m.Body, "private")
 		requireEqual(t, m.Nickname, "Mod Whisper")
+		requireEqual(t, m.AvatarURL, "/media/avatars/admin.png")
 	}
 	requireEqual(t, watch.count("chat"), 0)
 	f.r.Handle(f.ctx, c, ClientMsg{Type: "whisper", To: admin.Key(), Body: "self"})

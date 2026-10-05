@@ -13,8 +13,8 @@ const checks = [], errors = []
 ;(async () => {
   const browser = await chromium.launch({ headless: true })
   try {
-    async function setup(user = self) {
-      const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+    async function setup(user = self, touch = false) {
+      const context = await browser.newContext({ viewport: touch ? { width: 390, height: 844 } : { width: 1280, height: 800 }, hasTouch: touch })
       const page = await context.newPage()
       let room, requests = [], uploads = [], failUpload = false
       page.on('pageerror', e => errors.push(e.message))
@@ -67,7 +67,8 @@ const checks = [], errors = []
         ws.send(JSON.stringify({ event: 'signal/provide', payload: { sdp: 'test' } }))
       }))
       await page.goto(`${base}/room/default`)
-      await expect(page.getByText('Live', { exact: true })).toBeVisible()
+      await expect(page.getByRole('main', { name: 'Room screen' }).getByRole('status')).toHaveCount(0)
+      await expect.poll(() => page.locator('video').first().evaluate(el => el.readyState)).toBeGreaterThanOrEqual(2)
       await expect(page.getByLabel('Chat message', { exact: true })).toBeVisible()
       return { page, context, requests, uploads, send: data => room.send(JSON.stringify(data)), welcome, fail: value => { failUpload = value } }
     }
@@ -212,7 +213,17 @@ const checks = [], errors = []
     await expect.poll(() => p.locator('[data-chat-bubble]').last().evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0.45)')
     await p.getByRole('button', { name: 'Open image', exact: true }).click()
     assert(await p.getByRole('dialog').evaluate(el => document.fullscreenElement.contains(el)))
+    const openImage = p.getByRole('button', { name: 'Open image', exact: true })
+    const previewLink = p.getByRole('dialog').getByRole('link')
+    await p.keyboard.press('Tab'); await expect(previewLink).toBeFocused()
+    await p.keyboard.press('Tab'); await expect(previewLink).toBeFocused()
+    await p.keyboard.press('Shift+Tab'); await expect(previewLink).toBeFocused()
+    assert(await p.getByRole('button', { name: 'Exit fullscreen', exact: true }).evaluate(el => {
+      const rect = el.getBoundingClientRect()
+      return !!document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)?.closest('[role="dialog"]')
+    }), 'the media backdrop covers the fullscreen toolbar')
     await p.keyboard.press('Escape')
+    await expect(openImage).toBeFocused()
     if (await p.evaluate(() => !!document.fullscreenElement)) await p.getByRole('button', { name: 'Exit fullscreen', exact: true }).click()
     await p.setViewportSize({ width: 390, height: 844 })
     await expect(input).toBeVisible(); assert(await input.evaluate(el => el.getBoundingClientRect().width) > 200)
@@ -238,6 +249,26 @@ const checks = [], errors = []
     await a.page.getByLabel('Chat message', { exact: true }).fill('x'.repeat(300))
     assert.equal((await a.page.getByLabel('Chat message', { exact: true }).inputValue()).length, 250)
     checks.push('anonymous textarea enforced 250-char limit')
+    const mobile = await setup(self, true)
+    mobile.welcome([msg(201, self, 'Touch target text that wraps onto several lines beside both message actions.')])
+    for (const chatStyle of ['classic', 'modern', 'compact']) {
+      await mobile.page.evaluate(async chatStyle => { const state = await import('/src/app/state.ts'); state.updatePreferences({ chatStyle }) }, chatStyle)
+      const bubble = mobile.page.locator('[data-chat-bubble]')
+      const edit = bubble.getByRole('button', { name: 'Edit message', exact: true })
+      const remove = bubble.getByRole('button', { name: 'Delete message', exact: true })
+      await expect(edit).toBeVisible(); await expect(remove).toBeVisible()
+      const e = await edit.boundingBox(), d = await remove.boundingBox()
+      assert(e.width >= 32 && e.height >= 32 && d.width >= 32 && d.height >= 32, `${chatStyle}: touch targets`)
+      assert(e.x + e.width <= d.x, `${chatStyle}: actions do not overlap`)
+      assert(await edit.evaluate(el => {
+        const text = el.parentElement.querySelector('span'), range = document.createRange()
+        range.selectNodeContents(text)
+        const button = el.getBoundingClientRect()
+        return [...range.getClientRects()].every(rect => rect.right <= button.left || rect.top >= button.bottom || rect.bottom <= button.top)
+      }), `${chatStyle}: actions do not cover text`)
+    }
+    checks.push('fullscreen preview above toolbar, Tab/Shift+Tab trap and focus return; 32px touch actions in all chat styles without overlap')
+    await mobile.context.close()
     assert.deepEqual(errors, [])
     console.log(JSON.stringify({ checks, pageErrors: errors }, null, 2))
     await h.context.close(); await a.context.close()

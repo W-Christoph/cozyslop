@@ -310,8 +310,16 @@ export class RoomStore {
         break
       case 'user_joined':
       case 'user_updated':
-        this.users.value = new Map(this.users.value).set(msg.user.key, msg.user)
-        if (msg.user.key === this.selfKey.value) this.self.value = msg.user
+        batch(() => {
+          this.users.value = new Map(this.users.value).set(msg.user.key, msg.user)
+          const avatarUrl = msg.user.avatarUrl || (msg.user.anonymous ? '/png/default_avatar_on_alpha.png' : '/png/default_avatar.png')
+          if (this.chat.value.some((message) => message.author === msg.user.key && message.avatarUrl !== avatarUrl)) {
+            this.chat.value = this.chat.value.map((message) => message.author === msg.user.key
+              ? { ...message, avatarUrl }
+              : message)
+          }
+          if (msg.user.key === this.selfKey.value) this.self.value = msg.user
+        })
         break
       case 'user_left': {
         const users = new Map(this.users.value)

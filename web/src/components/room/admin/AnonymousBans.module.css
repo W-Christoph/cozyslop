@@ -1,2 +1,2 @@
-.ip { font-family: var(--font-mono); font-size: 0.87rem; }
+.ip { font-family: var(--font-mono); font-size: var(--text-sm); }
 .actions { display: flex; justify-content: flex-end; }

@@ -3,29 +3,25 @@
 .banner { --name-colour: var(--accent); height: 64px; background: linear-gradient(120deg, color-mix(in srgb, var(--name-colour) 70%, var(--bg-raised)), color-mix(in srgb, var(--name-colour) 22%, var(--bg-raised))); }
 .identity { display: flex; align-items: flex-end; flex-wrap: wrap; gap: var(--space-4); padding: 0 var(--space-4) var(--space-4); margin-top: -40px; }
 .names { flex: 1; min-width: 0; padding-bottom: 2px; }
-.nickname { font-size: 1.3rem; font-weight: 700; overflow-wrap: anywhere; }
-.username { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); color: var(--text-muted); font-size: 0.9rem; }
+.nickname { font-size: var(--text-2xl); font-weight: 700; overflow-wrap: anywhere; }
+.username { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); color: var(--text-muted); font-size: var(--text-body); }
 .colour { display: flex; gap: var(--space-5); }
 .picker { display: flex; flex-direction: column; gap: var(--space-2); }
-.picker :global(.react-colorful) { width: 220px; height: 170px; border-radius: var(--radius-md); overflow: hidden; }
+.picker :global(.react-colorful) { width: 220px; height: 170px; border-radius: var(--radius-md); overflow: visible; }
 .picker :global(.react-colorful__saturation) { border-radius: 0; }
 .picker :global(.react-colorful__hue) { height: 14px; border-radius: 0; }
-.picker :global(.react-colorful__interactive:focus-visible .react-colorful__pointer) { box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--text); }
 .picker :global(.react-colorful__pointer) { width: 16px; height: 16px; border-width: 2px; }
-.label { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
 .presets { display: flex; flex-wrap: wrap; gap: 6px; width: 220px; }
 .preset { width: 16px; height: 16px; flex: 1 0 16px; padding: 0; border-radius: 50%; aspect-ratio: 1; box-shadow: inset 0 0 0 1px var(--border-strong); }
 .preset[data-current] { outline: 2px solid var(--text); outline-offset: 2px; }
-.preset:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .result { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .result > [role='img'] { flex: 1; }
-.hex { display: flex; align-items: center; gap: var(--space-2); width: 220px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-input); }
-.hex:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.hex input { flex: 1; min-width: 0; padding: 7px 0; border: 0; background: transparent; color: var(--text); font: 0.87rem var(--font-mono); text-transform: uppercase; }
-.hex input:focus { outline: none; }
+.hex { display: flex; align-items: center; gap: var(--space-2); width: 220px; padding: 0 10px; border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--bg-input); }
+.hex input { flex: 1; min-width: 0; padding: 7px 0; border: 0; background: transparent; color: var(--text); font: var(--text-sm) var(--font-mono); text-transform: uppercase; }
 .swatch { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--border-strong); }
 .actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
-@media (max-width: 620px) {
+@media (max-width: 640px) {
+  .names { flex-basis: 100%; }
   .colour { flex-direction: column; }
   .picker :global(.react-colorful), .presets, .hex { width: 100%; }
 }

@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact'
 import { useId } from 'preact/hooks'
 import { Dialog } from './Dialog'
+import { CloseButton } from './CloseButton'
 import { Icon, type IconName } from './Icon'
 import styles from './SettingsLayout.module.css'
 
@@ -59,7 +60,7 @@ export function SettingsLayout({ nav, current, onSelect, navHeader, navFooter, w
       <div class={styles.main}>
         <header class={styles.header}>
           <h2 id={titleId} class={styles.title}>{title}</h2>
-          {onClose && <button class={styles.close} type="button" onClick={onClose} aria-label="Close"><Icon name="x" size={20} /></button>}
+          {onClose && <CloseButton onClick={onClose} />}
         </header>
         <div class={styles.scroll}>
           <div class={`${styles.content} ${wide ? styles.wide : ''}`}>{children}</div>

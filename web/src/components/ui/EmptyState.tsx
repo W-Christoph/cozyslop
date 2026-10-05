@@ -11,7 +11,3 @@ export function EmptyState({ icon, title, children }: { icon: IconName; title: s
     </div>
   )
 }
-
-export function Spinner({ label }: { label: string }) {
-  return <div class={styles.loading} role="status"><span class={styles.spinner} />{label}</div>
-}

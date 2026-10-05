@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import { api, type Permission, type RoomInfo } from '../../api'
-import { Spinner } from '../ui/EmptyState'
+import { Spinner } from '../ui/Spinner'
 import { Notice } from '../ui/Notice'
 import { AdminTable } from './AdminTable'
 import { blankPermission, PermissionRow } from './PermissionRow'
@@ -62,8 +62,19 @@ export function PermissionTable({ room }: { room?: string }) {
   }
   return (
     <>
-      {loading && <Spinner label="Loading permissions..." />}
+      {loading && <Spinner label="Loading permissions…" />}
       {error && <Notice tone="error">{error}</Notice>}
+      {!loading && (
+        <PermissionRow
+          key={`new:${room ?? ''}`}
+          permission={newPermission}
+          room={room}
+          rooms={rooms}
+          creating
+          onSaved={saved}
+          onDeleted={() => {}}
+        />
+      )}
       <AdminTable
         headings={[
           ...(room ? [] : ['Room']),
@@ -78,17 +89,6 @@ export function PermissionTable({ room }: { room?: string }) {
           '',
         ]}
       >
-        {!loading && (
-          <PermissionRow
-            key={`new:${room ?? ''}`}
-            permission={newPermission}
-            room={room}
-            rooms={rooms}
-            creating
-            onSaved={saved}
-            onDeleted={() => {}}
-          />
-        )}
         {permissions.map((permission) => (
           <PermissionRow
             key={JSON.stringify([permission.room, permission.username])}

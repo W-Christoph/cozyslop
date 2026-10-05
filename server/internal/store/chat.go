@@ -21,6 +21,7 @@ type ChatMessage struct {
 	UserID      *int64
 	Nickname    string // snapshot at posting time
 	NameColor   string
+	Avatar      string // current account avatar, joined when reading history; not stored
 	Anonymous   bool
 	Type        string // text | image | video
 	Body        string
@@ -29,12 +30,12 @@ type ChatMessage struct {
 	CreatedAtMs int64
 }
 
-const chatColumns = "id, room, identity, user_id, nickname, name_color, anonymous, type, body, media, edited, created_at_ms"
+const chatColumns = "chat.id, chat.room, chat.identity, chat.user_id, chat.nickname, chat.name_color, chat.anonymous, chat.type, chat.body, chat.media, chat.edited, chat.created_at_ms"
 
 func scanChat(row interface{ Scan(...any) error }) (ChatMessage, error) {
 	var m ChatMessage
 	err := row.Scan(&m.ID, &m.Room, &m.Identity, &m.UserID, &m.Nickname, &m.NameColor,
-		&m.Anonymous, &m.Type, &m.Body, &m.Media, &m.Edited, &m.CreatedAtMs)
+		&m.Anonymous, &m.Type, &m.Body, &m.Media, &m.Edited, &m.CreatedAtMs, &m.Avatar)
 	return m, err
 }
 
@@ -56,9 +57,9 @@ func (s *Store) InsertChat(ctx context.Context, m *ChatMessage) error {
 func (s *Store) ChatHistory(ctx context.Context, room string) ([]ChatMessage, error) {
 	cutoff := s.now().Add(-ChatRetention).UnixMilli()
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+chatColumns+` FROM (
+		`SELECT `+chatColumns+`, COALESCE(users.avatar, '') FROM (
 		   SELECT * FROM chat_messages WHERE room = ? AND created_at_ms > ? ORDER BY id DESC LIMIT ?
-		 ) ORDER BY id`, room, cutoff, ChatMaxMessages)
+		 ) AS chat LEFT JOIN users ON users.id = chat.user_id ORDER BY chat.id`, room, cutoff, ChatMaxMessages)
 	if err != nil {
 		return nil, err
 	}

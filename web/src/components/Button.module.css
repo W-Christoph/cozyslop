@@ -5,28 +5,32 @@
   gap: var(--space-2);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
-  font: 600 0.9rem/1.2 var(--font-ui);
+  font: 600 var(--text-body)/1.2 var(--font-ui);
   white-space: nowrap;
   text-decoration: none;
   cursor: pointer;
   user-select: none;
   transition: background-color 0.15s, border-color 0.15s, color 0.15s;
 }
-.button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .button:disabled { opacity: 0.5; cursor: not-allowed; }
-.sm { padding: 5px 10px; font-size: 0.82rem; border-radius: 6px; }
+.sm { padding: 5px 10px; font-size: var(--text-xs); border-radius: var(--radius-sm); }
 .md { min-height: var(--control-height); padding: 6px 14px; }
-.lg { padding: 11px 18px; font-size: 0.95rem; }
+.lg { padding: 11px 18px; font-size: var(--text-md); }
 .block { display: flex; width: 100%; }
 .bare.sm { min-width: 30px; padding: 5px 6px; }
 .bare.md { min-width: var(--control-height); padding: 6px; }
 
-.primary { background: var(--accent); color: var(--on-accent); }
+.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent-text); }
 .primary:hover:not(:disabled) { background: var(--accent-hover); }
 .primary:disabled { opacity: 1; background: var(--bg-raised); border-color: var(--border); color: var(--text-muted); }
-.secondary { background: var(--bg-raised); color: var(--text); border-color: var(--border); }
-.secondary:hover:not(:disabled) { background: var(--bg-raised); border-color: var(--border-strong); }
+.secondary { background: var(--bg-raised); color: var(--text); border-color: var(--border-control); }
+.secondary:hover:not(:disabled) { background: var(--bg-raised); border-color: var(--border-control); }
 .ghost { background: transparent; color: var(--text-secondary); }
 .ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
 .danger { background: var(--danger); color: var(--on-danger); }
 .danger:hover:not(:disabled) { background: var(--danger-hover); }
+.dangerOutline { background: transparent; color: var(--danger-text); border-color: var(--danger); }
+.dangerOutline:hover:not(:disabled) { background: var(--danger-soft); border-color: var(--danger-hover); }
+
+.dangerGhost { background: transparent; color: var(--text-secondary); }
+.dangerGhost:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger-text); }

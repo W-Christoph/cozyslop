@@ -44,7 +44,7 @@ export function RoomSettingsWindow({ onClose }: { onClose: () => void }) {
   const [invites, setInvites] = useState(0)
   if (!store.rights.value.admin) return null
   return (
-    <SettingsWindow left nav={nav} current={section} wide={wide.includes(section)} onClose={onClose}
+    <SettingsWindow nav={nav} current={section} wide={wide.includes(section)} onClose={onClose}
       onSelect={(id) => setSection(id as SectionId)}
       navHeader={<div class={styles.room}><span>Room settings</span><strong>{store.settings.value?.name ?? store.room}</strong></div>}>
       {section === 'access' && <RoomAccessSettings />}
@@ -56,13 +56,13 @@ export function RoomSettingsWindow({ onClose }: { onClose: () => void }) {
         </Section>
       )}
       {section === 'permissions' && (
-        <Section title="Account permissions" description="Every account with its own permissions in this room, present or not. The first row adds a new one.">
+        <Section title="Account permissions" description="Every account with its own permissions in this room, present or not. The form above the table adds a new one.">
           <PermissionTable room={store.room} />
         </Section>
       )}
       {section === 'invites' && (
         <Section title="Invite links" description="Links that let people into this room."
-          actions={<Button accent icon="plus" onClick={() => setInvite(true)}>Create invite</Button>}>
+          actions={<Button variant="primary" icon="plus" onClick={() => setInvite(true)}>Create invite</Button>}>
           <InviteList key={invites} room={store.room} />
         </Section>
       )}

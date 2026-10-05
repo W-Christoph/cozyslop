@@ -3,6 +3,7 @@ import { Button } from '../../Button'
 import { Field, Input, Select } from '../../ui/Field'
 import { Notice } from '../../ui/Notice'
 import { useRoomStore } from '../RoomContext'
+import { userIdentity } from '../UserHoverName'
 import styles from './Whisper.module.css'
 
 export function Whisper() {
@@ -27,18 +28,18 @@ export function Whisper() {
   if (!store.rights.value.admin) return null
   return (
     <form class={styles.form} onSubmit={(e) => { e.preventDefault(); send() }}>
-      <Field label="To">
+      <Field label="To" class={styles.target}>
         <Select value={selected ? target : ''} onChange={(e) => { setTarget(e.currentTarget.value); setError(''); setSent('') }}>
           <option value="" disabled>Select user</option>
           {users.map((user) => <option key={user.key} value={user.key}>
-            {user.nickname} ({user.username || `Anon ${user.key.slice(2, 6)}`})
+            {user.nickname} ({userIdentity(user)})
           </option>)}
         </Select>
       </Field>
       <Field label="Message" class={styles.message}>
         <Input type="text" value={body} maxLength={4096} onInput={(e) => { setBody(e.currentTarget.value); setError(''); setSent('') }} />
       </Field>
-      <Button accent type="submit" disabled={!selected || !body.trim() || !connected}>Send</Button>
+      <Button variant="primary" type="submit" disabled={!selected || !body.trim() || !connected}>Send</Button>
       <div class={styles.notes}>
         {!users.length && <Notice>No other users are in the room.</Notice>}
         {!connected && <Notice>Wait for the room to reconnect before sending.</Notice>}

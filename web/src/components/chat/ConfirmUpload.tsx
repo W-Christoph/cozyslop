@@ -43,7 +43,7 @@ export function ConfirmUpload({ file, screenshot, onClose, onUploaded, onError }
   }
   return <Modal title="Upload this file?" size={screenshot ? 'lg' : 'sm'} onClose={onClose} footer={<>
     <Button onClick={onClose}>Cancel</Button>
-    <Button accent icon="upload" disabled={sending || !store.rights.value.image || store.server.value !== 'connected'} onClick={() => { void upload() }}>{sending ? 'Uploading…' : 'Upload'}</Button>
+    <Button variant="primary" icon="upload" disabled={sending || !store.rights.value.image || store.server.value !== 'connected'} onClick={() => { void upload() }}>{sending ? 'Uploading…' : 'Upload'}</Button>
   </>}>
     <div class={styles.frame}>
       {source && (file.type.startsWith('video/')

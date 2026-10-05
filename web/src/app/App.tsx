@@ -25,7 +25,7 @@ export function App() {
     return (
       <InfoScreen
         busy
-        message="Connecting to CozyCast..."
+        message="Connecting to CozyCast…"
         submessage="If this takes too long please refresh"
       />
     )
@@ -75,7 +75,7 @@ function Shell() {
   // The room fills the window and opens the settings itself.
   if (inRoom) return routes
   return (
-    <div class={styles.app}>
+    <div data-ui class={styles.app}>
       <Header />
       {routes}
       {settingsOpen.value && <SettingsDialog />}

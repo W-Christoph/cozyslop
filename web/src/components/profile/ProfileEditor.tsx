@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect, useLayoutEffect, useState } from 'preact/hooks'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
 import { api, type Me } from '../../api'
 import { me } from '../../app/state'
@@ -8,6 +8,8 @@ import { Badge } from '../ui/Badge'
 import { Field, Input } from '../ui/Field'
 import { Notice } from '../ui/Notice'
 import { AvatarChooser } from './AvatarChooser'
+import { profileChanged } from './profileChanges'
+import formStyles from '../ui/Form.module.css'
 import styles from './ProfileEditor.module.css'
 
 const DEFAULT_COLOR = '#f90'
@@ -21,7 +23,7 @@ function colourful(hex: string): boolean {
 
 const presets = ['#ff9900', '#f87171', '#facc15', '#4ade80', '#2dd4bf', '#38bdf8', '#818cf8', '#c084fc', '#f472b6', '#ffffff']
 
-export function ProfileEditor() {
+export function ProfileEditor({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) {
   const user = me.value
   const [nickname, setNickname] = useState(user?.nickname ?? ''),
     [color, setColor] = useState(user?.nameColor ?? DEFAULT_COLOR)
@@ -44,8 +46,12 @@ export function ProfileEditor() {
     setColor(me.value?.nameColor ?? DEFAULT_COLOR)
     setBlob(null)
   }, [user?.username])
+  const changed = !!user && profileChanged(user, nickname, color, blob)
+  useLayoutEffect(() => {
+    onDirtyChange?.(changed)
+    return () => { onDirtyChange?.(false) }
+  }, [changed, onDirtyChange])
   if (!user) return null
-  const changed = nickname !== user.nickname || color.toLowerCase() !== user.nameColor.toLowerCase() || !!blob
   function reset() {
     setNickname(user!.nickname)
     setColor(user!.nameColor)
@@ -63,12 +69,14 @@ export function ProfileEditor() {
         nameColor: color,
       })
       me.value = profile.user
+      setNickname((current) => current === nickname ? profile.user.nickname : current)
+      setColor((current) => current === color ? profile.user.nameColor : current)
       if (blob) {
         const form = new FormData()
         form.append('avatar', blob, 'avatar.png')
         const result = await api.post<{ user: Me }>('/api/me/avatar', form)
         me.value = result.user
-        setBlob(null)
+        setBlob((current) => current === blob ? null : current)
       }
       setMessage('Profile saved.')
     } catch (e) {
@@ -132,7 +140,7 @@ export function ProfileEditor() {
 
       <div class={styles.colour}>
         <div class={styles.picker}>
-          <span class={styles.label}>Name colour</span>
+          <span class={formStyles.label}>Name colour</span>
           <HexColorPicker
             color={color}
             onChange={setColor}
@@ -144,13 +152,13 @@ export function ProfileEditor() {
                 aria-label={`Use ${preset}`} title={preset} data-current={color.toLowerCase() === preset || undefined} onClick={() => setColor(preset)} />
             ))}
           </div>
-          <div class={styles.hex}>
+          <div data-focus-ring class={styles.hex}>
             <span class={styles.swatch} style={{ backgroundColor: color }} />
-            <HexColorInput color={color} onChange={setColor} prefixed aria-label="Nickname colour as hex" />
+            <HexColorInput data-focus-proxy color={color} onChange={setColor} prefixed aria-label="Nickname colour as hex" />
           </div>
         </div>
         <div class={styles.result}>
-          <span class={styles.label}>Preview</span>
+          <span class={formStyles.label}>Preview</span>
           <ChatPreview nickname={nickname || user.nickname} color={color} avatarUrl={avatar || '/png/default_avatar.png'} />
         </div>
       </div>
@@ -161,7 +169,7 @@ export function ProfileEditor() {
         <Button variant="ghost" disabled={busy || !changed} onClick={reset}>
           Reset
         </Button>
-        <Button accent type="submit" disabled={busy || !changed}>
+        <Button variant="primary" type="submit" disabled={busy || !changed}>
           {busy ? 'Saving…' : 'Save changes'}
         </Button>
       </div>

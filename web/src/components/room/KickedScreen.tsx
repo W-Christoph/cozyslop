@@ -1,4 +1,6 @@
 import { InfoScreen } from '../InfoScreen'
+import { ButtonLink } from '../Button'
+import { Header } from '../Header'
 import type { IconName } from '../ui/Icon'
 import { useRoomStore } from './RoomContext'
 import styles from './KickedScreen.module.css'
@@ -17,8 +19,12 @@ export function KickedScreen() {
     not_found: ['Room not found', 'This room does not exist.', 'search'],
     session: ['Session expired', 'Please log in again to join this room.', 'lock'],
   } satisfies Record<typeof kick.reason, [string, string, IconName]>)[kick.reason]
-  return <InfoScreen message={info[0]} submessage={info[1]} icon={info[2]}>
-    {(kick.reason === 'account' || kick.reason === 'session') && <a class={`${styles.link} ${styles.primary}`} href="/login">Login</a>}
-    <a class={styles.link} href="/">Home</a>
-  </InfoScreen>
+  const login = kick.reason === 'account' || kick.reason === 'session'
+  return <div class={styles.page}>
+    <Header />
+    <InfoScreen message={info[0]} submessage={info[1]} icon={info[2]}>
+      {login && <ButtonLink variant="primary" size="lg" href="/login">Log in</ButtonLink>}
+      <ButtonLink variant={login ? 'secondary' : 'primary'} size="lg" href="/">Back to rooms</ButtonLink>
+    </InfoScreen>
+  </div>
 }

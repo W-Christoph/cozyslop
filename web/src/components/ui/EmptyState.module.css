@@ -10,15 +10,5 @@
 .icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--bg-raised); color: var(--text-muted); }
 .icon { margin-bottom: var(--space-3); }
 .title { font-weight: 600; }
-.text { margin-top: var(--space-1); color: var(--text-muted); font-size: 0.9rem; max-width: 40ch; }
+.text { margin-top: var(--space-1); color: var(--text-muted); font-size: var(--text-body); max-width: 40ch; }
 .text > p { margin: 0 0 var(--space-4); }
-.loading { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) 0; color: var(--text-muted); font-size: 0.9rem; }
-.spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--border-strong);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }

@@ -32,7 +32,7 @@ export function FilesWindow({ onClose }: { onClose: () => void }) {
         <strong>Drop files here to send them to the room</strong>
         <span>They land in the desktop's Downloads folder, ready to open in VLC or the browser.</span>
       </div>
-      <Button accent disabled={uploading} onClick={() => input.current?.click()}>{uploading ? 'Uploading…' : 'Choose files'}</Button>
+      <Button variant="primary" disabled={uploading} onClick={() => input.current?.click()}>{uploading ? 'Uploading…' : 'Choose files'}</Button>
       <input ref={input} type="file" multiple hidden onChange={(e) => {
         const el = e.currentTarget
         upload(el.files)

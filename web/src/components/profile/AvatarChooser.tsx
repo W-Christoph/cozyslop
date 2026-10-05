@@ -3,6 +3,9 @@ import Cropper from 'cropperjs'
 import { Modal } from '../Modal'
 import { Button } from '../Button'
 import { Icon } from '../ui/Icon'
+import { Notice } from '../ui/Notice'
+import { cropKeyboard } from '../ui/cropKeyboard'
+import cropStyles from '../ui/Cropper.module.css'
 import styles from './AvatarChooser.module.css'
 
 export function AvatarChooser({
@@ -75,17 +78,20 @@ export function AvatarChooser({
   }
   return (
     <>
-      <button
-        class={styles.avatar}
-        type="button"
-        disabled={disabled}
-        onClick={() => input.current?.click()}
-        aria-label="Upload avatar"
-      >
-        <img src={avatar || '/png/default_avatar.png'} alt="Avatar" />
-        <span class={styles.overlay}>Change</span>
-        <span class={styles.badge}><Icon name="upload" size={14} /></span>
-      </button>
+      <div class={styles.chooser}>
+        <button
+          class={styles.avatar}
+          type="button"
+          disabled={disabled}
+          onClick={() => input.current?.click()}
+          aria-label="Change avatar"
+        >
+          <img src={avatar || '/png/default_avatar.png'} alt="Avatar" />
+          <span class={styles.overlay}>Change</span>
+          <span class={styles.badge}><Icon name="upload" size={14} /></span>
+        </button>
+        <Button size="sm" disabled={disabled} onClick={() => input.current?.click()}>Change avatar</Button>
+      </div>
       <input
         class={styles.input}
         type="file"
@@ -98,7 +104,8 @@ export function AvatarChooser({
       />
       {source && (
         <Modal title="Crop avatar" size="lg" onClose={close}>
-          <div class={styles.cropper}>
+          <div class={`${cropStyles.frame} ${styles.cropper}`} tabIndex={0} role="group" aria-label="Crop area: arrow keys move, Shift and arrow keys resize"
+            onKeyDown={(e) => cropKeyboard(e, cropper.current, true)}>
             <img
               ref={image}
               src={source}
@@ -110,16 +117,17 @@ export function AvatarChooser({
               }
             />
           </div>
-          <div class={styles.actions}>
+          <p class={cropStyles.hint}>Arrow keys move the crop; Shift + arrow keys resize it.</p>
+          <div class={cropStyles.actions}>
             <Button onClick={close}>Close</Button>
-            <Button accent disabled={!ready} onClick={crop}>
+            <Button variant="primary" disabled={!ready} onClick={crop}>
               Crop
             </Button>
           </div>
-          {error && <p class={styles.error} role="alert">{error}</p>}
+          {error && <Notice compact tone="error">{error}</Notice>}
         </Modal>
       )}
-      {!source && error && <p class={styles.error} role="alert">{error}</p>}
+      {!source && error && <Notice compact tone="error">{error}</Notice>}
     </>
   )
 }

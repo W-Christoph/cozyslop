@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact'
 import { Icon, type IconName } from './ui/Icon'
+import { LoadingIndicator } from './ui/Spinner'
 import styles from './InfoScreen.module.css'
 
 // A whole-page message: loading, an error, the reason someone was removed.
@@ -17,9 +18,9 @@ export function InfoScreen({
   children?: ComponentChildren
 }) {
   return (
-    <main class={styles.screen}>
+    <main data-ui class={styles.screen}>
       <div class={styles.card}>
-        {busy ? <span class={styles.spinner} /> : <div class={styles.icon}><Icon name={icon ?? 'info'} size={26} /></div>}
+        {busy ? <LoadingIndicator large /> : <div class={styles.icon}><Icon name={icon ?? 'info'} size={26} /></div>}
         <h1 class={styles.message}>{message}</h1>
         {submessage && <p class={styles.submessage}>{submessage}</p>}
         {children && <div class={styles.actions}>{children}</div>}

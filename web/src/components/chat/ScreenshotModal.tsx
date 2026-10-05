@@ -4,6 +4,8 @@ import { Button } from '../Button'
 import { Modal } from '../Modal'
 import { Notice } from '../ui/Notice'
 import { useObjectUrl } from './useObjectUrl'
+import { cropKeyboard } from '../ui/cropKeyboard'
+import cropStyles from '../ui/Cropper.module.css'
 import styles from './ScreenshotModal.module.css'
 
 export function ScreenshotModal({ source, onCrop, onClose }: { source: Blob; onCrop: (blob: Blob) => void; onClose: () => void }) {
@@ -33,10 +35,12 @@ export function ScreenshotModal({ source, onCrop, onClose }: { source: Blob; onC
   }
   return <Modal title="Crop screenshot" size="xl" onClose={onClose}>
     <p class={styles.hint}>Drag to choose the part of the picture to post in chat.</p>
-    <div class={styles.cropper}>{url && <img ref={image} src={url} alt="Select an area of the screenshot" onError={() => setError('Could not load this screenshot.')} />}</div>
-    <div class={styles.actions}>
+    <div class={`${cropStyles.frame} ${styles.cropper}`} tabIndex={0} role="group" aria-label="Crop area: arrow keys move, Shift and arrow keys resize"
+      onKeyDown={(e) => cropKeyboard(e, cropper.current)}>{url && <img ref={image} src={url} alt="Select an area of the screenshot" onError={() => setError('Could not load this screenshot.')} />}</div>
+    <p class={cropStyles.hint}>Arrow keys move the crop; Shift + arrow keys resize it.</p>
+    <div class={cropStyles.actions}>
       <Button onClick={onClose}>Close</Button>
-      <Button accent onClick={crop} disabled={!ready}>Crop</Button>
+      <Button variant="primary" onClick={crop} disabled={!ready}>Crop</Button>
     </div>
     {error && <Notice tone="error">{error}</Notice>}
   </Modal>

@@ -70,6 +70,32 @@ function fixture(t) {
   }
 }
 
+test('chat retains the latest profile picture through updates, leaving and reconnecting', (t) => {
+  const { store, room, welcome } = fixture(t)
+  welcome(false)
+  const author = { key: 'u:2', username: 'bob', avatarUrl: '/media/avatars/bob.png', anonymous: false }
+  room.message({ type: 'user_joined', user: author })
+  room.message({ type: 'chat', message: { id: 1, author: author.key, avatarUrl: author.avatarUrl } })
+  room.message({ type: 'chat', message: { id: 2, author: 'u:3', avatarUrl: '/media/avatars/other.png' } })
+  const other = store.chat.value[1]
+  const unchanged = store.chat.value
+  room.message({ type: 'user_updated', user: { ...author, muted: true } })
+  assert.equal(store.chat.value, unchanged, 'presence changes do not replace chat messages')
+  for (const avatarUrl of ['/media/avatars/new.png', '', '/media/avatars/latest.png']) {
+    room.message({ type: 'user_updated', user: { ...author, avatarUrl } })
+    assert.equal(store.chat.value[0].avatarUrl, avatarUrl || '/png/default_avatar.png')
+    assert.equal(store.chat.value[1], other)
+  }
+  room.message({ type: 'typing', key: author.key, typing: true })
+  room.message({ type: 'user_left', key: author.key })
+  assert.equal(store.users.value.has(author.key), false)
+  assert.equal(store.typing.value.has(author.key), false)
+  assert.equal(store.chat.value[0].avatarUrl, '/media/avatars/latest.png')
+  const history = store.chat.value
+  room.message({ type: 'welcome', self: { key: 'u:1' }, rights: {}, settings: {}, users: [], history, remote: null })
+  assert.equal(store.chat.value[0].avatarUrl, '/media/avatars/latest.png')
+})
+
 test('availability comes from welcome; restart sends the action and clears old errors', (t) => {
   const { store, room, welcome } = fixture(t)
   assert.equal(store.restartAvailable.value, false)

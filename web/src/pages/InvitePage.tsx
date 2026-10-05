@@ -78,7 +78,7 @@ export function InvitePage() {
     >
       {state.login ? (
         <>
-          <Button accent size="lg" onClick={() => route('/login')}>
+          <Button variant="primary" size="lg" onClick={() => route('/login')}>
             Log in
           </Button>
           <Button size="lg" onClick={() => route('/register')}>
@@ -88,7 +88,7 @@ export function InvitePage() {
       ) : (
         <>
           {state.room && (
-            <ButtonLink accent size="lg" href={`/room/${encodeURIComponent(state.room)}`}>
+            <ButtonLink variant="primary" size="lg" href={`/room/${encodeURIComponent(state.room)}`}>
               Join {state.room}
             </ButtonLink>
           )}

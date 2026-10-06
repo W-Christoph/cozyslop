@@ -74,7 +74,3 @@ CozyCast does not use; none of them needs a patched neko.
   without the mouse. That is intended (Tab belongs to the app on the
   desktop). A way out for keyboard-only use would be an advertised key
   combination or a visible "leave the desktop" control.
-- **Ask before pasting into the room.** A personal setting: after Ctrl/Cmd+V
-  over the desktop, ask "paste your clipboard into the room?" before sending
-  it, so the local clipboard does not end up on the shared desktop by
-  accident.

@@ -85,6 +85,26 @@ export interface AdminUser extends Me {
   createdAt: number
 }
 
+export interface AdminRoom {
+  name: string
+  source: 'configured' | 'registered'
+  nekoUrl: string
+  connected: boolean
+  userCount: number
+}
+
+export interface RoomToken extends AdminRoom {
+  nekoToken: string
+}
+
+export const adminRooms = {
+  list: () => api.get<AdminRoom[]>('/api/admin/rooms'),
+  create: (name: string, nekoUrl: string) => api.post<RoomToken>('/api/admin/rooms', { name, nekoUrl }),
+  changeAddress: (name: string, nekoUrl: string) => api.patch<AdminRoom>(`/api/admin/rooms/${encodeURIComponent(name)}`, { nekoUrl }),
+  newToken: (name: string) => api.post<RoomToken>(`/api/admin/rooms/${encodeURIComponent(name)}/token`),
+  remove: (name: string) => api.del<void>(`/api/admin/rooms/${encodeURIComponent(name)}`),
+}
+
 export interface Permission {
   room: string
   username: string

@@ -133,7 +133,7 @@ type restartingMsg struct {
 // Sent right before the server closes the socket on purpose.
 type kickedMsg struct {
 	Type        string `json:"type"`   // "kicked"
-	Reason      string `json:"reason"` // "banned" | "account" | "verified" | "invite" | "kicked" | "deleted" | "not_found" | "session"
+	Reason      string `json:"reason"` // "banned" | "account" | "verified" | "invite" | "kicked" | "deleted" | "not_found" | "session" | "room_changed"
 	BannedUntil *int64 `json:"bannedUntil,omitempty"`
 }
 

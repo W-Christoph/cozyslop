@@ -217,7 +217,7 @@ test('desktop token failures back off without an announced restart; generic erro
   assert.equal(store.error.value, null)
 })
 
-for (const reason of ['not_found', 'session', 'kicked', 'banned', 'account', 'verified', 'invite', 'deleted']) {
+for (const reason of ['not_found', 'session', 'kicked', 'banned', 'account', 'verified', 'invite', 'deleted', 'room_changed']) {
   test(`${reason} uses the terminal kick path and clears desktop retries`, (t) => {
     const { store, room, timers, tick } = fixture(t)
     globalThis.authRefreshes = 0

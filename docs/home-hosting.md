@@ -6,8 +6,8 @@ through a VPS: viewers, and the websites the room opens, see the VPS's
 address, as if the rooms ran there. The home network and IP address stay
 hidden, and the home upload speed does not limit the number of viewers.
 
-Today one machine does everything, and neko sends every viewer their own
-copy of the stream. At home that means port forwarding, a visible home IP,
+The default deployment runs on one machine, and neko sends every viewer
+their own copy of the stream. At home that means port forwarding, a visible home IP,
 and an upload of viewers × bitrate (10 viewers at 2.5 Mbit/s = 25 Mbit/s).
 
 ## Overview
@@ -29,8 +29,9 @@ websites ◀─room's browsing── Go server                                  
   no port forwarding; works behind carrier NAT.
 - **tunnel**: WireGuard. The node connects to the hub. The server reaches
   each room's neko API through it (rooms are already URLs in
-  `COZYCAST_ROOMS`), and the relay pulls media through it. It is also the
-  room containers' only route to the internet: the hub does the NAT.
+  `COZYCAST_ROOMS` or database registrations), and the relay pulls media
+  through it. It is also the room containers' only route to the internet:
+  the hub does the NAT.
 
 The home line then carries one stream per watched room up, whatever the
 number of viewers, and what the room's browser downloads. Viewers and
@@ -90,8 +91,9 @@ Start with 1.
 
 ## Room management
 
-Today rooms are services in `compose.yaml`, and restarting one from the UI
-needs the Docker socket on the server (`architecture.md`, "Room WebSocket").
+Today containers are started separately (usually services in `compose.yaml`);
+the admin API can register room connections without a server restart.
+Restarting a configured room from the UI needs the Docker socket on the server (`architecture.md`, "Room WebSocket").
 With two machines the socket is on the node.
 
 A small agent on the node dials out to the hub and accepts only: create,

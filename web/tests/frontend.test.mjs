@@ -73,7 +73,12 @@ const server = await createServer({
 let readableNameColor, cropKeyboard, useDialogFocus, Button, ButtonLink, Modal, Input, FormActions, AvatarChooser, ProfileEditor, SettingsDialog, profileChanged, userIdentity, ChatPanel, MessageGroup, MessageList, ChatPreview, MediaModal, RemoteScreen, AccountRow, NekoClient, KickedScreen, DesktopUploadStatus, PermissionRow, PermissionFields, PermissionTable, BanDate, Notice, blankPermission, config, App, useRoom, VideoArea
 let ChatInput, MessageEditor
 let useDesktopPaste, PasteDialog, useMobileKeyboard, RoomSection, ResetPasswordPage, ResetLinkModal, LoginPage
+let AdminPage, RoomsTab, RoomModal, roomNameError, nekoUrlError
 try {
+  ;({ AdminPage } = await server.ssrLoadModule('/src/pages/admin/AdminPage.tsx'))
+  ;({ RoomsTab } = await server.ssrLoadModule('/src/pages/admin/RoomsTab.tsx'))
+  ;({ RoomModal } = await server.ssrLoadModule('/src/components/admin/RoomModal.tsx'))
+  ;({ roomNameError, nekoUrlError } = await server.ssrLoadModule('/src/components/admin/roomValidation.ts'))
   ;({ ResetPasswordPage } = await server.ssrLoadModule('/src/pages/ResetPasswordPage.tsx'))
   ;({ ResetLinkModal } = await server.ssrLoadModule('/src/components/admin/ResetLinkModal.tsx'))
   ;({ LoginPage } = await server.ssrLoadModule('/src/pages/LoginPage.tsx'))
@@ -953,7 +958,7 @@ test('kick screens share the site header and page buttons', (t) => {
   assert.equal(home.type.name, 'ButtonLink')
   assert.equal(home.props.href, '/')
   assert.equal(home.props.variant, 'primary')
-  for (const reason of ['banned', 'account', 'verified', 'invite', 'kicked', 'deleted', 'not_found', 'session']) {
+  for (const reason of ['banned', 'account', 'verified', 'invite', 'kicked', 'deleted', 'not_found', 'session', 'room_changed']) {
     f.store.kicked.value.reason = reason
     const screen = KickedScreen()
     assert.ok(named(screen, 'Header'))
@@ -964,6 +969,10 @@ test('kick screens share the site header and page buttons', (t) => {
       assert.equal(login.props.href, '/login')
     } else assert.equal(login, undefined)
     if (reason === 'session') assert.equal(named(screen, 'InfoScreen').props.message, 'Session expired')
+    if (reason === 'room_changed') {
+      assert.equal(named(screen, 'InfoScreen').props.message, 'Room updated')
+      assert.match(named(screen, 'InfoScreen').props.submessage, /Reopen the room to reconnect/)
+    }
   }
 })
 
@@ -1573,6 +1582,220 @@ test('admin reset link action generates a private link and copies it', async (t)
   button(render(), 'Copy').props.onClick(); await settle()
   assert.deepEqual(copied, ['https://cozy.test/reset/secret'])
   assert.match(nodes(render()).filter(n => n.type?.name === 'Notice')[0].props.children.join(''), /24 hours, works once, and replaces earlier links/)
+})
+
+const registeredRoom = { name: 'extra', source: 'registered', nekoUrl: 'http://10.0.0.2:8080', connected: false, userCount: 0 }
+const configuredRoom = { ...registeredRoom, name: 'default', source: 'configured', connected: true, userCount: 3 }
+const roomReply = (data, status = 200) => ({ ok: status < 400, status, json: async () => data })
+const formSubmit = (node) => nodes(node).find(n => n.type === 'form').props.onSubmit({ preventDefault() {} })
+const fieldInput = (node, label) => named(nodes(node).find(n => n.type?.name === 'Field' && n.props.label === label), 'Input')
+
+test('admin Rooms route selects the tab and keeps the admin guard', (t) => {
+  const f = fixture(t), routed = []
+  f.me = { admin: true }
+  f.route = { params: { tab: 'rooms' } }
+  f.location = { route: path => routed.push(path) }
+  const node = f.render(AdminPage)
+  assert.ok(named(node, 'RoomsTab'))
+  const layout = named(node, 'SettingsLayout')
+  assert.equal(layout.props.current, 'rooms')
+  assert.equal(layout.props.wide, true)
+  assert.equal(layout.props.nav.flatMap(group => group.items).find(item => item.id === 'rooms').href, '/admin/rooms')
+  f.me = null
+  assert.equal(f.render(AdminPage), null)
+  assert.deepEqual(routed, ['/'])
+})
+
+test('rooms list shows connection, people and links; configured rows are read-only; refresh reloads', async (t) => {
+  const f = fixture(t), requests = []
+  globals(t, { fetch: async (path, init) => {
+    requests.push([path, init.method])
+    return roomReply([configuredRoom, registeredRoom])
+  } })
+  const render = () => f.render(RoomsTab)
+  assert.ok(named(render(), 'Spinner'))
+  await settle()
+  const table = named(render(), 'AdminTable'), rows = nodes(table).filter(n => n.type === 'tr')
+  assert.deepEqual(table.props.headings, ['Room', 'Source', 'Neko address', 'Connection', 'People', 'Actions'])
+  assert.deepEqual(rows.map(row => nodes(row).find(n => n.type === 'a').props.href), ['/room/default', '/room/extra'])
+  assert.deepEqual(nodes(rows[0]).filter(n => n.type?.name === 'Badge').map(n => n.props.children), ['Configured', 'Connected'])
+  assert.equal(nodes(rows[0]).find(n => n.props?.['data-label'] === 'People').props.children, 3)
+  assert.ok(nodes(rows[0]).find(n => n.type === 'code' && n.props.children === 'COZYCAST_ROOMS'))
+  assert.equal(nodes(rows[0]).filter(n => n.type?.name === 'Button').length, 0)
+  assert.deepEqual(nodes(rows[1]).filter(n => n.type?.name === 'Badge').map(n => n.props.children), ['Registered', 'Not reachable'])
+  for (const [text, mode] of [['Change address', 'address'], ['New token', 'token'], ['Remove', 'remove']]) {
+    button(rows[1], text).props.onClick()
+    const modal = named(render(), 'RoomModal')
+    assert.deepEqual(modal.props.action, { mode, room: registeredRoom })
+    assert.ok(!button(named(render(), 'AdminTable'), text).props.disabled, 'the opener stays focusable for dialog focus restoration')
+    modal.props.onClose()
+    assert.equal(named(render(), 'RoomModal'), undefined)
+  }
+  button(render().props.actions, 'Refresh').props.onClick()
+  render(); await settle()
+  assert.deepEqual(requests, [['/api/admin/rooms', 'GET'], ['/api/admin/rooms', 'GET']])
+})
+
+test('rooms listing handles failure, retry and empty state', async (t) => {
+  const f = fixture(t)
+  let failed = true
+  globals(t, { fetch: async () => failed ? roomReply({ error: 'Rooms unavailable.' }, 503) : roomReply([]) })
+  const render = () => f.render(RoomsTab)
+  render(); await settle()
+  assert.equal(named(render(), 'Notice').props.children, 'Rooms unavailable.')
+  assert.equal(named(render(), 'EmptyState'), undefined)
+  failed = false
+  button(render().props.actions, 'Refresh').props.onClick()
+  render(); await settle()
+  assert.equal(named(render(), 'Notice'), undefined)
+  assert.equal(named(render(), 'EmptyState').props.title, 'No rooms')
+})
+
+test('rooms listing ignores a response after leaving the tab', async (t) => {
+  const f = fixture(t)
+  let finish
+  globals(t, { fetch: () => new Promise(resolve => { finish = resolve }) })
+  f.render(RoomsTab); f.unmount()
+  finish(roomReply([registeredRoom])); await settle()
+  assert.equal(named(f.render(RoomsTab), 'AdminTable'), undefined)
+})
+
+test('room validation follows the server name and neko address rules', () => {
+  for (const name of ['default', 'Room_2-test', '0']) assert.equal(roomNameError(name), '')
+  for (const name of ['', 'two words', 'room/path', 'café', 'room\n']) assert.ok(roomNameError(name), name)
+  for (const url of ['http://10.0.0.2:8080', 'https://neko.example/prefix', 'http://room-extra:8080', 'http://[::1]:8080/a%20b', 'HTTP://neko/a b', 'http://neko/a\\b', 'http://neko:99999', 'http://[fe80::1%25eth0]:8080']) assert.equal(nekoUrlError(url), '', url)
+  for (const url of ['', '/neko', 'ftp://neko', 'http:neko', 'http:///neko', 'http://user:pass@neko', 'http://@neko', 'http://neko?', 'http://neko?x=1', 'http://neko#', 'http://neko#x', ' http://neko', 'http://neko/a%xx', 'http://neko\\path', 'http://neko:80:99', 'http://[fe80::1%25]']) assert.ok(nekoUrlError(url), url)
+})
+
+test('add room validates before calling the API and shows server errors inline', async (t) => {
+  const f = fixture(t), requests = []
+  globals(t, { fetch: async (path, init) => {
+    requests.push([path, JSON.parse(init.body)])
+    return roomReply({ error: 'That room already exists.' }, 409)
+  } })
+  const props = { action: { mode: 'add' }, onClose() {}, onSaved() {}, onRemoved() {} }
+  const render = () => f.render(RoomModal, props)
+  formSubmit(render()); await settle()
+  assert.equal(requests.length, 0)
+  assert.match(named(render(), 'Notice').props.children, /Room names/)
+  fieldInput(render(), 'Name').props.onInput({ currentTarget: { value: 'extra' } })
+  fieldInput(render(), 'Neko URL').props.onInput({ currentTarget: { value: 'http://neko?' } })
+  formSubmit(render()); await settle()
+  assert.equal(requests.length, 0)
+  assert.match(named(render(), 'Notice').props.children, /Neko URL/)
+  fieldInput(render(), 'Neko URL').props.onInput({ currentTarget: { value: registeredRoom.nekoUrl } })
+  formSubmit(render()); await settle()
+  assert.deepEqual(requests, [['/api/admin/rooms', { name: 'extra', nekoUrl: registeredRoom.nekoUrl }]])
+  assert.equal(named(render(), 'Notice').props.children, 'That room already exists.')
+  assert.equal(named(render(), 'Input').props.value, 'extra', 'failed requests keep the form editable')
+})
+
+test('add room shows token once, copies token and environment, and saves no secret outside the modal', async (t) => {
+  const f = fixture(t), saved = [], copied = [], requests = []
+  let closed = 0
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { clipboard: { writeText: async text => copied.push(text) } } })
+  t.after(() => { if (original) Object.defineProperty(globalThis, 'navigator', original); else delete globalThis.navigator })
+  globals(t, { fetch: async (path, init) => { requests.push([path, init.method]); return roomReply({ ...registeredRoom, nekoToken: 'secret-once' }, 201) } })
+  const props = { action: { mode: 'add' }, onClose: () => closed++, onSaved: room => saved.push(room), onRemoved() {} }
+  const render = () => f.render(RoomModal, props)
+  fieldInput(render(), 'Name').props.onInput({ currentTarget: { value: 'extra' } })
+  fieldInput(render(), 'Neko URL').props.onInput({ currentTarget: { value: registeredRoom.nekoUrl } })
+  formSubmit(render()); await settle()
+  assert.deepEqual(saved, [registeredRoom])
+  assert.equal('nekoToken' in saved[0], false)
+  assert.equal(fieldInput(render(), 'Token').props.value, 'secret-once')
+  assert.equal(fieldInput(render(), 'Token').props.readOnly, true)
+  const environment = named(render(), 'Textarea')
+  assert.equal(environment.props.value, 'COZYCAST_ROOM=extra\nCOZYCAST_NEKO_TOKEN=secret-once')
+  let selected = 0
+  environment.props.onFocus({ currentTarget: { select: () => selected++ } })
+  assert.equal(selected, 1)
+  await button(render(), 'Copy').props.onClick()
+  await button(render(), 'Copy environment').props.onClick()
+  assert.deepEqual(copied, ['secret-once', environment.props.value])
+  assert.match(nodes(render()).find(n => n.type?.name === 'Notice').props.children, /will not be shown again.*New token/)
+  assert.equal(nodes(render()).find(n => n.type === 'form'), undefined)
+  assert.equal(button(render().props.footer, 'Add room'), undefined)
+  button(render().props.footer, 'Done').props.onClick()
+  assert.equal(closed, 1)
+  assert.deepEqual(requests, [['/api/admin/rooms', 'POST']])
+  f.unmount()
+  const reopened = fixture(t).render(RoomModal, props)
+  assert.equal(fieldInput(reopened, 'Token'), undefined)
+})
+
+test('changing a room address validates its single field, patches and closes', async (t) => {
+  const f = fixture(t), requests = [], saved = []
+  let closed = 0
+  globals(t, { fetch: async (path, init) => {
+    requests.push([path, init.method, JSON.parse(init.body)])
+    return roomReply({ ...registeredRoom, nekoUrl: 'https://neko.example/prefix' })
+  } })
+  const render = () => f.render(RoomModal, { action: { mode: 'address', room: registeredRoom }, onClose: () => closed++, onSaved: room => saved.push(room), onRemoved() {} })
+  assert.equal(nodes(render()).filter(n => n.type?.name === 'Input').length, 1)
+  assert.equal(fieldInput(render(), 'Neko URL').props.value, registeredRoom.nekoUrl)
+  fieldInput(render(), 'Neko URL').props.onInput({ currentTarget: { value: 'https://neko.example#' } })
+  formSubmit(render()); await settle()
+  assert.equal(requests.length, 0)
+  fieldInput(render(), 'Neko URL').props.onInput({ currentTarget: { value: 'https://neko.example/prefix' } })
+  formSubmit(render()); await settle()
+  assert.deepEqual(requests, [['/api/admin/rooms/extra', 'PATCH', { nekoUrl: 'https://neko.example/prefix' }]])
+  assert.equal(saved[0].nekoUrl, 'https://neko.example/prefix')
+  assert.equal(closed, 1)
+})
+
+test('new room token requires confirmation and explains restarting with its replacement', async (t) => {
+  const f = fixture(t), requests = [], saved = []
+  globals(t, { fetch: async (path, init) => { requests.push([path, init.method]); return roomReply({ ...registeredRoom, nekoToken: 'new-secret' }) } })
+  const render = () => f.render(RoomModal, { action: { mode: 'token', room: registeredRoom }, onClose() {}, onSaved: room => saved.push(room), onRemoved() {} })
+  assert.equal(requests.length, 0)
+  assert.ok(nodes(render()).some(n => n.type === 'p' && n.props.children.includes('The room’s container must be restarted with the new token.')))
+  await button(render().props.footer, 'New token').props.onClick()
+  assert.deepEqual(requests, [['/api/admin/rooms/extra/token', 'POST']])
+  assert.equal(fieldInput(render(), 'Token').props.value, 'new-secret')
+  assert.ok(nodes(render()).some(n => n.type === 'p' && /Restart.*container with the new token/.test(n.props.children)))
+  assert.deepEqual(saved, [registeredRoom])
+  assert.equal(button(render().props.footer, 'New token'), undefined)
+})
+
+test('remove room confirms disconnection and retained data; failed deletion stays open for retry', async (t) => {
+  const f = fixture(t), requests = [], removed = []
+  let failed = true, closed = 0
+  globals(t, { fetch: async (path, init) => {
+    requests.push([path, init.method])
+    return failed ? roomReply({ error: 'Remove failed.' }, 500) : roomReply(undefined, 204)
+  } })
+  const render = () => f.render(RoomModal, { action: { mode: 'remove', room: registeredRoom }, onClose: () => closed++, onSaved() {}, onRemoved: name => removed.push(name) })
+  const text = nodes(render()).filter(n => n.type === 'p').map(n => Array.isArray(n.props.children) ? n.props.children.join('') : n.props.children).join(' ')
+  assert.match(text, /People in the room are disconnected/)
+  assert.match(text, /Chat history, settings and permissions are kept and return if a room with this name is added again/)
+  assert.equal(requests.length, 0)
+  await button(render().props.footer, 'Remove').props.onClick()
+  assert.equal(named(render(), 'Notice').props.children, 'Remove failed.')
+  assert.deepEqual(removed, [])
+  assert.equal(closed, 0)
+  failed = false
+  await button(render().props.footer, 'Remove').props.onClick()
+  assert.deepEqual(requests, [['/api/admin/rooms/extra', 'DELETE'], ['/api/admin/rooms/extra', 'DELETE']])
+  assert.deepEqual(removed, ['extra'])
+  assert.equal(closed, 1)
+})
+
+test('room token issuance blocks closing and duplicate confirmation while in flight', async (t) => {
+  const f = fixture(t)
+  let finish, closed = 0, count = 0
+  globals(t, { fetch: () => { count++; return new Promise(resolve => { finish = resolve }) } })
+  const render = () => f.render(RoomModal, { action: { mode: 'token', room: registeredRoom }, onClose: () => closed++, onSaved() {}, onRemoved() {} })
+  const pending = button(render().props.footer, 'New token').props.onClick()
+  render().props.onClose()
+  assert.equal(closed, 0)
+  assert.equal(button(render().props.footer, 'New token').props.disabled, true)
+  await button(render().props.footer, 'New token').props.onClick()
+  assert.equal(count, 1)
+  finish(roomReply({ ...registeredRoom, nekoToken: 'secret' })); await pending
+  render().props.onClose()
+  assert.equal(closed, 1)
 })
 
 test('login shows the password reset confirmation', (t) => {

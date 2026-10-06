@@ -1,0 +1,7 @@
+.name { overflow-wrap: anywhere; }
+.address.address { overflow-wrap: anywhere; max-width: 280px; }
+.actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-1); }
+.note { color: var(--text-muted); font-size: var(--text-xs); }
+@media (max-width: 780px) {
+  .address.address.address { flex: 1 0 100%; max-width: 100%; min-width: 0; }
+}

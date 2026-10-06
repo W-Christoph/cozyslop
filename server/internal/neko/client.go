@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -44,9 +45,10 @@ type Member struct {
 var ErrNotFound = errors.New("neko: not found")
 
 type Client struct {
-	base  *url.URL
-	token string
-	http  *http.Client
+	connected atomic.Bool
+	base      *url.URL
+	token     string
+	http      *http.Client
 }
 
 func NewClient(baseURL, apiToken string) (*Client, error) {
@@ -144,7 +146,11 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any, admin
 	}
 	if res.StatusCode >= 300 {
 		msg, _ := io.ReadAll(io.LimitReader(res.Body, 512))
-		return fmt.Errorf("neko: %s %s: %s: %s", method, path, res.Status, bytes.TrimSpace(msg))
+		message := string(bytes.TrimSpace(msg))
+		if c.token != "" {
+			message = strings.ReplaceAll(message, c.token, "[redacted]")
+		}
+		return fmt.Errorf("neko: %s %s: %s: %s", method, path, res.Status, message)
 	}
 	if out != nil {
 		return json.NewDecoder(res.Body).Decode(out)
@@ -199,3 +205,6 @@ func (c *Client) ScreenConfigurations(ctx context.Context) ([]ScreenSize, error)
 	err := c.do(ctx, http.MethodGet, "/api/room/screen/configurations", nil, &list, true)
 	return list, err
 }
+
+// Connected reports whether the observer currently has a working event stream.
+func (c *Client) Connected() bool { return c.connected.Load() }

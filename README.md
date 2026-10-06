@@ -125,9 +125,10 @@ leave an existing account's password unchanged.
 
 | Server variable | Default | |
 |---|---|---|
-| `COZYCAST_NEKO_SECRET` | required | each room's neko admin token is derived from it and the room's name; the room containers get the same secret and do the same (`COZYCAST_ROOM`) |
+| `COZYCAST_NEKO_SECRET` | required | configured rooms derive their neko admin token from it and their name; configured room containers use the same secret and `COZYCAST_ROOM`; registered room containers receive only their own token |
 | `COZYCAST_NEKO_API_TOKEN` | | instead of the secret: one token used as-is for every room, for a neko you run yourself with `NEKO_SESSION_API_TOKEN` |
-| `COZYCAST_ROOMS` | `default=http://room-default:8080` | `name=url,name2=url2` |
+| `COZYCAST_ROOMS` | `default=http://room-default:8080` | `name=url,name2=url2`; configured rooms alongside database registrations; the configured list must still contain at least one room (empty uses the default) |
+| `COZYCAST_NEKO_TOKEN` | | worker only: ready neko admin token for a registered room; takes precedence over `COZYCAST_NEKO_SECRET`; both variables are removed before starting desktop processes |
 | `COZYCAST_DEFAULT_SCREEN` | | container default screen for all rooms (`1280x720@30`); Compose sets it from `SCREEN`; empty leaves the desktop size alone when clearing the room setting |
 | `COZYCAST_DATA_DIR` | `data` | database and uploaded chat media |
 | `COZYCAST_INIT_ADMIN_PASSWORD` | | creates the `admin` account on first start; sets its password with `reset-admin` |
@@ -149,6 +150,32 @@ append the client IP to `X-Forwarded-For`, and the server must not be reachable
 around it. Invalid forwarded IPs fall back to the peer address.
 
 Room restarts from the UI are an [opt-in Docker control feature](docs/architecture.md#room-websocket); enable the commented socket, environment and group settings in `compose.yaml`.
+
+## Adding a room without a restart
+
+An admin can register an existing neko through
+`POST /api/admin/rooms` with `{"name":"extra","nekoUrl":"http://room-extra:8080"}`.
+Names use letters, digits, underscores and hyphens. The URL must be absolute
+HTTP/HTTPS without credentials, query or fragment. The response includes
+`nekoToken` once; save it for the room's container. The desktop may come up
+later: the server retries its connection.
+
+Start the room container yourself with `COZYCAST_ROOM=extra` and
+`COZYCAST_NEKO_TOKEN=<returned token>`, plus its usual neko/media configuration.
+Do **not** give a registered room container `COZYCAST_NEKO_SECRET`.
+Registration does not create or manage containers. The admin API can change
+`nekoUrl`, rotate the token, or delete the registration (see [API](docs/api.md)).
+After rotation, set the container's token to the new value and restart that
+container yourself. URL/token changes disconnect viewers with a message to
+reopen the room; removal shows “Room not found”.
+
+Removing a registration preserves chat history (subject to normal retention),
+settings and permissions. Registering the same name restores them.
+`COZYCAST_ROOMS` names are managed in configuration; they cannot be registered
+or changed through this API. If configuration later takes a registered name,
+it wins at startup with a warning; the registration stays in the database.
+The existing configured-room requirement remains: an empty environment value
+uses the default room, and a list containing no entries is rejected.
 
 ## Stream settings
 

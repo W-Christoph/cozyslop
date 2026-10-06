@@ -7,9 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -22,7 +20,6 @@ import (
 	"cozycast/internal/httpapi"
 	"cozycast/internal/hub"
 	"cozycast/internal/legacy"
-	"cozycast/internal/neko"
 	"cozycast/internal/store"
 	"cozycast/webui"
 
@@ -129,20 +126,17 @@ func run(args []string, out io.Writer) error {
 		slog.Info("room container control disabled")
 	}
 
-	rooms := make([]hub.RoomConfig, 0, len(cfg.Rooms))
-	for _, rc := range cfg.Rooms {
-		nc, err := neko.NewClient(rc.NekoURL, cfg.NekoToken(rc.Name))
-		if err != nil {
-			return err
-		}
-		room := hub.RoomConfig{Name: rc.Name, Neko: nc, DefaultScreen: cfg.DefaultScreen, TitleURL: titleURL(nc),
-			PlayURL: playURL(nc), PlayToken: cfg.NekoToken(rc.Name)}
-		if dc != nil {
-			u, err := url.Parse(rc.NekoURL)
-			if err != nil {
-				return err
-			}
-			service := u.Hostname()
+	buildRoom := func(name, nekoURL, token string) (hub.RoomConfig, error) {
+		return hub.BuildRoomConfig(name, nekoURL, token, cfg.DefaultScreen)
+	}
+	rooms, err := loadRooms(ctx, db, cfg, buildRoom)
+	if err != nil {
+		return err
+	}
+	for i := range rooms {
+		room := &rooms[i]
+		if dc != nil && room.Source == "configured" {
+			service := room.Neko.BaseURL().Hostname()
 			room.Restart = func(ctx context.Context) error {
 				id, err := dc.ServiceContainer(ctx, project, service)
 				if err != nil {
@@ -151,7 +145,6 @@ func run(args []string, out io.Writer) error {
 				return dc.Restart(ctx, id, 10*time.Second)
 			}
 		}
-		rooms = append(rooms, room)
 	}
 	h := hub.New(db, filepath.Join(mediaDir, "chat"), rooms)
 	if err := h.Start(ctx); err != nil {
@@ -164,6 +157,7 @@ func run(args []string, out io.Writer) error {
 	}
 
 	api := httpapi.New(httpapi.Deps{
+		BuildRoom:   buildRoom,
 		Store:       db,
 		Auth:        auth.New(db, cfg.TrustProxy),
 		Hub:         h,
@@ -215,19 +209,6 @@ func run(args []string, out io.Writer) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return errors.Join(serveErr, shutdown(shutdownCtx, servers, api))
-}
-
-// titleURL is where the room's container says which window is in front on
-// its desktop: worker/window-title.py, next to neko. A neko without that
-// helper just never answers there.
-func titleURL(nc *neko.Client) string {
-	return "http://" + net.JoinHostPort(nc.BaseURL().Hostname(), "8081") + "/title"
-}
-
-// playURL is where the room's container plays a file of its desktop's
-// Downloads folder: worker/play.py, next to neko.
-func playURL(nc *neko.Client) string {
-	return "http://" + net.JoinHostPort(nc.BaseURL().Hostname(), "8082") + "/play"
 }
 
 func shutdown(ctx context.Context, servers []*http.Server, api *httpapi.Server) error {
@@ -295,4 +276,36 @@ func deleteExpired(ctx context.Context, db *store.Store) {
 	if err := db.DeleteExpiredAnonBans(ctx); err != nil && ctx.Err() == nil {
 		slog.Warn("delete expired anonymous bans", "err", err)
 	}
+}
+
+// loadRooms gives configured rooms precedence without deleting registrations.
+func loadRooms(ctx context.Context, db *store.Store, cfg config.Config, build httpapi.RoomBuilder) ([]hub.RoomConfig, error) {
+	rooms := []hub.RoomConfig{}
+	configured := make(map[string]bool)
+	for _, rc := range cfg.Rooms {
+		room, err := build(rc.Name, rc.NekoURL, cfg.NekoToken(rc.Name))
+		if err != nil {
+			return nil, err
+		}
+		room.Source = "configured"
+		rooms = append(rooms, room)
+		configured[rc.Name] = true
+	}
+	registered, err := db.RegisteredRooms(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, rc := range registered {
+		if configured[rc.Name] {
+			slog.Warn("configured room overrides registered room", "room", rc.Name)
+			continue
+		}
+		room, err := build(rc.Name, rc.NekoURL, rc.NekoToken)
+		if err != nil {
+			return nil, err
+		}
+		room.Source = "registered"
+		rooms = append(rooms, room)
+	}
+	return rooms, nil
 }

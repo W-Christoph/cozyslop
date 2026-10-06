@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -141,4 +143,18 @@ func splitList(s string) []string {
 		}
 	}
 	return out
+}
+
+var roomName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
+func ValidRoomName(name string) bool { return roomName.MatchString(name) }
+
+// ValidateNekoURL accepts a server address, optionally with a path prefix.
+func ValidateNekoURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") ||
+		u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(raw, "#") {
+		return errors.New("Neko URL must be an absolute http or https URL without credentials, query or fragment.")
+	}
+	return nil
 }

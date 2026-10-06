@@ -365,3 +365,24 @@ func TestNekoSocketKeepsViewersOnTheRoomStream(t *testing.T) {
 		t.Fatal("socket with a kicked tab's token:", got)
 	}
 }
+
+func TestRoomRemovalClosesNekoProxy(t *testing.T) {
+	p := newProxyTest(t, store.RoomSettings{})
+	_, _, token := p.join()
+	conn := p.socket(token)
+	if _, _, err := conn.Read(p.ctx); err != nil {
+		t.Fatal(err)
+	} // system/init
+	if !p.hub.Remove("default", "not_found") {
+		t.Fatal("room missing")
+	}
+	if _, _, err := conn.Read(p.ctx); err == nil || p.ctx.Err() != nil {
+		t.Fatalf("proxy did not close promptly: %v", err)
+	}
+	if err := p.fake.WaitObservers(p.ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.status("GET", "/neko/default/api/ws?token="+token); got != 404 {
+		t.Fatalf("removed room still proxied: %d", got)
+	}
+}

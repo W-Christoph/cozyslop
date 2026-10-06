@@ -30,6 +30,7 @@ const passwordError = "Passwords must be at least 8 characters and at most 72 by
 type apiTest struct {
 	t   *testing.T
 	st  *store.Store
+	h   *hub.Hub
 	srv *httptest.Server
 }
 
@@ -47,7 +48,7 @@ func newAPITest(t *testing.T) *apiTest {
 	h := hub.New(st, t.TempDir(), []hub.RoomConfig{{Name: "default", Neko: nc}})
 	srv := httptest.NewServer(httpapi.New(httpapi.Deps{Store: st, Auth: auth.New(st, false), Hub: h}).Handler())
 	t.Cleanup(srv.Close)
-	return &apiTest{t: t, st: st, srv: srv}
+	return &apiTest{t: t, st: st, srv: srv, h: h}
 }
 
 func (a *apiTest) client() *http.Client {

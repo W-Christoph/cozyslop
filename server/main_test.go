@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"cozycast/internal/auth"
+	"cozycast/internal/config"
 	"cozycast/internal/httpapi"
 	"cozycast/internal/hub"
 	"cozycast/internal/neko"
@@ -355,5 +357,45 @@ func TestUnknownSubcommand(t *testing.T) {
 		if args[0] == "unknown" && !strings.Contains(err.Error(), "unknown subcommand") {
 			t.Fatalf("unknown subcommand not identified: %v", err)
 		}
+	}
+}
+
+func TestLoadConfiguredAndRegisteredRooms(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	for _, room := range []store.RegisteredRoom{
+		{Name: "default", NekoURL: "http://shadowed:8080", NekoToken: "shadow-token"},
+		{Name: "registered", NekoURL: "https://remote:8443/neko", NekoToken: "random-token"},
+	} {
+		if err := st.CreateRegisteredRoom(ctx, &room); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := config.Config{NekoSecret: "master-secret", DefaultScreen: "1280x720@30", Rooms: []config.Room{{Name: "default", NekoURL: "http://configured:8080"}}}
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	defer slog.SetDefault(previous)
+	rooms, err := loadRooms(ctx, st, cfg, func(name, nekoURL, token string) (hub.RoomConfig, error) {
+		return hub.BuildRoomConfig(name, nekoURL, token, cfg.DefaultScreen)
+	})
+	if err != nil || len(rooms) != 2 {
+		t.Fatalf("rooms: %+v %v", rooms, err)
+	}
+	if rooms[0].Name != "default" || rooms[0].Source != "configured" || rooms[0].Neko.BaseURL().Host != "configured:8080" || rooms[0].PlayToken != cfg.NekoToken("default") {
+		t.Fatal("configured room lost precedence")
+	}
+	if rooms[1].Name != "registered" || rooms[1].Source != "registered" || rooms[1].PlayToken != "random-token" || rooms[1].PlayURL != "http://remote:8082/play" || rooms[1].TitleURL != "http://remote:8081/title" || rooms[1].DefaultScreen != cfg.DefaultScreen || rooms[1].Restart != nil {
+		t.Fatal("registered room configuration differs")
+	}
+	if !strings.Contains(logs.String(), "configured room overrides registered room") || strings.Contains(logs.String(), "shadow-token") || strings.Contains(logs.String(), "random-token") {
+		t.Fatalf("warning: %s", logs.String())
+	}
+	if _, err := st.RegisteredRoom(ctx, "default"); err != nil {
+		t.Fatal("shadowed registration was deleted")
 	}
 }

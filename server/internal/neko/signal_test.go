@@ -1,6 +1,12 @@
 package neko
 
-import "testing"
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
 
 func TestPinStream(t *testing.T) {
 	const want = `"selector":{"id":"room","type":"exact"}`
@@ -69,5 +75,21 @@ func TestWidescreen(t *testing.T) {
 		if got := size.Widescreen(); got != want {
 			t.Errorf("%v: Widescreen() = %v, want %v", size, got, want)
 		}
+	}
+}
+
+func TestAdminTokenRedactedFromErrors(t *testing.T) {
+	const token = "random-secret-token"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad authorization: "+r.Header.Get("Authorization"), http.StatusForbidden)
+	}))
+	defer srv.Close()
+	client, err := NewClient(srv.URL, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.ListMembers(context.Background())
+	if err == nil || strings.Contains(err.Error(), token) || !strings.Contains(err.Error(), "[redacted]") {
+		t.Fatalf("token leaked: %v", err)
 	}
 }

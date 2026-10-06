@@ -6,6 +6,7 @@ import { AccountsTab } from './AccountsTab'
 import { ServerSettingsTab } from './ServerSettingsTab'
 import { PermissionsTab } from './PermissionsTab'
 import { InvitesTab } from './InvitesTab'
+import { RoomsTab } from './RoomsTab'
 
 const nav: NavGroup[] = [
   {
@@ -16,9 +17,12 @@ const nav: NavGroup[] = [
       { id: 'invites', label: 'Invites', icon: 'ticket', href: '/admin/invites' },
     ],
   },
-  { label: 'Server', items: [{ id: 'settings', label: 'Server settings', icon: 'server', href: '/admin/settings' }] },
+  { label: 'Server', items: [
+    { id: 'rooms', label: 'Rooms', icon: 'monitor', href: '/admin/rooms' },
+    { id: 'settings', label: 'Server settings', icon: 'server', href: '/admin/settings' },
+  ] },
 ]
-const tabs = ['accounts', 'permissions', 'invites', 'settings']
+const tabs = ['accounts', 'permissions', 'invites', 'rooms', 'settings']
 
 export function AdminPage() {
   const { params } = useRoute()
@@ -38,6 +42,8 @@ export function AdminPage() {
           <PermissionsTab />
         ) : tab === 'invites' ? (
           <InvitesTab />
+        ) : tab === 'rooms' ? (
+          <RoomsTab />
         ) : (
           <AccountsTab />
         )}

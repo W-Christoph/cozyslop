@@ -22,7 +22,10 @@ import (
 	"cozycast/internal/store"
 )
 
+type RoomBuilder func(name, nekoURL, token string) (hub.RoomConfig, error)
+
 type Deps struct {
+	BuildRoom   RoomBuilder
 	Store       *store.Store
 	Auth        *auth.Service
 	Hub         *hub.Hub
@@ -35,6 +38,8 @@ type Deps struct {
 }
 
 type Server struct {
+	buildRoom      RoomBuilder
+	roomMu         sync.Mutex // registration mutations
 	store          *store.Store
 	auth           *auth.Service
 	hub            *hub.Hub
@@ -61,8 +66,14 @@ func New(d Deps) *Server {
 	if d.MaxUploadMB <= 0 {
 		d.MaxUploadMB = 10
 	}
+	if d.BuildRoom == nil {
+		d.BuildRoom = func(name, nekoURL, token string) (hub.RoomConfig, error) {
+			return hub.BuildRoomConfig(name, nekoURL, token, "")
+		}
+	}
 	socketCtx, stopSockets := context.WithCancel(context.Background())
 	return &Server{
+		buildRoom:      d.BuildRoom,
 		store:          d.Store,
 		auth:           d.Auth,
 		hub:            d.Hub,
@@ -103,6 +114,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/permissions", s.adminListPermissions)
 	mux.HandleFunc("PUT /api/admin/permissions/{room}/{username}", s.adminSavePermission)
 	mux.HandleFunc("DELETE /api/admin/permissions/{room}/{username}", s.adminDeletePermission)
+
+	mux.HandleFunc("GET /api/admin/rooms", s.adminListRooms)
+	mux.HandleFunc("POST /api/admin/rooms", s.adminCreateRoom)
+	mux.HandleFunc("PATCH /api/admin/rooms/{room}", s.adminChangeRoom)
+	mux.HandleFunc("POST /api/admin/rooms/{room}/token", s.adminChangeRoom)
+	mux.HandleFunc("DELETE /api/admin/rooms/{room}", s.adminDeleteRoom)
 
 	mux.HandleFunc("GET /api/admin/rooms/{room}/settings", s.adminGetRoomSettings)
 	mux.HandleFunc("PUT /api/admin/rooms/{room}/settings", s.adminSaveRoomSettings)

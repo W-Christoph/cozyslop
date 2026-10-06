@@ -104,6 +104,17 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
   while closed. Avatar cards show identity, remote and sound state
   on hover, focus or tap. The volume track shows its current level.
 
+## Admin rooms
+
+The Rooms tab at `/admin/rooms` lists room sources, neko addresses, connection
+state and people counts. Admins can register a room, change its address, rotate
+its token or remove it; configured rooms are read-only and refer to
+`COZYCAST_ROOMS`. Add and New token show the secret only in the issuing modal,
+with copy buttons for the token and the container's `COZYCAST_ROOM` /
+`COZYCAST_NEKO_TOKEN` environment. Rotation requires restarting the container.
+Removal confirms that viewers are disconnected and saved chat, settings and
+permissions return when the name is registered again.
+
 ## Password reset links
 
 Accounts in the admin area keep the direct password reset and add a Reset
@@ -168,8 +179,11 @@ Content Security Policy on reset page loads.
 
 - Registering logs you in. Invite links remember the code across the
   login/register detour.
-- No "delete room" (rooms are configured on the server).
+- Admins register and manage room connections in the Rooms tab; container
+  creation and startup remain separate.
 - Bans and kicks arrive as a `kicked` message with a reason; show the reason.
+  Removing a room uses `not_found`; changing a registered room's connection
+  uses `room_changed`, with a message to reopen the room. Both are terminal.
 - Uploading files into the desktop is a separate permission (`rights.upload`);
   chat images need `rights.image`.
 - Clipboard, for whoever holds the remote: Ctrl/Cmd+V pastes the local

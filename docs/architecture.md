@@ -46,9 +46,13 @@ under another user than the desktop, which needs a patched image. So the
 person holding the remote is treated as in control of their room's neko, and
 that is kept from reaching further:
 
-- Every room has its own token, derived from one secret and the room's name
-  (`config.NekoToken`, `worker/entrypoint.sh`). The secret never reaches the
-  desktop's processes.
+- Configured rooms derive their token from one secret and the room's name
+  (`config.NekoToken`, `worker/entrypoint.sh`), unchanged. Registered rooms get
+  32 random bytes encoded as URL-safe base64, stored as-is in SQLite. The
+  admin API returns a token only at registration or rotation, never in lists.
+  Their worker receives `COZYCAST_NEKO_TOKEN`, which takes precedence over
+  derivation. Neither that variable nor `COZYCAST_NEKO_SECRET` reaches the
+  desktop's processes; only the resulting `NEKO_SESSION_API_TOKEN` does.
 - Every room is on its own Docker network, shared with the server only.
 - The proxy only lets through neko tokens the server issued to a tab still
   in the room, so a member created with the admin token is no use from
@@ -121,6 +125,11 @@ from both existing users and numeric account identity keys retained in chat.
 - `sessions`: token_hash, user_id, created_at, expires_at, last_seen_at.
 - `settings`: key/value. `message` (front page text), `registration`
   (`open` | `invite`).
+- `registered_rooms`: name (primary key), neko_url, neko_token, created_by
+  (user ID, SET NULL on account deletion), created_at (unix seconds).
+  Registrations are independent of settings and have no owning node yet.
+  Configured rooms take precedence over registrations with the same name,
+  with a startup warning; the shadowed registration is retained.
 - `rooms`: name, access (`public` | `account` | `verified` | `invite`),
   hidden, remote_ownership, default_remote, default_image,
   default_upload, screen (desktop size, e.g. `1280x720@30`, applied through
@@ -187,6 +196,24 @@ has a 10-second dial deadline, requires `system/init` within 10 seconds,
 and pings every 20 seconds with a 10-second deadline. Failed connections
 reconnect with backoff; healthy quiet connections have no read deadline.
 
+## Room registration and runtime lifetime
+
+At startup the server loads configured rooms and SQLite registrations through
+one runtime config builder (neko client, default screen, title and play helpers,
+play token). Admin registrations immediately enter the hub's synchronized room
+map and start the same settings load, readiness retry, observer, member check
+and title polling as startup rooms. Connection status means the authenticated
+neko observer has received its initial state and remains connected.
+
+Removing a room unpublishes it, rejects joins through stale references, sends a
+terminal `not_found` kick, closes proxied neko sockets and HTTP transfers, and
+cancels and waits for its background work. URL/token changes replace the runtime
+and send `room_changed`, telling viewers to reopen the room. Neither operation
+removes settings, permissions or chat history; normal chat retention still runs.
+Registered rooms have no Docker restart hook. Container creation, owning nodes
+and tunnels remain future work. `COZYCAST_ROOMS` keeps its existing nonempty
+configuration requirement.
+
 ## Room WebSocket
 
 `GET /api/rooms/{room}/ws[?access=<temporary invite>]`, JSON messages
@@ -194,7 +221,7 @@ reconnect with backoff; healthy quiet connections have no read deadline.
 room and only counted once the join succeeds. Message types are defined in
 `server/internal/hub/protocol.go` and mirrored in `web/src/room/protocol.ts`.
 
-Admin actions that change stored state (permissions, bans, room settings)
+Admin actions that change stored state (registrations, permissions, bans, room settings)
 are REST endpoints; they notify the hub, which applies the change to live
 connections immediately.
 

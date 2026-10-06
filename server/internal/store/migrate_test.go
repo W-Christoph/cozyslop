@@ -183,7 +183,7 @@ func TestMigrateUserIDs(t *testing.T) {
 			if err := s.db.QueryRow("SELECT seq FROM sqlite_sequence WHERE name = 'users'").Scan(&seq); err != nil || seq != wantSeq {
 				t.Fatalf("sequence: %d want %d, err=%v", seq, wantSeq, err)
 			}
-			if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 8 {
+			if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 9 {
 				t.Fatalf("version: %d err=%v", version, err)
 			}
 			if err := s.db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil || foreignKeys != 1 {

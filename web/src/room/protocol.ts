@@ -51,7 +51,7 @@ export interface ChatMessage {
   time: number // unix ms
 }
 
-export type KickReason = 'banned' | 'account' | 'verified' | 'invite' | 'kicked' | 'deleted' | 'not_found' | 'session'
+export type KickReason = 'banned' | 'account' | 'verified' | 'invite' | 'kicked' | 'deleted' | 'not_found' | 'session' | 'room_changed'
 
 export type ServerMessage =
   | {

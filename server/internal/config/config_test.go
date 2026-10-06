@@ -78,3 +78,29 @@ func TestDefaultScreenConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestRegisteredRoomValidation(t *testing.T) {
+	for _, name := range []string{"default", "room-second", "Room_2", "123"} {
+		if !ValidRoomName(name) {
+			t.Errorf("name rejected: %q", name)
+		}
+	}
+	for _, name := range []string{"", "a/b", "..", "a b", "a?b", "a=b", "a,b"} {
+		if ValidRoomName(name) {
+			t.Errorf("unsafe name accepted: %q", name)
+		}
+	}
+	for _, raw := range []string{"http://neko:8080", "https://neko/prefix/", "http://[::1]:8080"} {
+		if err := ValidateNekoURL(raw); err != nil {
+			t.Errorf("URL %s: %v", raw, err)
+		}
+	}
+	for _, raw := range []string{"neko", "//neko", "ftp://neko", "http:///path", "http://user:pass@neko", "http://neko?", "http://neko?x=1", "http://neko#", "http://neko#fragment", "http://neko:bad"} {
+		if err := ValidateNekoURL(raw); err == nil {
+			t.Errorf("unsafe URL accepted: %q", raw)
+		}
+	}
+	if _, err := parseRooms(""); err == nil {
+		t.Fatal("empty configured room list accepted")
+	}
+}

@@ -141,6 +141,34 @@ admin. `trusted` grants room admission and remote/image/upload rights;
 `invited` grants admission. Effective rights also depend on room defaults and
 global admin rights; see [architecture](architecture.md#permissions).
 
+## Admin room registrations
+
+All endpoints use the usual admin authentication and JSON error format.
+
+| Endpoint | Body | Success | Errors |
+|---|---|---|---|
+| `GET /api/admin/rooms` | None | 200 sorted array of `{name,source,nekoUrl,connected,userCount}` for all live rooms; source is `configured` or `registered`; connected means the authenticated neko event stream is working; no tokens | Common admin errors |
+| `POST /api/admin/rooms` | `{"name":"extra","nekoUrl":"http://room-extra:8080"}` | 201 room fields above plus `nekoToken`, returned once | 400 invalid name/URL; 409 `"That room already exists."` (including configured names) |
+| `PATCH /api/admin/rooms/{room}` | `{"nekoUrl":"https://neko.example/prefix"}` | 200 room fields, no token; replaces connection immediately | 400 invalid URL; 404 `"Unknown room."`; 409 configured room |
+| `POST /api/admin/rooms/{room}/token` | None | 200 room fields plus a fresh `nekoToken`, returned once; replaces connection immediately | 404 unknown; 409 configured room |
+| `DELETE /api/admin/rooms/{room}` | None | 204; unpublishes room and disconnects viewers | 404 unknown; 409 configured room |
+
+Names contain one or more ASCII letters, digits, underscores or hyphens.
+URLs must be absolute `http`/`https` with a hostname and no credentials,
+query (including an empty `?`) or fragment. A path prefix is allowed.
+Neko does not need to be reachable at registration; the hub retries.
+Configured rooms reject changes with `"This room is managed in COZYCAST_ROOMS."`.
+Configuration wins at startup over a stored registration of the same name.
+
+Each token is 32 random bytes encoded as unpadded URL-safe base64. Supply it to
+the worker as `COZYCAST_NEKO_TOKEN`; after rotation update the worker yourself.
+Lists and PATCH responses never include it. URL/token replacement sends a
+terminal `room_changed` kick: viewers reopen the room to reconnect. Removal
+sends `not_found`. Removing a registration keeps settings, permissions and chat
+history (under normal retention); registering its name again restores them.
+The public `GET /api/rooms` reflects registrations and removals immediately.
+These APIs register connections only; they do not create containers.
+
 ## Admin room settings and moderation
 
 All callers: admin.
@@ -223,7 +251,7 @@ with `error` `""` if it worked (see `docs/architecture.md`).
 An unknown room upgrades successfully, sends
 `{"type":"kicked","reason":"not_found"}`, then closes with code 4000.
 Other `kicked.reason` values are `banned`, `account`, `verified`, `invite`,
-`kicked`, `deleted` and `session`.
+`kicked`, `deleted`, `session` and `room_changed`.
 
 On join or a `{"type":"neko_token"}` request, failure to issue a token
 because neko failed sends `{"type":"neko_unavailable","message":"..."}`

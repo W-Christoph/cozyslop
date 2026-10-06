@@ -79,6 +79,15 @@ func (s *Server) nekoProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	detach, ok := rm.AttachNeko(token, &hub.NekoConn{Send: func([]byte) {}, Close: cancel})
+	if !ok {
+		writeError(w, http.StatusForbidden, "Your connection to the room's desktop has expired.")
+		return
+	}
+	defer detach()
+	r = r.WithContext(ctx)
 	target := rm.Neko().BaseURL()
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {

@@ -40,12 +40,17 @@ type DeniedError struct{ Denial rights.Denial }
 func (e *DeniedError) Error() string { return "hub: join denied: " + e.Denial.Reason }
 
 type Room struct {
+	Source   string // immutable runtime source
 	Name     string
 	NekoPath string // public path the browser uses to reach this room's neko
 
+	removed       context.Context
+	removeCancel  context.CancelFunc
 	hub           *Hub
 	neko          *neko.Client
 	log           *slog.Logger
+	done          chan struct{} // all background work has ended
+	cancel        context.CancelFunc
 	ready         chan struct{} // closed once neko is up and cleaned
 	defaultScreen string
 
@@ -109,20 +114,24 @@ type Client struct {
 }
 
 func newRoom(h *Hub, name string, nc *neko.Client) *Room {
+	removed, removeCancel := context.WithCancel(context.Background())
 	return &Room{
-		Name:     name,
-		NekoPath: "/neko/" + name,
-		hub:      h,
-		neko:     nc,
-		log:      slog.With("room", name),
-		ready:    make(chan struct{}),
-		inbound:  ratelimit.New(40, 200*time.Millisecond),
-		chatUser: ratelimit.New(10, 500*time.Millisecond),
-		chatAnon: ratelimit.New(5, time.Second),
-		settings: store.RoomSettings{Name: name, Access: "public"},
-		members:  make(map[string]*member),
-		clients:  make(map[string]*Client),
-		tokens:   make(map[string]*Client),
+		removed:      removed,
+		removeCancel: removeCancel,
+		Name:         name,
+		NekoPath:     "/neko/" + name,
+		hub:          h,
+		neko:         nc,
+		log:          slog.With("room", name),
+		ready:        make(chan struct{}),
+		done:         make(chan struct{}),
+		inbound:      ratelimit.New(40, 200*time.Millisecond),
+		chatUser:     ratelimit.New(10, 500*time.Millisecond),
+		chatAnon:     ratelimit.New(5, time.Second),
+		settings:     store.RoomSettings{Name: name, Access: "public"},
+		members:      make(map[string]*member),
+		clients:      make(map[string]*Client),
+		tokens:       make(map[string]*Client),
 	}
 }
 
@@ -153,9 +162,13 @@ func (r *Room) run(ctx context.Context) {
 	}
 	close(r.ready)
 	r.log.Info("neko ready")
-	go r.watchMembers(ctx)
+	var work sync.WaitGroup
+	defer work.Wait()
+	work.Add(1)
+	go func() { defer work.Done(); r.watchMembers(ctx) }()
 	if r.titleURL != "" {
-		go r.watchTitle(ctx)
+		work.Add(1)
+		go func() { defer work.Done(); r.watchTitle(ctx) }()
 	}
 	r.neko.WatchHost(ctx, func(init neko.Init) {
 		r.mu.Lock()
@@ -420,6 +433,12 @@ func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
 	now := time.Now().UnixMilli()
 
 	r.mu.Lock()
+	select {
+	case <-r.removed.Done():
+		r.mu.Unlock()
+		return nil, &DeniedError{rights.Denial{Reason: "not_found"}}
+	default:
+	}
 	c.joinedAt = time.Now()
 	key := id.Key()
 	m := r.members[key]
@@ -786,8 +805,14 @@ func (r *Room) ResetRemote(ctx context.Context) error {
 // NekoToken returns a fresh neko session token for the tab, creating its
 // neko member first if needed (first call, or neko restarted).
 func (r *Room) NekoToken(ctx context.Context, c *Client) (string, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(r.removed, cancel)
+	defer stop()
+	defer cancel()
 	select {
 	case <-r.ready:
+	case <-r.removed.Done():
+		return "", ErrNotPresent
 	case <-ctx.Done():
 		return "", ctx.Err()
 	}

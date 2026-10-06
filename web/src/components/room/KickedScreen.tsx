@@ -17,6 +17,7 @@ export function KickedScreen() {
     kicked: ['You have been kicked', 'You were removed from this room.', 'logout'],
     deleted: ['Account deleted or disabled', 'Your account is no longer available.', 'user'],
     not_found: ['Room not found', 'This room does not exist.', 'search'],
+    room_changed: ['Room updated', 'The room’s connection details changed. Reopen the room to reconnect.', 'logout'],
     session: ['Session expired', 'Please log in again to join this room.', 'lock'],
   } satisfies Record<typeof kick.reason, [string, string, IconName]>)[kick.reason]
   const login = kick.reason === 'account' || kick.reason === 'session'

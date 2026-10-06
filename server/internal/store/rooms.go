@@ -56,3 +56,79 @@ func ValidAccess(s string) bool {
 	}
 	return false
 }
+
+// RegisteredRoom holds the connection details separately from room settings.
+// Tokens must only be exposed when created or rotated.
+type RegisteredRoom struct {
+	Name      string
+	NekoURL   string
+	NekoToken string `json:"-"`
+	CreatedBy *int64
+	CreatedAt int64
+}
+
+var ErrRoomExists = errors.New("room already registered")
+
+const registeredRoomColumns = "name, neko_url, neko_token, created_by, created_at"
+
+func scanRegisteredRoom(row interface{ Scan(...any) error }) (RegisteredRoom, error) {
+	var room RegisteredRoom
+	err := row.Scan(&room.Name, &room.NekoURL, &room.NekoToken, &room.CreatedBy, &room.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = ErrNotFound
+	}
+	return room, err
+}
+
+func (s *Store) RegisteredRooms(ctx context.Context) ([]RegisteredRoom, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT "+registeredRoomColumns+" FROM registered_rooms ORDER BY name")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	list := []RegisteredRoom{}
+	for rows.Next() {
+		room, err := scanRegisteredRoom(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, room)
+	}
+	return list, rows.Err()
+}
+
+func (s *Store) RegisteredRoom(ctx context.Context, name string) (RegisteredRoom, error) {
+	return scanRegisteredRoom(s.db.QueryRowContext(ctx, "SELECT "+registeredRoomColumns+" FROM registered_rooms WHERE name = ?", name))
+}
+
+func (s *Store) CreateRegisteredRoom(ctx context.Context, room *RegisteredRoom) error {
+	room.CreatedAt = s.unix()
+	_, err := s.db.ExecContext(ctx, "INSERT INTO registered_rooms ("+registeredRoomColumns+") VALUES (?, ?, ?, ?, ?)",
+		room.Name, room.NekoURL, room.NekoToken, room.CreatedBy, room.CreatedAt)
+	if isUniqueViolation(err) {
+		return ErrRoomExists
+	}
+	return err
+}
+
+func (s *Store) UpdateRegisteredRoom(ctx context.Context, room RegisteredRoom) error {
+	res, err := s.db.ExecContext(ctx, "UPDATE registered_rooms SET neko_url = ?, neko_token = ? WHERE name = ?", room.NekoURL, room.NekoToken, room.Name)
+	return registeredRoomResult(res, err)
+}
+
+// DeleteRegisteredRoom keeps settings, permissions and chat history.
+func (s *Store) DeleteRegisteredRoom(ctx context.Context, name string) error {
+	res, err := s.db.ExecContext(ctx, "DELETE FROM registered_rooms WHERE name = ?", name)
+	return registeredRoomResult(res, err)
+}
+
+func registeredRoomResult(res sql.Result, err error) error {
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err == nil && n == 0 {
+		return ErrNotFound
+	}
+	return err
+}

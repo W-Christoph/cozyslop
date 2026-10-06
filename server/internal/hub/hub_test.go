@@ -444,3 +444,171 @@ func TestNekoUnavailable(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeRoomLifecycle(t *testing.T) {
+	f := newFixture(t, store.RoomSettings{})
+	fake := nekotest.New(t, "runtime-secret")
+	nc, err := neko.NewClient(fake.URL(), "runtime-secret")
+	requireOK(t, err)
+	rc := RoomConfig{Name: "added", Source: "registered", Neko: nc}
+	requireOK(t, f.h.Add(f.ctx, rc))
+	requireEqual(t, f.h.Add(f.ctx, rc), ErrRoomExists)
+	r := f.h.Room(rc.Name)
+	rec := newRecording()
+	c, err := r.Join(f.ctx, JoinRequest{Identity: anon("live"), Send: rec.send, Kill: rec.kill})
+	requireOK(t, err)
+	rec.wait(t, "welcome")
+	token, err := r.NekoToken(f.ctx, c)
+	requireOK(t, err)
+	waitCtx, cancel := observerDeadline()
+	defer cancel()
+	requireOK(t, fake.WaitObservers(waitCtx, 1))
+	closed := make(chan struct{})
+	detach, ok := r.AttachNeko(token, &NekoConn{Send: func([]byte) {}, Close: func() { close(closed) }})
+	requireEqual(t, ok, true)
+	defer detach()
+	r.Handle(f.ctx, c, ClientMsg{Type: "chat_send", Body: "kept across registration"})
+	settings := r.Settings()
+	settings.DefaultUpload = true
+	requireOK(t, f.s.SaveRoomSettings(f.ctx, settings))
+	alice := f.user("runtime-user")
+	requireOK(t, f.s.SavePermission(f.ctx, store.Permission{Room: rc.Name, UserID: alice.User.ID, Image: true}))
+	requireEqual(t, f.h.Remove(rc.Name, "not_found"), true)
+	rec.assertKills(t, 1)
+	requireEqual(t, rec.wait(t, "kicked").(kickedMsg).Reason, "not_found")
+	requireEqual(t, r.UserCount(), 0)
+	requireEqual(t, f.h.Room(rc.Name), nil)
+	requireEqual(t, r.NekoTokenIssued(token), false)
+	select {
+	case <-closed:
+	default:
+		t.Fatal("proxy not closed")
+	}
+	select {
+	case <-r.done:
+	default:
+		t.Fatal("room work survived removal")
+	}
+	requireOK(t, fake.WaitObservers(waitCtx, 0))
+	requireEqual(t, r.Neko().Connected(), false)
+	_, err = r.Join(f.ctx, JoinRequest{Identity: anon("late"), Send: rec.send, Kill: rec.kill})
+	var denied *DeniedError
+	if !errors.As(err, &denied) || denied.Denial.Reason != "not_found" {
+		t.Fatalf("stale room admitted a client: %v", err)
+	}
+	r.Leave(f.ctx, c)
+	requireOK(t, f.h.Add(f.ctx, rc))
+	again := f.h.Room(rc.Name)
+	requireEqual(t, again.Settings().DefaultUpload, true)
+	next := newRecording()
+	client, err := again.Join(f.ctx, JoinRequest{Identity: alice, Send: next.send, Kill: next.kill})
+	requireOK(t, err)
+	welcome := next.wait(t, "welcome").(welcomeMsg)
+	requireEqual(t, welcome.Rights.Image, true)
+	if len(welcome.History) != 1 || welcome.History[0].Body != "kept across registration" {
+		t.Fatalf("history lost: %+v", welcome.History)
+	}
+	again.Leave(f.ctx, client)
+	requireEqual(t, f.h.Remove(rc.Name, "not_found"), true)
+	requireEqual(t, f.h.Remove(rc.Name, "not_found"), false)
+}
+
+func TestRemoveUnreachableRoomStopsWork(t *testing.T) {
+	f := newFixture(t, store.RoomSettings{})
+	fake := nekotest.New(t, "secret")
+	fake.SetHealthy(false)
+	nc, err := neko.NewClient(fake.URL(), "secret")
+	requireOK(t, err)
+	requireOK(t, f.h.Add(f.ctx, RoomConfig{Name: "offline", Neko: nc}))
+	r := f.h.Room("offline")
+	rec := newRecording()
+	c, err := r.Join(f.ctx, JoinRequest{Identity: anon("waiting"), Send: rec.send, Kill: rec.kill})
+	requireOK(t, err)
+	done := make(chan struct{})
+	go func() { defer close(done); r.SendNekoToken(context.Background(), c) }()
+	requireEqual(t, f.h.Remove("offline", "not_found"), true)
+	select {
+	case <-done:
+	case <-time.After(testTimeout):
+		t.Fatal("token waiter survived removal")
+	}
+	select {
+	case <-r.done:
+	default:
+		t.Fatal("health retry survived removal")
+	}
+	rec.assertKills(t, 1)
+	r.Leave(f.ctx, c)
+}
+
+func TestRuntimeRoomReaders(t *testing.T) {
+	f := newFixture(t, store.RoomSettings{})
+	fake := nekotest.New(t, "admin-secret")
+	fake.SetHealthy(false)
+	nc, err := neko.NewClient(fake.URL(), "admin-secret")
+	requireOK(t, err)
+	done := make(chan struct{})
+	var readers sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		readers.Add(1)
+		go func() {
+			defer readers.Done()
+			for {
+				select {
+				case <-done:
+					return
+				default:
+				}
+				f.h.Room("changing")
+				f.h.Rooms()
+				f.h.EndSessions(0, nil)
+				f.h.UserChanged(f.ctx, 999)
+				f.h.PermissionsChanged(f.ctx, "changing", 999)
+				f.h.RoomSettingsChanged(f.ctx, "changing")
+			}
+		}()
+	}
+	for i := 0; i < 10; i++ {
+		requireOK(t, f.h.Add(f.ctx, RoomConfig{Name: "changing", Neko: nc}))
+		f.h.Remove("changing", "not_found")
+	}
+	close(done)
+	readers.Wait()
+}
+
+func TestRuntimeRoomBecomesReachable(t *testing.T) {
+	f := newFixture(t, store.RoomSettings{})
+	fake := nekotest.New(t, "later-secret")
+	fake.SetHealthy(false)
+	nc, err := neko.NewClient(fake.URL(), "later-secret")
+	requireOK(t, err)
+	requireOK(t, f.h.Add(f.ctx, RoomConfig{Name: "later", Source: "registered", Neko: nc}))
+	r := f.h.Room("later")
+	t.Cleanup(func() { f.h.Remove("later", "not_found") })
+	rec := newRecording()
+	client, err := r.Join(f.ctx, JoinRequest{Identity: anon("early"), Send: rec.send, Kill: rec.kill})
+	requireOK(t, err)
+	done := make(chan struct{})
+	go func() { defer close(done); r.SendNekoToken(f.ctx, client) }()
+	// Wait until startup actually encountered the unavailable desktop.
+	deadline := time.NewTimer(testTimeout)
+	defer deadline.Stop()
+	for len(fake.Calls()) == 0 {
+		select {
+		case <-deadline.C:
+			t.Fatal("no health retry")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	requireEqual(t, rec.count("neko"), 0)
+	fake.SetHealthy(true)
+	if rec.wait(t, "neko").(nekoMsg).Token == "" {
+		t.Fatal("no token after desktop came up")
+	}
+	select {
+	case <-done:
+	case <-time.After(testTimeout):
+		t.Fatal("token request did not finish")
+	}
+	r.Leave(f.ctx, client)
+}

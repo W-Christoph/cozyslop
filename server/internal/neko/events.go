@@ -66,6 +66,7 @@ func (c *Client) WatchHost(ctx context.Context, onConnect func(Init), onHost fun
 }
 
 func (c *Client) watchHostOnce(ctx context.Context, onConnect func(Init), onHost func(string)) error {
+	defer c.connected.Store(false)
 	token, err := c.observerToken(ctx)
 	if err != nil {
 		return err
@@ -138,6 +139,7 @@ func (c *Client) watchHostOnce(ctx context.Context, onConnect func(Init), onHost
 			}
 			initCancel()
 			readCtx = ctx
+			c.connected.Store(true)
 			onConnect(Init{Videos: init.WebRTC.Videos})
 			host = init.ControlHost
 		case "control/host":

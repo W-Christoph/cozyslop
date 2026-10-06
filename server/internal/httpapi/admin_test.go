@@ -2,6 +2,8 @@ package httpapi_test
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,8 +13,10 @@ import (
 	"time"
 
 	"cozycast/internal/hub"
+	"cozycast/internal/neko/nekotest"
 	"cozycast/internal/store"
 
+	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 )
 
@@ -21,6 +25,11 @@ func TestAdminAuthorization(t *testing.T) {
 	a.user("alice", false)
 	anon, user := a.client(), a.login("alice")
 	for _, route := range []struct{ method, path string }{
+		{"GET", "/api/admin/rooms"},
+		{"POST", "/api/admin/rooms"},
+		{"PATCH", "/api/admin/rooms/default"},
+		{"POST", "/api/admin/rooms/default/token"},
+		{"DELETE", "/api/admin/rooms/default"},
 		{"GET", "/api/admin/users"},
 		{"PATCH", "/api/admin/users/alice"},
 		{"DELETE", "/api/admin/users/alice"},
@@ -432,4 +441,175 @@ func TestAdminGlobalSettings(t *testing.T) {
 	a.call(admin, "PUT", "/api/admin/settings", map[string]string{"message": message + "é", "registration": "open"}, 400, nil)
 	a.call(admin, "PUT", "/api/admin/settings", map[string]string{"registration": "invalid"}, 400, nil)
 	a.call(admin, "PUT", "/api/admin/settings", map[string]string{"message": "welcome", "registration": "invite"}, 200, nil)
+}
+
+func TestAdminRoomRegistrations(t *testing.T) {
+	a := newAPITest(t)
+	a.user("root", true)
+	admin := a.login("root")
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := a.h.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cancel()
+		for _, room := range a.h.Rooms() {
+			a.h.Remove(room.Name, "not_found")
+		}
+	})
+	for _, name := range []string{"", "with space", "a/b", ".", "..", "a?b", "a=b"} {
+		a.call(admin, "POST", "/api/admin/rooms", map[string]string{"name": name, "nekoUrl": "http://neko:8080"}, 400, nil)
+	}
+	for _, url := range []string{"", "relative", "//neko", "ftp://neko", "http:///missing", "http://user:pass@neko", "http://neko?x=y", "http://neko?", "http://neko#x", "http://neko#", "http://neko:bad"} {
+		a.call(admin, "POST", "/api/admin/rooms", map[string]string{"name": "extra", "nekoUrl": url}, 400, nil)
+	}
+	a.error(admin, "POST", "/api/admin/rooms", map[string]string{"name": "default", "nekoUrl": "http://neko"}, 409, "That room already exists.")
+	for _, route := range []struct{ method, suffix string }{{"PATCH", ""}, {"POST", "/token"}, {"DELETE", ""}} {
+		a.error(admin, route.method, "/api/admin/rooms/default"+route.suffix, map[string]string{"nekoUrl": "http://neko"}, 409, "This room is managed in COZYCAST_ROOMS.")
+		a.error(admin, route.method, "/api/admin/rooms/missing"+route.suffix, map[string]string{"nekoUrl": "http://neko"}, 404, "Unknown room.")
+	}
+	var created struct {
+		Name, Source, NekoURL, NekoToken string
+		Connected                        bool
+		UserCount                        int
+	}
+	a.call(admin, "POST", "/api/admin/rooms", map[string]string{"name": "extra", "nekoUrl": "http://localhost:1"}, 201, &created)
+	raw, err := base64.RawURLEncoding.DecodeString(created.NekoToken)
+	if err != nil || len(raw) != 32 || created.Name != "extra" || created.Source != "registered" || created.Connected || created.UserCount != 0 {
+		t.Fatalf("create: %+v token bytes=%d err=%v", created, len(raw), err)
+	}
+	saved, err := a.st.RegisteredRoom(ctx, "extra")
+	if err != nil || saved.NekoToken != created.NekoToken || saved.CreatedBy == nil {
+		t.Fatalf("stored: %+v %v", saved, err)
+	}
+	a.call(admin, "POST", "/api/admin/rooms", map[string]string{"name": "extra", "nekoUrl": "https://other"}, 409, nil)
+	assertLists := func(want int) {
+		t.Helper()
+		for _, path := range []string{"/api/admin/rooms", "/api/rooms"} {
+			var list []map[string]any
+			data := a.call(admin, "GET", path, nil, 200, &list)
+			if len(list) != want || strings.Contains(strings.ToLower(string(data)), "token") || strings.Contains(string(data), created.NekoToken) {
+				t.Fatalf("list %s: %s", path, data)
+			}
+		}
+	}
+	assertLists(2)
+	a.call(admin, "PATCH", "/api/admin/rooms/extra", map[string]string{"nekoUrl": "relative"}, 400, nil)
+	fake := nekotest.New(t, created.NekoToken)
+	patched := a.call(admin, "PATCH", "/api/admin/rooms/extra", map[string]string{"nekoUrl": fake.URL()}, 200, nil)
+	if strings.Contains(strings.ToLower(string(patched)), "token") {
+		t.Fatalf("patch leaked token: %s", patched)
+	}
+	waitCtx, stop := context.WithTimeout(ctx, 5*time.Second)
+	defer stop()
+	if err := fake.WaitObservers(waitCtx, 1); err != nil {
+		t.Fatal(err)
+	}
+	room := a.h.Room("extra")
+	for !room.Neko().Connected() {
+		select {
+		case <-waitCtx.Done():
+			t.Fatal("connection not reported")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	var list []struct {
+		Name      string
+		Connected bool
+	}
+	a.call(admin, "GET", "/api/admin/rooms", nil, 200, &list)
+	if len(list) != 2 || list[1].Name != "extra" || !list[1].Connected {
+		t.Fatalf("status: %+v", list)
+	}
+	conn, _, err := websocket.Dial(ctx, a.srv.URL+"/api/rooms/extra/ws", &websocket.DialOptions{HTTPClient: admin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	readUntil := func(typ string) map[string]any {
+		t.Helper()
+		for {
+			var msg map[string]any
+			if err := wsjson.Read(waitCtx, conn, &msg); err != nil {
+				t.Fatal(err)
+			}
+			if msg["type"] == typ {
+				return msg
+			}
+		}
+	}
+	readUntil("welcome")
+	readUntil("neko")
+	var rotated struct{ NekoToken string }
+	a.call(admin, "POST", "/api/admin/rooms/extra/token", nil, 200, &rotated)
+	if rotated.NekoToken == created.NekoToken {
+		t.Fatal("token not rotated")
+	}
+	raw, err = base64.RawURLEncoding.DecodeString(rotated.NekoToken)
+	if err != nil || len(raw) != 32 {
+		t.Fatal("bad rotated token")
+	}
+	if readUntil("kicked")["reason"] != "room_changed" {
+		t.Fatal("replacement reason missing")
+	}
+	if err := fake.WaitObservers(waitCtx, 0); err != nil {
+		t.Fatal(err)
+	}
+	saved, err = a.st.RegisteredRoom(ctx, "extra")
+	if err != nil || saved.NekoURL != fake.URL() || saved.NekoToken != rotated.NekoToken {
+		t.Fatalf("rotation lost URL: %+v %v", saved, err)
+	}
+	updatedFake := nekotest.New(t, rotated.NekoToken)
+	a.call(admin, "PATCH", "/api/admin/rooms/extra", map[string]string{"nekoUrl": updatedFake.URL()}, 200, nil)
+	if err := updatedFake.WaitObservers(waitCtx, 1); err != nil {
+		t.Fatal(err)
+	}
+	assertLists(2)
+	member, _, err := websocket.Dial(ctx, a.srv.URL+"/api/rooms/extra/ws", &websocket.DialOptions{HTTPClient: admin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer member.CloseNow()
+	for {
+		var msg map[string]any
+		if err := wsjson.Read(waitCtx, member, &msg); err != nil {
+			t.Fatal(err)
+		}
+		if msg["type"] == "neko" {
+			break
+		}
+	}
+	var occupied []struct {
+		Name      string
+		UserCount int
+	}
+	a.call(admin, "GET", "/api/admin/rooms", nil, 200, &occupied)
+	if len(occupied) != 2 || occupied[1].UserCount != 1 {
+		t.Fatalf("people count: %+v", occupied)
+	}
+	a.call(admin, "DELETE", "/api/admin/rooms/extra", nil, 204, nil)
+	for {
+		var msg map[string]any
+		if err := wsjson.Read(waitCtx, member, &msg); err != nil {
+			t.Fatal(err)
+		}
+		if msg["type"] == "kicked" {
+			if msg["reason"] != "not_found" {
+				t.Fatalf("removal reason: %+v", msg)
+			}
+			break
+		}
+	}
+	if _, _, err := member.Read(waitCtx); websocket.CloseStatus(err) != 4000 {
+		t.Fatalf("removal must be terminal: %v", err)
+	}
+	if err := updatedFake.WaitObservers(waitCtx, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.st.RegisteredRoom(ctx, "extra"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("not deleted: %v", err)
+	}
+	assertLists(1)
+	a.call(admin, "POST", "/api/admin/rooms", map[string]string{"name": "extra", "nekoUrl": "https://other/neko/"}, 201, &created)
+	assertLists(2)
 }

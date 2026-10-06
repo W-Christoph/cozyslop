@@ -6,6 +6,11 @@ import { createServer } from 'vite'
 // by each fixture, using the same Vite transform as the other Node tests.
 const mocks = {
   'preact/compat': `export const createPortal = (node, container) => { globalThis.frontendFixture.portal = container; return node }`,
+  'preact-iso': `
+    export function LocationProvider() {}; export function Route() {}; export function Router() {}
+    export const useLocation = () => globalThis.frontendFixture.location
+    export const useRoute = () => globalThis.frontendFixture.route
+  `,
   'preact/hooks': `
     export const useState = (...args) => globalThis.frontendFixture.state(...args)
     export const useRef = (...args) => globalThis.frontendFixture.ref(...args)
@@ -22,19 +27,30 @@ const mocks = {
     destroy() {}
   }`,
   '/app/state': `
-    export const preferences = { get value() { return globalThis.frontendFixture?.preferences ?? { volume: 100, muted: false } } }
+    export const preferences = { get value() { return globalThis.frontendFixture?.preferences ?? { volume: 100, muted: false } }, peek() { return this.value } }
     export const me = { get value() { return globalThis.frontendFixture?.me ?? null }, set value(user) { globalThis.frontendFixture.me = user } }
+    export const meLoaded = { get value() { return globalThis.frontendFixture.meLoaded ?? false } }
+    export const pageTitle = { value: null }
+    export const refreshMe = async () => {}
+    export const refreshServerSettings = async () => {}
+    export const login = async () => {}
+    export const register = async () => {}
+    export const pendingInvite = { get: () => null }
     export const settingsOpen = { get value() { return globalThis.frontendFixture.settingsOpen }, set value(section) { globalThis.frontendFixture.settingsOpen = section } }
     export const logout = async () => globalThis.frontendFixture.logout()
     export const serverSettings = { value: { registration: 'open' } }
     export const resolveTheme = theme => theme
-    export const updatePreferences = () => {}
+    export const updatePreferences = change => { globalThis.frontendFixture.preferences = { ...preferences.value, ...change } }
   `,
   '/RoomContext': `export const useRoomStore = () => globalThis.frontendFixture.store; export const RoomContext = {}`,
   'react-colorful': `export function HexColorInput() {}; export function HexColorPicker() {}`,
   '/useTouchTrackpad': `export const useTouchTrackpad = () => {}`,
   '/useChatEvents': `export const useChatEvents = () => []`,
-  '/guacamole-keyboard.js': `export default class { listenTo() {} reset() {} }`,
+  '/guacamole-keyboard.js': `export default class {
+    constructor() { globalThis.frontendFixture.keyboard = this; this.modifiers = { ctrl: false, meta: false } }
+    listenTo() {}
+    reset() { globalThis.frontendFixture.keyboardResets = (globalThis.frontendFixture.keyboardResets ?? 0) + 1 }
+  }`,
 }
 const server = await createServer({
   configFile: false,
@@ -45,7 +61,8 @@ const server = await createServer({
     transform(code, id) {
       if (!id.includes('/src/')) return
       return code.replace(/(from\s*['"])([^'"]+)(['"])/g, (match, before, path, after) => {
-        const key = Object.keys(mocks).find((key) => path === key || path.endsWith(key))
+        const key = id.endsWith('/app/App.tsx') && path === './state' ? '/app/state'
+          : Object.keys(mocks).find((key) => path === key || path.endsWith(key))
         return key ? `${before}virtual:fixture:${key}${after}` : match
       })
     },
@@ -53,8 +70,19 @@ const server = await createServer({
     load(id) { if (id.startsWith('\0fixture:')) return mocks[id.slice(9)] },
   }],
 })
-let readableNameColor, cropKeyboard, useDialogFocus, Button, ButtonLink, Modal, Input, FormActions, AvatarChooser, ProfileEditor, SettingsDialog, profileChanged, userIdentity, ChatPanel, MessageGroup, MessageList, ChatPreview, MediaModal, RemoteScreen, AccountRow, NekoClient, KickedScreen, DesktopUploadStatus, PermissionRow, PermissionFields, PermissionTable, BanDate, Notice, blankPermission, config
+let readableNameColor, cropKeyboard, useDialogFocus, Button, ButtonLink, Modal, Input, FormActions, AvatarChooser, ProfileEditor, SettingsDialog, profileChanged, userIdentity, ChatPanel, MessageGroup, MessageList, ChatPreview, MediaModal, RemoteScreen, AccountRow, NekoClient, KickedScreen, DesktopUploadStatus, PermissionRow, PermissionFields, PermissionTable, BanDate, Notice, blankPermission, config, App, useRoom, VideoArea
+let ChatInput, MessageEditor
+let useDesktopPaste, PasteDialog, useMobileKeyboard, RoomSection, ResetPasswordPage, ResetLinkModal, LoginPage
 try {
+  ;({ ResetPasswordPage } = await server.ssrLoadModule('/src/pages/ResetPasswordPage.tsx'))
+  ;({ ResetLinkModal } = await server.ssrLoadModule('/src/components/admin/ResetLinkModal.tsx'))
+  ;({ LoginPage } = await server.ssrLoadModule('/src/pages/LoginPage.tsx'))
+  ;({ useDesktopPaste } = await server.ssrLoadModule('/src/components/room/useDesktopPaste.tsx'))
+  ;({ PasteDialog } = await server.ssrLoadModule('/src/components/room/PasteDialog.tsx'))
+  ;({ useMobileKeyboard } = await server.ssrLoadModule('/src/components/room/useMobileKeyboard.ts'))
+  ;({ RoomSection } = await server.ssrLoadModule('/src/components/settings/RoomSection.tsx'))
+  ;({ ChatInput } = await server.ssrLoadModule('/src/components/chat/ChatInput.tsx'))
+  ;({ MessageEditor } = await server.ssrLoadModule('/src/components/chat/MessageEditor.tsx'))
   ;({ readableNameColor } = await server.ssrLoadModule('/src/components/chat/nameColor.ts'))
   ;({ cropKeyboard } = await server.ssrLoadModule('/src/components/ui/cropKeyboard.ts'))
   ;({ useDialogFocus } = await server.ssrLoadModule('/src/components/ui/useDialogFocus.ts'))
@@ -82,6 +110,9 @@ try {
   ;({ NekoClient } = await server.ssrLoadModule('/src/neko/client.ts'))
   ;({ KickedScreen } = await server.ssrLoadModule('/src/components/room/KickedScreen.tsx'))
   ;({ DesktopUploadStatus } = await server.ssrLoadModule('/src/components/room/DesktopUpload.tsx'))
+  ;({ App } = await server.ssrLoadModule('/src/app/App.tsx'))
+  ;({ useRoom } = await server.ssrLoadModule('/src/room/useRoom.ts'))
+  ;({ VideoArea } = await server.ssrLoadModule('/src/components/room/VideoArea.tsx'))
   ;({ default: config } = await server.ssrLoadModule('/vite.config.ts'))
 } finally { await server.close() }
 
@@ -148,6 +179,77 @@ function globals(t, values) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor)
       else delete globalThis[key]
     }
+  })
+}
+
+for (const editing of [false, true]) {
+  test(`${editing ? 'inline editor' : 'chat input'} completes mentions before sending and supports dismissal, caret movement and blur`, (t) => {
+    const f = fixture(t), listeners = new Map(), sent = []
+    const self = { key: 'u:1', nickname: 'Alice', anonymous: false }
+    f.me = self
+    f.store = {
+      server: { value: 'connected' }, error: { value: null }, self: { value: self }, selfKey: { value: self.key },
+      users: { value: new Map([self, { key: 'u:2', nickname: 'B ob' }, { key: 'u:3', nickname: 'Cora' }].map((user) => [user.key, user])) },
+      rights: { value: { image: false } }, chat: { value: [] }, setTyping() {},
+      sendChat: (text) => sent.push(text), editChat: (_, text) => sent.push(text),
+    }
+    const doc = { activeElement: null, addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) }
+    const ta = {
+      value: '', selectionStart: 0, selectionEnd: 0, style: {}, scrollHeight: 18,
+      focus() { doc.activeElement = ta },
+      setSelectionRange(start, end) { ta.selectionStart = start; ta.selectionEnd = end },
+    }
+    f.elements = { textarea: ta }
+    globals(t, { document: doc, window: { setTimeout, clearTimeout } })
+    const props = editing ? { message: { id: 1, body: '' }, onClose() {} } : { inputRef: { current: ta }, onEdit() {} }
+    const Component = editing ? MessageEditor : ChatInput
+    let tree, input, popup
+    const render = () => {
+      tree = f.render(Component, props)
+      input = nodes(tree).find((node) => node.type === 'textarea').props
+      popup = named(tree, 'MentionPopup').props.suggestions
+      ta.value = input.value
+    }
+    const fill = (value, caret = value.length) => {
+      ta.focus(); ta.value = value; ta.setSelectionRange(caret, caret)
+      input.onInput({ currentTarget: ta }); render()
+    }
+    const key = (name) => {
+      const event = { key: name, preventDefault() { this.prevented = true }, stopPropagation() {}, isComposing: false }
+      input.onKeyDown(event); render(); input.onKeyUp(); render()
+      return event
+    }
+    render(); ta.focus(); input.onFocus(); render()
+    fill('@')
+    assert.deepEqual(popup.users.map((user) => user.nickname), ['B ob', 'Cora'])
+    assert.equal(input['aria-activedescendant'], `${popup.id}-0`)
+    key('ArrowUp'); assert.equal(popup.index, 1)
+    key('ArrowDown'); assert.equal(popup.index, 0)
+    key('ArrowDown'); assert.equal(popup.index, 1)
+    assert(key('Enter').prevented)
+    assert.equal(ta.value, '@Cora '); assert.equal(ta.selectionStart, 6)
+    assert.deepEqual(sent, []); assert.equal(popup.open, false)
+    fill('Hi @Bozz later', 6)
+    assert(key('Tab').prevented)
+    assert.equal(ta.value, 'Hi @Bob  later'); assert.equal(ta.selectionStart, 8)
+    assert.deepEqual(sent, [])
+    fill('@Bo'); key('Escape')
+    assert.equal(ta.value, '@Bo'); assert.equal(popup.open, false)
+    fill('@B'); assert.equal(popup.open, true)
+    popup.accept(popup.users[0]); render()
+    assert.equal(ta.value, '@Bob '); assert.equal(ta.selectionStart, 5)
+    fill('@Bo later', 3)
+    ta.setSelectionRange(9, 9); listeners.get('selectionchange')(); render()
+    assert.equal(popup.open, false)
+    fill('@'); key('ArrowDown'); assert.equal(popup.index, 1)
+    doc.activeElement = null; input.onBlur(); render()
+    assert.equal(popup.open, false)
+    ta.focus(); input.onFocus(); render(); assert.equal(popup.index, 0)
+    fill('a@b'); assert.equal(popup.open, false)
+    fill('@Nobody'); assert.equal(popup.open, false)
+    fill('@Bob '); key('Enter')
+    assert.deepEqual(sent, ['@Bob ']); assert.equal(popup.open, false)
+    f.unmount(); assert.equal(listeners.size, 0)
   })
 }
 
@@ -448,7 +550,7 @@ test('own verified flag is editable while account lockout controls remain disabl
   assert.deepEqual(changes, [['alice', { verified: false }]])
   for (const name of ['Admin', 'Enabled']) assert.equal(toggle(node, name).props.disabled, true)
   const action = (node, label) => nodes(node).find((n) => n.props?.['aria-label'] === label)
-  for (const label of ['Delete alice', 'Reset password of alice']) assert.equal(action(node, label).props.disabled, true)
+  for (const label of ['Delete alice', 'Reset password of alice', 'Reset link for alice']) assert.equal(action(node, label).props.disabled, true)
   node = AccountRow({ ...props, busy: true })
   assert.equal(toggle(node, 'Verified').props.disabled, true)
 })
@@ -749,6 +851,98 @@ test('media uses the same dev proxy target as the API', () => {
   assert.equal(config.server.proxy['/neko'].ws, true)
 })
 
+test('room URLs mount the router during session lookup; other pages keep their loading screen', (t) => {
+  const app = fixture(t)
+  const root = app.render(App)
+  assert.equal(root.type.name, 'LocationProvider')
+  const Shell = named(root, 'Shell').type
+  const f = fixture(t)
+  f.location = { path: '/room/default', route() {} }
+  let node = f.render(Shell)
+  assert.equal(named(node, 'InfoScreen'), undefined)
+  assert.equal(node.type.name, 'Router')
+  assert.ok(nodes(node).find((n) => n.props?.path === '/room/:room'))
+  f.meLoaded = true
+  assert.equal(f.render(Shell).type, node.type, 'session completion keeps the room router mounted')
+  for (const path of ['/', '/login', '/admin/users', '/access/code']) {
+    f.location.path = path
+    f.meLoaded = false
+    node = f.render(Shell)
+    assert.equal(node.type.name, 'InfoScreen')
+    assert.equal(node.props.message, 'Connecting to CozyCast…')
+    f.meLoaded = true
+    assert.ok(named(f.render(Shell), 'Router'))
+  }
+})
+
+test('the room renders before session lookup completes and joins once with its access code', (t) => {
+  const f = fixture(t), sockets = []
+  globals(t, {
+    window: { clearTimeout() {}, clearInterval() {} },
+    location: { protocol: 'https:', host: 'cozy.test' },
+    WebSocket: class {
+      constructor(url) { this.url = url; sockets.push(this) }
+      close() { this.closed = true }
+    },
+  })
+  const Room = () => useRoom('movie night', 'temporary+invite')
+  const store = f.render(Room)
+  assert.equal(store.server.value, 'connecting')
+  assert.equal(sockets.length, 0, 'legacy login can finish before the WebSocket authenticates')
+  f.meLoaded = true
+  assert.equal(f.render(Room), store, 'session completion preserves the room and its layout')
+  assert.equal(sockets.length, 1)
+  assert.equal(sockets[0].url, 'wss://cozy.test/api/rooms/movie%20night/ws?access=temporary%2Binvite')
+  f.render(Room)
+  store.connect()
+  assert.equal(sockets.length, 1, 'repeated renders do not create additional joins')
+  f.unmount()
+  assert.equal(sockets[0].closed, true)
+  store.connect()
+  assert.equal(sockets.length, 1, 'a disposed room cannot join again')
+})
+
+test('leaving a room during session lookup never opens a socket', (t) => {
+  const f = fixture(t)
+  globals(t, { window: { clearTimeout() {}, clearInterval() {} }, WebSocket: class { constructor() { assert.fail('room already left') } } })
+  const store = f.render(() => useRoom('default'))
+  f.unmount()
+  f.meLoaded = true
+  store.connect()
+})
+
+test('the video area keeps one loading indicator through session, server and desktop stages', (t) => {
+  const f = fixture(t)
+  f.store = {
+    neko: { screen: { width: 1280, height: 720 } }, rights: { value: { upload: false } },
+    paused: { value: false }, restarting: { value: null }, error: { value: null },
+    server: { value: 'connecting' }, video: { value: 'disconnected' }, audioOnly: { value: false },
+  }
+  const render = (disconnected = false) => f.render(VideoArea, { disconnected, error: '', fullscreen: false })
+  const status = (node) => nodes(node).filter((n) => n.props?.role === 'status')
+  const initial = status(render())
+  assert.equal(initial.length, 1)
+  assert.equal(initial[0].props.children[0].props.src, '/svg/loading-cozy.svg')
+  assert.equal(initial[0].props.children[1].props.children, 'Connecting to server…')
+  f.meLoaded = true
+  assert.equal(status(render())[0].props.class, initial[0].props.class)
+  f.store.server.value = 'connected'
+  f.store.video.value = 'connecting'
+  const desktop = status(render())
+  assert.equal(desktop.length, 1)
+  assert.equal(desktop[0].type, initial[0].type)
+  assert.equal(desktop[0].props.class, initial[0].props.class)
+  assert.equal(desktop[0].props.children[0].props.src, '/svg/loading-cozy.svg')
+  assert.equal(desktop[0].props.children[1].props.children, 'Connecting to the desktop…')
+  f.store.video.value = 'connected'
+  assert.equal(status(render()).length, 0)
+  f.store.server.value = 'connecting'
+  f.store.error.value = 'Server unreachable'
+  const reconnect = status(render(true))[0]
+  assert.equal(reconnect.props.children[1].props.children, 'Connection lost')
+  assert.equal(reconnect.props.children[2].props.children, 'Server unreachable')
+})
+
 test('kick screens share the site header and page buttons', (t) => {
   const f = fixture(t)
   f.store = { kicked: { value: { reason: 'not_found' } } }
@@ -886,6 +1080,25 @@ async function authFixture(t) {
 
 const alice = { username: 'alice', nickname: 'Alice' }
 const settle = () => new Promise((resolve) => setImmediate(resolve))
+
+test('session readiness waits for legacy login so the room joins with the migrated account', async (t) => {
+  const { state, requests, reply } = await authFixture(t)
+  const tried = new Map()
+  globals(t, {
+    localStorage: { getItem: (key) => key === 'refreshToken' ? 'legacy-token' : null, setItem() {} },
+    sessionStorage: { getItem: (key) => tried.get(key), setItem: (key, value) => tried.set(key, value) },
+  })
+  const pending = state.refreshMe()
+  assert.equal(state.meLoaded.value, false)
+  reply(0, 200, { user: null })
+  await settle()
+  assert.equal(requests[1].path, '/api/auth/legacy')
+  assert.equal(state.meLoaded.value, false, 'the room must not join anonymously during migration')
+  reply(1, 200, { user: alice })
+  await pending
+  assert.deepEqual(state.me.value, alice)
+  assert.equal(state.meLoaded.value, true)
+})
 
 for (const action of ['login', 'register', 'logout']) {
   test(`${action} updates me and broadcasts only after a successful request`, async (t) => {
@@ -1161,4 +1374,212 @@ test('Escape closes only the top dialog and each close restores its opener', (t)
   child.unmount(); child.unmount = () => {}; assert.equal(document.activeElement, opener)
   escape(); assert.equal(childClosed, 1); assert.equal(parentClosed, 1)
   parent.unmount(); parent.unmount = () => {}; assert.equal(document.activeElement, previous)
+})
+
+test('clipboard confirmation cancels, preserves the full text, and only a current host can accept', (t) => {
+  const f = fixture(t), pasted = []
+  f.preferences = { askBeforePaste: true }
+  f.store = { isHost: { value: true }, neko: { paste: text => pasted.push(text) } }
+  const render = () => f.render(() => useDesktopPaste())
+  const text = ' \t first line\n' + '😀'.repeat(2100) + '\n last line  '
+  render().requestPaste(text)
+  assert.equal(render().dialog.props.text, text)
+  assert.deepEqual(pasted, [])
+  render().dialog.props.onCancel()
+  assert.equal(render().dialog, false)
+  assert.deepEqual(pasted, [])
+  render().requestPaste(text)
+  render().dialog.props.onAccept(true)
+  assert.deepEqual(pasted, [text])
+  assert.equal(f.preferences.askBeforePaste, false)
+  render().requestPaste('immediate')
+  assert.deepEqual(pasted, [text, 'immediate'])
+  f.preferences.askBeforePaste = true
+  render().requestPaste('lost host')
+  f.store.isHost.value = false
+  render().dialog.props.onAccept(true)
+  render().requestPaste('viewer')
+  assert.deepEqual(pasted, [text, 'immediate'])
+  assert.equal(f.preferences.askBeforePaste, true, 'losing control also leaves the preference alone')
+})
+
+test('paste preview preserves whitespace and counts Unicode characters without truncating the pasted value', (t) => {
+  const f = fixture(t), accepted = []
+  const prefix = ' \t\n', text = prefix + '😀'.repeat(2100)
+  let focused = 0
+  f.elements = { form: { querySelector: () => ({ focus: () => focused++ }) } }
+  const props = { text, onAccept: value => accepted.push(value), onCancel() {} }
+  const render = () => f.render(PasteDialog, props)
+  const tree = render()
+  assert.equal(named(tree, 'Modal').props.title, 'Paste into the desktop?')
+  assert.equal(nodes(tree).find(n => n.type === 'pre').props.children, prefix + '😀'.repeat(1997))
+  assert(nodes(tree).some(n => Array.isArray(n.props?.children) && n.props.children.includes(103)))
+  assert.equal(focused, 1)
+  named(tree, 'Checkbox').props.onChange({ currentTarget: { checked: true } })
+  nodes(render()).find(n => n.type === 'form').props.onSubmit({ preventDefault() {} })
+  assert.deepEqual(accepted, [true])
+})
+
+test('room preferences expose the persisted paste confirmation toggle', (t) => {
+  const f = fixture(t)
+  f.preferences = { askBeforePaste: true }
+  const tree = f.render(RoomSection, { room: null })
+  const toggle = nodes(tree).find(n => n.type?.name === 'ToggleRow' && n.props.title === 'Ask before pasting into the desktop')
+  assert.equal(toggle.props.checked, true)
+  toggle.props.onChange(false)
+  assert.equal(f.preferences.askBeforePaste, false)
+})
+
+test('mobile clipboard paste is confirmed, ordinary typing is immediate, and dialogs/viewers block typing', (t) => {
+  const f = fixture(t), pasted = [], requests = [], keys = []
+  globals(t, { window: { clearTimeout() {} }, document: { querySelector: () => null } })
+  f.store = { isHost: { value: true }, neko: { paste: text => pasted.push(text), keyDown: key => keys.push(key), keyUp() {} } }
+  const el = new EventTarget()
+  el.setSelectionRange = () => {}
+  const textarea = { current: el }, blocked = { current: false }
+  f.render(() => { useMobileKeyboard(textarea, text => requests.push(text), blocked); return null })
+  const event = (type, props) => {
+    const e = Object.assign(new Event(type, { cancelable: true }), props)
+    el.dispatchEvent(e)
+    return e
+  }
+  event('beforeinput', { inputType: 'insertText', data: 'A' })
+  event('keydown', { key: 'Enter' })
+  assert.deepEqual(pasted, ['A'])
+  assert.deepEqual(keys, [0xff0d])
+  const chord = event('keydown', { key: 'v', ctrlKey: true })
+  assert.equal(chord.defaultPrevented, false)
+  event('paste', { clipboardData: { getData: () => ' clipboard\n' } })
+  assert.deepEqual(requests, [' clipboard\n'])
+  event('beforeinput', { inputType: 'insertFromPaste', data: 'fallback' })
+  assert.deepEqual(requests, [' clipboard\n', 'fallback'])
+  blocked.current = true
+  event('keydown', { key: 'x' })
+  event('input', { inputType: 'insertText', data: 'x' })
+  f.store.isHost.value = false
+  blocked.current = false
+  event('keydown', { key: 'Enter' })
+  assert.deepEqual(pasted, ['A'])
+  assert.deepEqual(keys, [0xff0d])
+})
+
+test('neko paste sends the v3 control/paste event with the complete clipboard text', (t) => {
+  globals(t, { WebSocket: { OPEN: 1 } })
+  const neko = new NekoClient(), sent = []
+  neko.ws = { readyState: 1, send: message => sent.push(JSON.parse(message)) }
+  neko.paste(' \ttext\n😀 ')
+  assert.deepEqual(sent, [{ event: 'control/paste', payload: { text: ' \ttext\n😀 ' } }])
+})
+
+test('paste confirmation defaults on and persists through the existing preferences mechanism', async (t) => {
+  const { state } = await authFixture(t)
+  assert.equal(state.preferences.value.askBeforePaste, true)
+  const saved = []
+  globalThis.localStorage.setItem = (key, value) => saved.push([key, JSON.parse(value)])
+  state.updatePreferences({ askBeforePaste: false })
+  assert.equal(saved.at(-1)[0], 'preferences')
+  assert.equal(saved.at(-1)[1].askBeforePaste, false)
+})
+
+test('desktop waits to forward Ctrl/Meta, preserving copy shortcuts and modifier-clicks', (t) => {
+  globals(t, { document: { querySelector: () => null } })
+  const { f, neko, down } = desktop(t)
+  const keys = []
+  neko.keyDown = k => keys.push(['down', k])
+  neko.keyUp = k => keys.push(['up', k])
+  for (const modifier of [0xffe3, 0xffe7]) {
+    f.keyboard.onkeydown(modifier)
+    assert.equal(keys.length, 0, 'a modifier alone does not reach the desktop')
+    f.keyboard.onkeydown(0x63)
+    f.keyboard.onkeyup(0x63)
+    f.keyboard.onkeyup(modifier)
+    assert.deepEqual(keys.splice(0), [['down', modifier], ['down', 0x63], ['up', 0x63], ['up', modifier]])
+  }
+  f.keyboard.onkeydown(0xffe3)
+  down(0, 1)
+  assert.deepEqual(keys.splice(0), [['down', 0xffe3]])
+  f.keyboard.onkeyup(0xffe3)
+  f.keyboard.onkeyup(0x76)
+  assert.deepEqual(keys, [['up', 0xffe3]], 'a suppressed paste V has no remote keyup')
+})
+
+
+test('reset page checks without a session, validates confirmation, and replaces the token URL after redemption', async (t) => {
+  const f = fixture(t), requests = [], redirects = []
+  f.route = { params: { token: 'secret' } }
+  globals(t, { location: { replace: path => redirects.push(path) }, fetch: async (path, init) => {
+    requests.push([path, JSON.parse(init.body)])
+    return { ok: true, status: path.endsWith('/check') ? 200 : 204, json: async () => ({ valid: true, username: 'alice' }) }
+  } })
+  const render = () => f.render(ResetPasswordPage)
+  assert.equal(render().props.busy, true)
+  await settle()
+  assert.equal(render().props.title, 'Set a new password for alice')
+  const inputs = () => nodes(render()).filter(n => n.type?.name === 'Input')
+  assert.equal(inputs()[0].props.minLength, 8)
+  assert.equal(inputs()[0].props.maxLength, 72)
+  inputs()[0].props.onInput({ currentTarget: { value: 'newpassword' } })
+  const submit = () => nodes(render()).find(n => n.type === 'form').props.onSubmit({ preventDefault() {} })
+  submit(); await settle()
+  assert.equal(named(render(), 'Notice').props.children, 'Passwords do not match')
+  assert.equal(requests.length, 1)
+  inputs()[1].props.onInput({ currentTarget: { value: 'newpassword' } })
+  submit(); await settle()
+  assert.deepEqual(requests, [
+    ['/api/auth/password-reset/check', { token: 'secret' }],
+    ['/api/auth/password-reset/redeem', { token: 'secret', password: 'newpassword' }],
+  ])
+  assert.deepEqual(redirects, ['/login?passwordReset=1'])
+})
+
+for (const stage of ['check', 'redeem']) {
+  test(`reset page explains an invalid link during ${stage}`, async (t) => {
+    const f = fixture(t)
+    f.route = { params: { token: 'expired' } }
+    globals(t, { fetch: async path => {
+      const invalid = path.endsWith('/' + stage)
+      return { ok: !invalid, status: invalid ? 404 : 200, json: async () => invalid ? { error: 'Invalid link' } : { valid: true, username: 'alice' } }
+    } })
+    const render = () => f.render(ResetPasswordPage)
+    render(); await settle()
+    if (stage === 'redeem') {
+      for (const input of nodes(render()).filter(n => n.type?.name === 'Input')) input.props.onInput({ currentTarget: { value: 'newpassword' } })
+      nodes(render()).find(n => n.type === 'form').props.onSubmit({ preventDefault() {} })
+      await settle()
+    }
+    assert.equal(render().props.message, 'Reset link not usable')
+    assert.match(render().props.submessage, /Ask a moderator/)
+  })
+}
+
+test('admin reset link action generates a private link and copies it', async (t) => {
+  const f = fixture(t), requests = [], copied = []
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { clipboard: { writeText: async text => copied.push(text) } } })
+  t.after(() => { if (navigatorDescriptor) Object.defineProperty(globalThis, 'navigator', navigatorDescriptor); else delete globalThis.navigator })
+  globals(t, { location: { origin: 'https://cozy.test' }, fetch: async (path, init) => {
+    requests.push([path, init.method])
+    return { ok: true, status: 201, json: async () => ({ token: 'secret', path: '/reset/secret', expiresAt: 86400 }) }
+  } })
+  let selected
+  const row = AccountRow({ user: { username: 'alice' }, self: false, busy: false, onResetLink: name => { selected = name } })
+  button(row, 'Reset link').props.onClick()
+  assert.equal(selected, 'alice')
+  const render = () => f.render(ResetLinkModal, { username: 'alice', onClose() {} })
+  button(render().props.footer, 'Generate link').props.onClick()
+  await settle()
+  assert.deepEqual(requests, [['/api/admin/users/alice/password-reset', 'POST']])
+  assert.equal(named(render(), 'Input').props.value, 'https://cozy.test/reset/secret')
+  button(render(), 'Copy').props.onClick(); await settle()
+  assert.deepEqual(copied, ['https://cozy.test/reset/secret'])
+  assert.match(nodes(render()).filter(n => n.type?.name === 'Notice')[0].props.children.join(''), /24 hours, works once, and replaces earlier links/)
+})
+
+test('login shows the password reset confirmation', (t) => {
+  const f = fixture(t)
+  f.location = { route() {} }
+  globals(t, { location: { search: '?passwordReset=1' } })
+  assert.equal(named(f.render(LoginPage), 'Notice').props.children, 'Password changed. Log in with your new password.')
+  f.me = { username: 'bob' }
+  assert.equal(named(f.render(LoginPage), 'Notice').props.children, 'Password changed. Log in with your new password.')
 })

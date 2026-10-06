@@ -69,7 +69,8 @@ with the same 415 error as unsupported or invalid images.
 
 Usernames are 2–12 ASCII letters/digits, optionally separated by single `-`,
 `_` or `.`; stored lowercase and looked up case-insensitively. Passwords are
-8–100 characters (`"Passwords are 8-100 characters."` on validation failure).
+at least 8 characters and at most 72 bytes
+(`"Passwords must be at least 8 characters and at most 72 bytes."` on validation failure).
 Nicknames are 1–12 printable characters from the account validation's ASCII /
 Latin-1 ranges, without leading, trailing or double spaces. A nickname may
 match the caller's own username, but may not match another account's username
@@ -90,10 +91,39 @@ All callers: admin.
 | `GET /api/admin/users` | None | 200 array of admin accounts, ordered by username | Common admin errors |
 | `PATCH /api/admin/users/{username}` | Any subset of `{"admin":true,"verified":true,"disabled":false}` | 200 updated admin account; disabling deletes all sessions; flags reach live room connections | 404 `"Unknown user."`; 403 `"You can't remove your own admin rights or disable yourself."`; 409 `"There must be at least one admin."` |
 | `DELETE /api/admin/users/{username}` | None | 204; deletes account, sessions and permissions; deletes the avatar file if no account still references it; disconnects live room connections | 404 unknown user; 403 `"You can't delete yourself."`; 409 `"Remove admin rights first."` |
-| `POST /api/admin/users/{username}/password` | `{"password":"…"}` | 204; resets password, deletes all of the user's sessions and closes all of their live room tabs with reason `session` | 404 unknown user; 400 `"Passwords are 8-100 characters."` |
+| `POST /api/admin/users/{username}/password` | `{"password":"…"}` | 204; resets password, deletes all of the user's sessions and closes all of their live room tabs with reason `session` | 404 unknown user; 400 password validation |
 
 Admins may change their own verification flag, but may not change their own
 admin or disabled flag. At least one enabled admin must remain.
+
+## Password reset links
+
+| Method and path | Caller | Request body | Response | Notable errors |
+|---|---|---|---|---|
+| `POST /api/admin/users/{username}/password-reset` | Admin | None | 201 `{"token":"…","path":"/reset/…","expiresAt":1234567890}`; secret returned only on issuance | 404 `"Unknown user."`; common admin errors |
+| `POST /api/auth/password-reset/check` | Anyone (no session) | `{"token":"…"}` | 200 `{"valid":true,"username":"alice"}`; does not consume the link | 404 generic invalid-link error; 429 reset attempt limit |
+| `POST /api/auth/password-reset/redeem` | Anyone (no session) | `{"token":"…","password":"…"}` | 204; changes password, consumes the link, revokes all sessions and legacy logins atomically, and closes live room tabs | 400 password validation; 404 generic invalid-link error; 429 reset attempt limit |
+
+Links contain 32 random bytes encoded as unpadded URL-safe base64. Only the
+SHA-256 of the token is stored. They last 24 hours and work once; issuance
+invalidates earlier unused links for the account. Any other password change,
+including admin reset and CLI admin recovery, invalidates outstanding links.
+Expired and used rows are cleaned up when a link is issued.
+
+Issuance uses the same global admin right as direct password reset. Admin
+accounts may be targets; disabled flags and room bans are preserved, so a
+reset does not enable an account or lift a ban. Redemption does not log in.
+Missing, malformed, expired, replaced and used tokens all return 404
+`"This reset link is invalid or has expired. Ask a moderator for a new link."`.
+Check and redeem share a separate per-IP limiter: burst 10, replenishing one
+attempt every 30 seconds; 429 says
+`"Too many reset link attempts. Try again in a minute."`.
+
+Public API calls carry the token in the JSON body rather than the URL.
+`/reset/<token>` pages set `Referrer-Policy: no-referrer`, `Cache-Control:
+no-store` and a Content Security Policy restricting requests to this server.
+The SPA also sets a no-referrer meta policy, including for client navigation
+and invite links. Tokens are not logged by the application.
 
 ## Admin permissions
 

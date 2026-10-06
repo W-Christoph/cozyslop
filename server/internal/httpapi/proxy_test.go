@@ -263,6 +263,23 @@ func TestNekoSocketFileList(t *testing.T) {
 	}
 }
 
+func TestNekoSocketForwardsPaste(t *testing.T) {
+	p := newProxyTest(t, store.RoomSettings{DefaultRemote: true})
+	_, clientID, token := p.join()
+	conn := p.socket(token)
+	const paste = `{"event":"control/paste","payload":{"text":"  local clipboard\n\tsecond line 😀"}}`
+	if err := conn.Write(p.ctx, websocket.MessageText, []byte(paste)); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.received(clientID, 1); !slices.Equal(got, []string{paste}) {
+		t.Fatalf("neko received %q, want %s", got, paste)
+	}
+	profile, ok := p.fake.Member(clientID)
+	if !ok || !profile.CanHost || !profile.CanAccessClipboard {
+		t.Fatalf("remote member profile: %+v (exists=%v)", profile, ok)
+	}
+}
+
 // A member that someone created with neko's admin token (which the room's
 // desktop user can read) has a token neko accepts. The proxy must not.
 func TestNekoProxyRefusesForeignMembers(t *testing.T) {

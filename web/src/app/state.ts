@@ -33,6 +33,7 @@ export interface Preferences {
   manualLoadMedia: boolean
   shortcuts: boolean
   audioOnly: boolean
+  askBeforePaste: boolean
 }
 
 const defaultPreferences: Preferences = {
@@ -55,6 +56,7 @@ const defaultPreferences: Preferences = {
   manualLoadMedia: false,
   shortcuts: true,
   audioOnly: false,
+  askBeforePaste: true,
 }
 
 const PREFS_KEY = 'preferences'

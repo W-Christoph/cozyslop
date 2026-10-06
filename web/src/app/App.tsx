@@ -9,6 +9,7 @@ import { InvitePage } from '../pages/InvitePage'
 import { LoginPage } from '../pages/LoginPage'
 import { LicensePage } from '../pages/LicensePage'
 import { NotFoundPage } from '../pages/NotFoundPage'
+import { ResetPasswordPage } from '../pages/ResetPasswordPage'
 import { RegisterPage } from '../pages/RegisterPage'
 import { RoomRoute } from '../pages/RoomPage'
 import { SettingsDialog } from '../components/settings/SettingsDialog'
@@ -20,16 +21,6 @@ export function App() {
     void refreshMe().catch(() => {})
     void refreshServerSettings().catch(() => {})
   }, [])
-
-  if (!meLoaded.value) {
-    return (
-      <InfoScreen
-        busy
-        message="Connecting to CozyCast…"
-        submessage="If this takes too long please refresh"
-      />
-    )
-  }
 
   return (
     <LocationProvider>
@@ -57,10 +48,20 @@ function Shell() {
     } else if (!settingsRoutes[previous.current]) settingsOpen.value = null
     previous.current = path
   }, [path])
+  if (!inRoom && !meLoaded.value) {
+    return (
+      <InfoScreen
+        busy
+        message="Connecting to CozyCast…"
+        submessage="If this takes too long please refresh"
+      />
+    )
+  }
   const routes = (
     <Router>
       <Route path="/" component={HomePage} />
       <Route path="/room/:room" component={RoomRoute} />
+      <Route path="/reset/:token" component={ResetPasswordPage} />
       <Route path="/invite/:code" component={InvitePage} />
       <Route path="/access/:code" component={AccessPage} />
       <Route path="/login" component={LoginPage} />

@@ -9,6 +9,7 @@ import { Notice } from '../components/ui/Notice'
 
 export function LoginPage() {
   const { route } = useLocation()
+  const passwordReset = new URLSearchParams(location.search).get('passwordReset') === '1'
   const [username, setUsername] = useState(''),
     [password, setPassword] = useState('')
   const [error, setError] = useState(''),
@@ -40,6 +41,7 @@ export function LoginPage() {
   if (me.value)
     return (
       <AuthLayout title="You're logged in" subtitle={`Signed in as ${me.value.username}.`}>
+        {passwordReset && <Notice tone="success">Password changed. Log in with your new password.</Notice>}
         <ButtonLink variant="primary" size="lg" block href="/">
           Go to rooms
         </ButtonLink>
@@ -63,6 +65,7 @@ export function LoginPage() {
           void submit()
         }}
       >
+        {passwordReset && <Notice tone="success">Password changed. Log in with your new password.</Notice>}
         <Field label="Username">
           <Input
             name="username"

@@ -22,7 +22,7 @@ try {
   ;({ RoomStore } = await server.ssrLoadModule('/src/room/store.ts'))
 } finally { await server.close() }
 
-function fixture(t) {
+function fixture(t, { autoConnect = true } = {}) {
   const timers = new Map()
   const delays = []
   let timerID = 0
@@ -46,7 +46,8 @@ function fixture(t) {
     location: { protocol: 'http:', host: 'cozy.test' },
     WebSocket: Socket,
   })
-  const store = new RoomStore('default')
+  const store = new RoomStore('default', undefined, { autoConnect })
+  if (!autoConnect) store.connect()
   const room = Socket.instances[0]
   room.onopen()
   t.after(() => {
@@ -57,7 +58,7 @@ function fixture(t) {
     }
   })
   return {
-    store, room, timers, delays,
+    store, room, timers, delays, sockets: Socket.instances,
     tick() {
       const pending = [...timers.values()]
       timers.clear()
@@ -178,6 +179,25 @@ test('room socket disconnection suppresses pending desktop retry; disposal clear
   assert.equal(timers.size, 0)
 })
 
+test('a room joined after session lookup still reconnects automatically after a server restart', (t) => {
+  const { store, room, sockets, timers, delays, tick } = fixture(t, { autoConnect: false })
+  room.onclose({ code: 1006 })
+  assert.equal(store.server.value, 'connecting')
+  assert.equal(timers.size, 1)
+  assert.equal(delays.at(-1), 1000)
+  store.connect()
+  assert.equal(sockets.length, 1, 'the existing retry owns reconnecting')
+  tick()
+  assert.equal(sockets.length, 2)
+  assert.equal(sockets[1].url, room.url)
+  sockets[1].onopen()
+  assert.equal(store.server.value, 'connected')
+  sockets[1].onclose({ code: 1006 })
+  assert.equal(delays.at(-1), 1000, 'a successful reconnect resets the backoff')
+  store.dispose()
+  assert.equal(timers.size, 0)
+})
+
 test('desktop token failures back off without an announced restart; generic errors do not retry', (t) => {
   const { store, room, tick, timers, welcome, delays } = fixture(t)
   welcome(false)
@@ -197,7 +217,7 @@ test('desktop token failures back off without an announced restart; generic erro
   assert.equal(store.error.value, null)
 })
 
-for (const reason of ['not_found', 'session', 'kicked']) {
+for (const reason of ['not_found', 'session', 'kicked', 'banned', 'account', 'verified', 'invite', 'deleted']) {
   test(`${reason} uses the terminal kick path and clears desktop retries`, (t) => {
     const { store, room, timers, tick } = fixture(t)
     globalThis.authRefreshes = 0

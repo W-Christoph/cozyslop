@@ -25,6 +25,7 @@ func TestAdminAuthorization(t *testing.T) {
 		{"PATCH", "/api/admin/users/alice"},
 		{"DELETE", "/api/admin/users/alice"},
 		{"POST", "/api/admin/users/alice/password"},
+		{"POST", "/api/admin/users/alice/password-reset"},
 		{"GET", "/api/admin/permissions"},
 		{"PUT", "/api/admin/permissions/default/alice"},
 		{"DELETE", "/api/admin/permissions/default/alice"},

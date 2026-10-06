@@ -5,18 +5,67 @@ import { createServer } from 'vite'
 // Use the project's TypeScript transform; this also works on Node builds
 // without native TypeScript stripping and needs no additional test dependency.
 const server = await createServer({ configFile: false, server: { middlewareMode: true } })
-let parser, snapshots
+let parser, snapshots, mentions
 try {
   parser = await server.ssrLoadModule('/src/components/chat/parseMessage.ts')
   snapshots = await server.ssrLoadModule('/src/components/chat/chatChanges.ts')
+  mentions = await server.ssrLoadModule('/src/components/chat/mentionCompletion.ts')
 } finally { await server.close() }
 const { parseMessage, pingName, pingCount, matchedPingNames, groupMessages, messageTime } = parser
 const { chatChanges } = snapshots
+const { activeMention, mentionCandidates, completeMention } = mentions
 
 const user = (key, nickname = 'Alice') => ({ key, nickname, username: key.startsWith('u:') ? nickname.toLowerCase() : '', anonymous: key.startsWith('a:') })
 const message = (id, author = 'u:2', body = 'Hello') => ({ id, author, body, type: 'text', nickname: 'Bob', nameColor: '#f90', time: 1000 })
 const self = user('u:1')
 const snapshot = (changes = {}) => ({ chat: [], users: new Map([[self.key, self]]), self, connected: true, ...changes })
+
+test('mention suggestions activate only at the start or after whitespace, including at a middle caret', () => {
+  assert.deepEqual(activeMention('@', 1), { start: 0, end: 1, query: '' })
+  assert.deepEqual(activeMention('Hi\n\t@Bo', 7), { start: 4, end: 7, query: 'Bo' })
+  assert.deepEqual(activeMention('Hi @Bobby later', 5), { start: 3, end: 9, query: 'B' })
+  assert.deepEqual(activeMention('Hi @Bobby later', 4), { start: 3, end: 9, query: '' })
+  for (const text of ['a@b', 'user@example.org', 'https://example.org/@Bob', '@@Bob', 'hi @Bob ']) {
+    assert.equal(activeMention(text, text.length), null, text)
+  }
+  assert.equal(activeMention('@Bob', 0), null)
+  assert.equal(activeMention('@Bob', -1), null)
+  assert.equal(activeMention('@Bob', 5), null)
+  assert.equal(activeMention('Hi @Bob', 2), null)
+  assert.equal(activeMention('Hi @Bob later', 8), null)
+})
+
+test('mention candidates exclude self, match nicknames without whitespace, rank prefixes before substrings and cap rows', () => {
+  const people = [self, user('u:2', 'Zalice'), user('u:3', 'A lbert'), user('u:4', 'ALIce'), user('u:5', 'Bob')]
+  const users = new Map(people.map((person) => [person.key, person]))
+  assert.deepEqual(mentionCandidates(users, self.key, 'AL').map((person) => person.nickname), ['A lbert', 'ALIce', 'Zalice'])
+  assert.deepEqual(mentionCandidates(users, self.key, 'bo').map((person) => person.key), ['u:5'])
+  assert.deepEqual(mentionCandidates(users, self.key, 'absent'), [])
+  assert.equal(mentionCandidates(users, self.key, '', 2).length, 2)
+  assert.equal(mentionCandidates(users, self.key, '', 0).length, 0)
+  const crowd = new Map(Array.from({ length: 12 }, (_, i) => [`u:${i}`, user(`u:${i}`, `Person${i}`)]))
+  assert.equal(mentionCandidates(crowd, null, '').length, 8)
+  assert.equal(users.size, 5)
+})
+
+test('completion replaces the whole token, preserves surrounding text and leaves the caret after a parser-compatible mention', () => {
+  const text = 'Hi @Bobby later @Alice'
+  const completion = completeMention(text, activeMention(text, 5), 'B ob')
+  assert.deepEqual(completion, { text: 'Hi @Bob  later @Alice', caret: 8 })
+  assert.equal(pingCount(completion.text, 'B ob'), 1)
+  assert(matchedPingNames(new Map([['u:2', user('u:2', 'B ob')]])).has(parseMessage(completion.text).find((part) => part.type === 'ping').target))
+  assert.deepEqual(completeMention('@', activeMention('@', 1), 'A l\ti\nc e'), { text: '@Alice ', caret: 7 })
+})
+
+test('suggestions offer only forms the existing parser can highlight, including spaced names', () => {
+  const people = ['A Friend', 'Bob', 'A@B', 'example.org', ''].map((name, i) => user(`u:${i}`, name))
+  const candidates = mentionCandidates(new Map(people.map((person) => [person.key, person])), null, '')
+  assert.deepEqual(candidates.map((person) => person.nickname), ['A Friend', 'Bob'])
+  for (const person of candidates) {
+    const completion = completeMention('@', activeMention('@', 1), person.nickname)
+    assert.equal(pingCount(completion.text, person.nickname), 1)
+  }
+})
 
 test('linkification preserves text/newlines and excludes @ inside URLs and email addresses', () => {
   const body = 'Hello\nhttps://example.org/@Alice?q=1\nuser@example.org @Alice'

@@ -53,6 +53,7 @@ type Server struct {
 	stopSockets context.CancelFunc
 
 	loginLimit    *ratelimit.Limiter // per IP: login attempts
+	resetLimit    *ratelimit.Limiter // per IP: reset link checks and redemptions
 	registerLimit *ratelimit.Limiter // per IP: account creations
 }
 
@@ -71,6 +72,7 @@ func New(d Deps) *Server {
 		mediaDir:       d.MediaDir,
 		maxUploadBytes: d.MaxUploadMB << 20,
 		loginLimit:     ratelimit.New(10, 30*time.Second),
+		resetLimit:     ratelimit.New(10, 30*time.Second),
 		registerLimit:  ratelimit.New(3, 10*time.Minute),
 		socketCtx:      socketCtx,
 		stopSockets:    stopSockets,
@@ -84,6 +86,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/legacy", s.legacyLogin)
 	mux.HandleFunc("POST /api/auth/logout", s.logout)
 	mux.HandleFunc("POST /api/auth/register", s.register)
+	mux.HandleFunc("POST /api/auth/password-reset/check", s.checkPasswordReset)
+	mux.HandleFunc("POST /api/auth/password-reset/redeem", s.redeemPasswordReset)
 	mux.HandleFunc("GET /api/me", s.getMe)
 	mux.HandleFunc("PATCH /api/me", s.updateMe)
 	mux.HandleFunc("POST /api/me/password", s.changePassword)
@@ -94,6 +98,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/admin/users/{username}", s.adminUpdateUser)
 	mux.HandleFunc("DELETE /api/admin/users/{username}", s.adminDeleteUser)
 	mux.HandleFunc("POST /api/admin/users/{username}/password", s.adminSetPassword)
+	mux.HandleFunc("POST /api/admin/users/{username}/password-reset", s.adminCreatePasswordReset)
 
 	mux.HandleFunc("GET /api/admin/permissions", s.adminListPermissions)
 	mux.HandleFunc("PUT /api/admin/permissions/{room}/{username}", s.adminSavePermission)
@@ -260,6 +265,11 @@ func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 func spaHandler(web fs.FS) http.Handler {
 	files := http.FileServerFS(web)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/reset/") {
+			w.Header().Set("Referrer-Policy", "no-referrer")
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'self'")
+		}
 		name := r.URL.Path[1:]
 		if name == "" {
 			name = "index.html"

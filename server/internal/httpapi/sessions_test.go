@@ -16,7 +16,7 @@ import (
 )
 
 func TestEndedSessionsCloseRoomSockets(t *testing.T) {
-	for _, action := range []string{"logout", "password", "admin reset"} {
+	for _, action := range []string{"logout", "password", "admin reset", "reset link"} {
 		t.Run(action, func(t *testing.T) {
 			p := newProxyTest(t, store.RoomSettings{DefaultRemote: true})
 			hash, err := auth.HashPassword("password123")
@@ -104,11 +104,22 @@ func TestEndedSessionsCloseRoomSockets(t *testing.T) {
 				post(first, "/api/auth/logout", "", 204)
 			case "password":
 				post(first, "/api/me/password", `{"current":"password123","new":"newpassword123"}`, 204)
+			case "reset link":
+				res := request(other, "POST", "/api/admin/users/alice/password-reset", "")
+				var link struct{ Token string }
+				if res.StatusCode != 201 {
+					t.Fatalf("issue reset link: %d", res.StatusCode)
+				}
+				if err := json.NewDecoder(res.Body).Decode(&link); err != nil {
+					t.Fatal(err)
+				}
+				res.Body.Close()
+				post(anonymous, "/api/auth/password-reset/redeem", `{"token":"`+link.Token+`","password":"newpassword123"}`, 204)
 			case "admin reset":
 				post(other, "/api/admin/users/alice/password", `{"password":"newpassword123"}`, 204)
 			}
 			for _, tab := range tabs {
-				ended := tab.session < 2 && (action == "admin reset" || (action == "logout" && tab.session == 0) || (action == "password" && tab.session == 1))
+				ended := tab.session < 2 && ((action == "admin reset" || action == "reset link") || (action == "logout" && tab.session == 0) || (action == "password" && tab.session == 1))
 				if ended {
 					var msg struct{ Type, Reason string }
 					for msg.Type != "kicked" {
@@ -162,7 +173,7 @@ func TestEndedSessionsCloseRoomSockets(t *testing.T) {
 				}
 			}
 			wantCount := 3
-			if action == "admin reset" {
+			if action == "admin reset" || action == "reset link" {
 				wantCount = 2
 			}
 			if got := p.hub.Room("default").UserCount(); got != wantCount {

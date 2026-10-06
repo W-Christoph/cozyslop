@@ -38,6 +38,10 @@ export function RoomSection({ room }: { room: RoomStore | null }) {
       <ToggleRow title="Sound only" description="Receive the room's sound without the picture. Saves bandwidth, for music or a slow connection."
         checked={prefs.audioOnly} onChange={(audioOnly) => updatePreferences({ audioOnly })} />
     </Section>
+    <Section title="Desktop">
+      <ToggleRow title="Ask before pasting into the desktop" description="Preview clipboard text before sharing it with the room."
+        checked={prefs.askBeforePaste} onChange={(askBeforePaste) => updatePreferences({ askBeforePaste })} />
+    </Section>
     {restart && (
       <Section title="This room">
         <SettingRow title="Restart the room" description="Restarts the desktop for everyone, for when the stream or the browser is stuck.">

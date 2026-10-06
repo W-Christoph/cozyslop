@@ -21,3 +21,12 @@
 .overlay[data-host='true'] {
   touch-action: none;
 }
+.clipboard {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}

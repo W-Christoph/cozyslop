@@ -59,6 +59,14 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
 - **Chat display**: `preferences.chatStyle` (`classic`, `modern`, `compact`)
   is set as `data-chat-style` on the chat panel and styled in the chat's own
   modules; `settings/ChatPreview` draws with those same modules.
+  Chat input and inline editing share mention suggestions: `@` at the start
+  or after whitespace lists up to eight other room users, filtered by nickname
+  (case-insensitive prefixes first, then substrings). Arrows select, Tab/Enter
+  or a tap completes, and Escape dismisses. Mentions use nicknames with
+  whitespace removed (`A Friend` becomes `@AFriend`), as the existing parser
+  and notification sound expect. Nicknames the parser cannot mention (such as
+  names containing `@` or parsed as links) are omitted. The accessible listbox
+  appears above the textarea, inside the fullscreen element when present.
 - **State**: app-wide state from `app/state.ts`; room state and actions from
   the `RoomStore` (pass the store down as a prop or via a context created in
   the room page). Local UI state with hooks. Signals are read with `.value`
@@ -83,6 +91,10 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
 - Stream states share a picture, sentence-case title and optional detail on
   black. Connection loss stays inside the stream; chat is readable with sending
   disabled until reconnecting. Fullscreen errors clear after five seconds.
+- Room URLs render the layout immediately, with the stream's loading state
+  covering the session lookup, server connection and desktop connection.
+  Joining waits for `/api/me` and any legacy login to finish; other pages keep
+  the whole-page session loading screen.
 - Portrait phones use one playback/chat toolbar row and a keyboard-accessible
   More menu for secondary actions. The stream follows the desktop aspect ratio,
   capped at 55% of the viewport; remote controls keep their own row. Touch message
@@ -91,6 +103,26 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
 - The room sidebar contains only chat; its toolbar button shows unread messages
   while closed. Avatar cards show identity, away time, remote and sound state
   on hover, focus or tap. The volume track shows its current level.
+
+## Password reset links
+
+Accounts in the admin area keep the direct password reset and add a Reset
+link action. Its modal generates a link, allows copying it for private
+out-of-band delivery, and explains the 24-hour lifetime, single use and
+replacement of earlier links. It uses the same global admin right as direct
+reset; room trust does not grant account management.
+
+`/reset/:token` is public, even for an already logged-in visitor. It checks
+the link, shows the account username and new/repeat password inputs, and uses
+the shared form fields and notices. Invalid or expired links show an
+InfoScreen asking for a new link from a moderator. Successful redemption
+replaces the URL with `/login?passwordReset=1`, reloads cached account state,
+and shows a short login confirmation. It does not create a session.
+
+Tokens stay in component state and API POST bodies, with no local storage or
+third-party requests. The HTML sets a no-referrer meta policy for SPA
+navigation; the server also sends no-referrer, no-store and a same-origin
+Content Security Policy on reset page loads.
 
 ## Old -> new names
 
@@ -141,7 +173,18 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
 - Uploading files into the desktop is a separate permission (`rights.upload`);
   chat images need `rights.image`.
 - Clipboard, for whoever holds the remote: Ctrl/Cmd+V pastes the local
-  clipboard into the desktop (`control/paste`), and anything copied on the
+  clipboard into the desktop (`control/paste`). A hidden textarea receives
+  the browser's native paste event, including in Firefox; the paste chord
+  bypasses Guacamole and resets held keys before sending the text. Clipboard
+  pastes on desktop and mobile ask for confirmation by default, showing a
+  whitespace-preserving preview (at most 2000 Unicode characters, with a
+  count of the remainder); accepting sends the full text. Enter accepts,
+  Escape/Cancel dismisses, and focus returns to the remote input. Keys do
+  not reach the desktop while a dialog is open. Ordinary mobile typing
+  remains immediate. "Don't ask again" disables `askBeforePaste`, also
+  available as "Ask before pasting into the desktop" in Settings › Room.
+  Like the other personal preferences, it persists in this browser's
+  `localStorage`, without account sync. Anything copied on the
   desktop is written to the local clipboard (`clipboard/updated`). Copying
   out needs a focused tab and HTTPS or localhost; browsers refuse it
   otherwise and it silently does nothing.

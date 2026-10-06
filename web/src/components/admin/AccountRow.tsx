@@ -12,6 +12,7 @@ export function AccountRow({
   onUpdate,
   onDelete,
   onReset,
+  onResetLink,
 }: {
   user: AdminUser
   self: boolean
@@ -22,6 +23,7 @@ export function AccountRow({
   ) => void
   onDelete: (username: string) => void
   onReset: (username: string) => void
+  onResetLink: (username: string) => void
 }) {
   return (
     <tr key={user.username} class={user.disabled ? styles.disabled : undefined}>
@@ -76,6 +78,11 @@ export function AccountRow({
             disabled={busy || self}
             onClick={() => onReset(user.username)}
           />
+          <Button size="sm" variant="ghost" disabled={busy || self}
+            aria-label={`Reset link for ${user.username}`}
+            onClick={() => onResetLink(user.username)}>
+            Reset link
+          </Button>
           <Button
             size="sm"
             variant="danger-ghost"

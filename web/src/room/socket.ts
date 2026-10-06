@@ -24,9 +24,14 @@ export class RoomSocket extends Emitter<RoomSocketEvents> {
   constructor(
     private readonly room: string,
     private readonly access?: string, // temporary access invite code
+    autoConnect = true,
   ) {
     super()
-    this.open()
+    if (autoConnect) this.connect()
+  }
+
+  connect() {
+    if (!this.closed && !this.ws) this.open()
   }
 
   send(msg: ClientMessage) {

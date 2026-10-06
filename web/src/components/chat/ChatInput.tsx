@@ -4,11 +4,14 @@ import { me } from '../../app/state'
 import { useRoomStore } from '../room/RoomContext'
 import { TypingIndicator } from './TypingIndicator'
 import { UploadControls } from './UploadControls'
+import { MentionPopup } from './MentionPopup'
+import { useMentionSuggestions } from './useMentionSuggestions'
 import styles from './ChatInput.module.css'
 
 export function ChatInput({ inputRef, onEdit }: { inputRef: RefObject<HTMLTextAreaElement | null>; onEdit: (id: number) => void }) {
   const store = useRoomStore()
   const [text, setText] = useState('')
+  const mentions = useMentionSuggestions(inputRef, text, setText)
   const [notice, setNotice] = useState('')
   const lastTyping = useRef(-Infinity)
   const fileReceiver = useRef<((file: File) => void) | null>(null)
@@ -38,23 +41,28 @@ export function ChatInput({ inputRef, onEdit }: { inputRef: RefObject<HTMLTextAr
   function send() {
     if (!text.trim() || !connected) return
     store.sendChat(text.replace(/^\n+|\n+$/g, ''))
+    mentions.close()
     setText('')
     stopTyping()
   }
   return <div class={styles.chatbox}>
     <div data-chat-input data-has-text={!!text} class={styles.uploader}>
       <div data-chat-input-wrapper class={styles.wrapper}>
-        <textarea aria-label="Chat message" placeholder={connected ? undefined : 'Reconnecting…'} ref={inputRef} value={text} rows={1} maxLength={anonymous ? 250 : undefined}
+        {/* maxlength as an attribute: Preact clears the maxLength property to 0, which
+            blocks typing once a visitor turns out to be logged in. */}
+        <textarea {...mentions.inputProps} aria-label="Chat message" placeholder={connected ? undefined : 'Reconnecting…'} ref={inputRef} value={text} rows={1} maxlength={anonymous ? 250 : undefined}
           class={`${styles.textarea} ${!text && store.rights.value.image ? styles.withUploads : ''}`}
-          onBlur={stopTyping}
+          onBlur={() => { stopTyping(); mentions.close() }}
           onInput={(e) => {
             const value = anonymous ? e.currentTarget.value.slice(0, 250) : e.currentTarget.value
             setText(value)
+            mentions.syncCaret()
             if (!value) stopTyping()
             else if (Date.now() - lastTyping.current >= 1000) { store.setTyping(true); lastTyping.current = Date.now() }
           }}
           onKeyDown={(e) => {
             if (e.isComposing) return
+            if (mentions.onKeyDown(e)) return
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
             else if (e.key === 'ArrowUp' && !text) {
               const last = [...store.chat.value].reverse().find((m) => m.author === store.selfKey.value && m.type === 'text' && m.id > 0 && !m.deleted)
@@ -70,6 +78,7 @@ export function ChatInput({ inputRef, onEdit }: { inputRef: RefObject<HTMLTextAr
             }
           }} />
       </div>
+      <MentionPopup suggestions={mentions} />
       {store.rights.value.image && <UploadControls visible={!text} receiveFile={fileReceiver} />}
     </div>
     <TypingIndicator />

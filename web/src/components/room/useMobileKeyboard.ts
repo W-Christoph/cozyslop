@@ -11,25 +11,27 @@ const isKey = (name: string): name is Key => Object.hasOwn(KEYSYMS, name)
 // the modifiers a physical key needs (a lone "A" pressed as a key comes out
 // as "a"). So all text is inserted as text, through neko's paste, and only
 // Enter and the delete keys are sent as keys.
-export function useMobileKeyboard(textarea: RefObject<HTMLTextAreaElement | null>) {
+export function useMobileKeyboard(textarea: RefObject<HTMLTextAreaElement | null>, requestPaste: (text: string) => void, blocked: RefObject<boolean>) {
   const store = useRoomStore()
   useLayoutEffect(() => {
     const el = textarea.current
     if (!el) return
+    const canType = () => store.isHost.value && !blocked.current && !document.querySelector('[role="dialog"]')
     const key = (name: Key) => {
-      if (!store.isHost.value) return
+      if (!canType()) return
       store.neko.keyDown(KEYSYMS[name])
       store.neko.keyUp(KEYSYMS[name])
     }
     const text = (value: string) => {
-      if (store.isHost.value && value) store.neko.paste(value)
+      if (canType() && value) store.neko.paste(value)
     }
     let composing = false
     let composition = ''
     let clearComposition: number | undefined
     const reset = () => { el.value = ' '; el.setSelectionRange(1, 1) }
     const keydown = (e: KeyboardEvent) => {
-      if (!store.isHost.value || composing || e.isComposing || e.keyCode === 229) return
+      if (!canType() || composing || e.isComposing || e.keyCode === 229) return
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') return
       const printable = Array.from(e.key).length === 1
       if (!printable && !isKey(e.key)) return
       e.preventDefault()
@@ -38,7 +40,7 @@ export function useMobileKeyboard(textarea: RefObject<HTMLTextAreaElement | null
       reset()
     }
     const beforeinput = (e: InputEvent) => {
-      if (!store.isHost.value || composing || e.isComposing || e.inputType === 'insertCompositionText') return
+      if (!canType() || composing || e.isComposing || e.inputType === 'insertCompositionText') return
       if (!e.cancelable) return // input handles browsers with non-cancelable beforeinput
       e.preventDefault()
       if (e.data && e.data === composition) return
@@ -47,6 +49,7 @@ export function useMobileKeyboard(textarea: RefObject<HTMLTextAreaElement | null
         case 'deleteContentForward': key('Delete'); break
         case 'insertLineBreak':
         case 'insertParagraph': key('Enter'); break
+        case 'insertFromPaste': requestPaste(e.data ?? ''); break
         default: text(e.data ?? '')
       }
       reset()
@@ -57,6 +60,7 @@ export function useMobileKeyboard(textarea: RefObject<HTMLTextAreaElement | null
         if (e.inputType === 'deleteContentBackward') key('Backspace')
         else if (e.inputType === 'deleteContentForward') key('Delete')
         else if (e.inputType === 'insertLineBreak') key('Enter')
+        else if (e.inputType === 'insertFromPaste') requestPaste(e.data ?? '')
         else text(e.data ?? '')
       }
       reset()
@@ -72,7 +76,7 @@ export function useMobileKeyboard(textarea: RefObject<HTMLTextAreaElement | null
     }
     const paste = (e: ClipboardEvent) => {
       e.preventDefault()
-      text(e.clipboardData?.getData('text/plain') ?? '')
+      requestPaste(e.clipboardData?.getData('text/plain') ?? '')
       reset()
     }
     reset()
@@ -91,5 +95,5 @@ export function useMobileKeyboard(textarea: RefObject<HTMLTextAreaElement | null
       el.removeEventListener('compositionend', compositionend)
       el.removeEventListener('paste', paste)
     }
-  }, [store, textarea])
+  }, [store, textarea, requestPaste, blocked])
 }

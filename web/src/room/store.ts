@@ -79,10 +79,10 @@ export class RoomStore {
   constructor(
     readonly room: string,
     access?: string, // temporary access invite code
-    { audioOnly = false } = {},
+    { audioOnly = false, autoConnect = true } = {},
   ) {
     this.audioOnly.value = audioOnly
-    this.socket = new RoomSocket(room, access)
+    this.socket = new RoomSocket(room, access, autoConnect)
     const neko = this.neko
     this.offs.push(
       this.socket.on('open', () => (this.server.value = 'connected')),
@@ -115,6 +115,10 @@ export class RoomStore {
         this.retryNekoToken()
       }),
     )
+  }
+
+  connect() {
+    this.socket.connect()
   }
 
   dispose() {

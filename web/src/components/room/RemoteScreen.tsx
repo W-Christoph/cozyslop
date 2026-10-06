@@ -8,6 +8,7 @@ import { useRoomStore } from './RoomContext'
 import GuacamoleKeyboard from '../../neko/guacamole-keyboard.js'
 import styles from './RemoteScreen.module.css'
 import { useTouchTrackpad } from './useTouchTrackpad'
+import { useDesktopPaste } from './useDesktopPaste'
 
 interface Props {
   mobile: boolean
@@ -16,8 +17,6 @@ interface Props {
   onPlaybackBlocked: (blocked: boolean) => void
 }
 
-const KEYSYM_V = 0x76
-const KEYSYM_SHIFT_V = 0x56
 const MOUSE_MOVE_THROTTLE_MS = 10
 // Browsers report wheel deltas in pixels; one X11 scroll step is roughly this.
 const WHEEL_STEP_PX = 53
@@ -32,6 +31,10 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
   const paused = store.paused.value
   const { muted, volume } = preferences.value
   const overlay = useRef<HTMLDivElement>(null)
+  const clipboard = useRef<HTMLTextAreaElement>(null)
+  const { requestPaste, pending, dialog } = useDesktopPaste()
+  const resetKeyboard = useRef(() => {})
+  const flushModifiers = useRef(() => {})
   const hostRef = useRef(isHost)
   hostRef.current = isHost
 
@@ -66,28 +69,60 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
     const el = overlay.current
     if (!el) return
     const keyboard = new GuacamoleKeyboard()
+    const forwarded = new Set<number>()
+    const modifiers = new Set<number>()
+    const flush = () => {
+      modifiers.forEach((keysym) => { forwarded.add(keysym); neko.keyDown(keysym) })
+      modifiers.clear()
+    }
+    flushModifiers.current = flush
+    // Dropping the held-back modifiers first keeps a reset from tapping them.
+    const reset = () => { modifiers.clear(); keyboard.reset() }
+    const blocked = () => pending.current || !!document.querySelector('[role="dialog"]')
     keyboard.onkeydown = (keysym: number) => {
-      if (!hostRef.current) return true // let the browser handle it
-      // Ctrl/Cmd+V: let the browser paste, so the overlay's paste handler
-      // can send the *local* clipboard. Sending the keystroke would paste the
-      // desktop's own clipboard instead.
-      if ((keysym === KEYSYM_V || keysym === KEYSYM_SHIFT_V) && (keyboard.modifiers.ctrl || keyboard.modifiers.meta)) {
-        return true
+      if (!hostRef.current || blocked()) return true // let the browser handle it
+      // Wait for the next key/mouse action before sending Ctrl/Meta. A local
+      // paste must not leave input on the data channel racing control/paste.
+      if ([0xffe3, 0xffe4, 0xffe7, 0xffe8, 0xffeb, 0xffec].includes(keysym)) {
+        modifiers.add(keysym)
+        return false
       }
+      flush()
+      forwarded.add(keysym)
       neko.keyDown(keysym)
       return false
     }
     keyboard.onkeyup = (keysym: number) => {
-      if (hostRef.current) neko.keyUp(keysym)
+      // A modifier released on its own (Super for the menu) is still a key press.
+      if (modifiers.delete(keysym) && hostRef.current && !blocked()) { neko.keyDown(keysym); neko.keyUp(keysym) }
+      else if (forwarded.delete(keysym) && hostRef.current) neko.keyUp(keysym)
     }
+    // Run before Guacamole's capture listener. Firefox targets paste at the
+    // body for a non-editable div; a focused textarea works in both browsers.
+    // Never cancel the native paste action or forward V (including its keyup).
+    const pasteKey = (e: KeyboardEvent) => {
+      if (blocked()) { e.stopImmediatePropagation(); return }
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'v') return
+      e.stopImmediatePropagation()
+      reset()
+      if (e.type === 'keydown' && hostRef.current) clipboard.current?.focus({ preventScroll: true })
+    }
+    el.addEventListener('keydown', pasteKey, true)
+    el.addEventListener('keyup', pasteKey, true)
     keyboard.listenTo(el)
-    const reset = () => keyboard.reset()
+    resetKeyboard.current = reset
     el.addEventListener('blur', reset)
+    const offHost = neko.on('host', reset)
     return () => {
-      keyboard.reset()
+      reset()
       keyboard.onkeydown = null
       keyboard.onkeyup = null
       el.removeEventListener('blur', reset)
+      el.removeEventListener('keydown', pasteKey, true)
+      el.removeEventListener('keyup', pasteKey, true)
+      offHost()
+      resetKeyboard.current = () => {}
+      flushModifiers.current = () => {}
     }
   }, [neko])
 
@@ -122,6 +157,7 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
       el.focus()
       if (!hostRef.current) return
       e.preventDefault()
+      flushModifiers.current()
       const { x, y } = toScreen(e)
       neko.move(x, y)
       neko.buttonDown(e.button + 1)
@@ -207,12 +243,18 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
       <video ref={video} class={styles.video} autoplay playsInline />
       <div ref={overlay} class={styles.overlay} data-host={isHost} tabIndex={0} aria-label="Remote desktop"
         onPaste={(e) => {
-          // neko puts the text on the desktop clipboard and presses Ctrl+V there.
-          const text = e.clipboardData?.getData('text/plain')
-          if (!store.isHost.value || !text) return
           e.preventDefault()
-          store.neko.paste(text)
-        }} />
+          resetKeyboard.current()
+          const text = e.clipboardData?.getData('text/plain')
+          if (store.isHost.value && text) requestPaste(text)
+          // The dialog restores this focus after either choice.
+          overlay.current?.focus({ preventScroll: true })
+        }}>
+        <textarea ref={clipboard} class={styles.clipboard} tabIndex={-1} aria-label="Desktop clipboard input"
+          autocomplete="off" autocapitalize="off" spellcheck={false}
+          onInput={(e) => { e.currentTarget.value = '' }} />
+      </div>
+      {dialog}
     </div>
   )
 }

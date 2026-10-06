@@ -5,6 +5,7 @@ import { Button } from '../../components/Button'
 import { Modal } from '../../components/Modal'
 import { AccountRow } from '../../components/admin/AccountRow'
 import { AdminTable } from '../../components/admin/AdminTable'
+import { ResetLinkModal } from '../../components/admin/ResetLinkModal'
 import { ResetPasswordModal } from '../../components/admin/ResetPasswordModal'
 import { Spinner } from '../../components/ui/Spinner'
 import { Input } from '../../components/ui/Field'
@@ -19,7 +20,8 @@ export function AccountsTab() {
   const [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null),
-    [resetting, setResetting] = useState<string | null>(null)
+    [resetting, setResetting] = useState<string | null>(null),
+    [resetLink, setResetLink] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   useEffect(() => {
     let active = true
@@ -104,6 +106,7 @@ export function AccountsTab() {
               setDeleting(username)
             }}
             onReset={setResetting}
+            onResetLink={setResetLink}
           />
         ))}
         {!error && shown.length === 0 && (
@@ -125,6 +128,7 @@ export function AccountsTab() {
           <p>Their sessions and room permissions are deleted with the account. This cannot be undone.</p>
         </Modal>
       )}
+      {resetLink && <ResetLinkModal username={resetLink} onClose={() => setResetLink(null)} />}
       {resetting && (
         <ResetPasswordModal
           username={resetting}

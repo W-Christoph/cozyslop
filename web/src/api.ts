@@ -121,3 +121,14 @@ export interface InviteView {
   valid: boolean
   path: string
 }
+
+export interface PasswordResetLink {
+  token: string
+  path: string
+  expiresAt: number
+}
+
+export interface PasswordResetCheck {
+  valid: boolean
+  username: string
+}

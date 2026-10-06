@@ -115,7 +115,25 @@ func (s *Store) AvatarReferenced(ctx context.Context, name string) (bool, error)
 }
 
 func (s *Store) UpdatePassword(ctx context.Context, id int64, hash string) error {
-	return s.execOne(ctx, "UPDATE users SET password_hash = ? WHERE id = ?", hash, id)
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		return s.updatePassword(ctx, tx, id, hash)
+	})
+}
+
+func (s *Store) updatePassword(ctx context.Context, tx *sql.Tx, id int64, hash string) error {
+	res, err := tx.ExecContext(ctx, "UPDATE users SET password_hash = ? WHERE id = ?", hash, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	_, err = tx.ExecContext(ctx, "DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL", id)
+	return err
 }
 
 // ResetAdmin restores the admin account and revokes its sessions atomically.
@@ -139,6 +157,9 @@ func (s *Store) ResetAdmin(ctx context.Context, hash string) (bool, error) {
 			if _, err := tx.ExecContext(ctx, "UPDATE users SET password_hash = ?, admin = 1, disabled = 0 WHERE id = ?", hash, id); err != nil {
 				return err
 			}
+		}
+		if _, err := tx.ExecContext(ctx, "DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL", id); err != nil {
+			return err
 		}
 		if _, err := tx.ExecContext(ctx, "DELETE FROM sessions WHERE user_id = ?", id); err != nil {
 			return err

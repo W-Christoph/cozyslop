@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"cozycast/internal/egress"
+	"cozycast/internal/fwd"
 	"cozycast/internal/pairing"
 	"cozycast/internal/tunnel"
 )
@@ -41,7 +42,9 @@ type Config struct {
 	// ProxyListen is where the room's apps find their HTTP proxy, e.g.
 	// ":3128"; it is carried to the server's, the room's only way out.
 	ProxyListen string
-	Out         io.Writer // messages for the person running it
+	// RoomHost is where the room's media port is forwarded to.
+	RoomHost string
+	Out      io.Writer // messages for the person running it
 
 	CheckEvery time.Duration // how often the server is asked for settings; 15 s
 	RetryEvery time.Duration // waits after failures; 5 s
@@ -345,8 +348,8 @@ func connect(ctx context.Context, cfg *Config, st state) error {
 			return err
 		}
 		defer l.Close()
-		go forward(ctx, l, func(ctx context.Context) (net.Conn, error) {
-			return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "tcp", target)
+		go fwd.TCP(ctx, l, func(ctx context.Context) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "tcp", target)
 		})
 	}
 	if cfg.ProxyListen != "" {
@@ -356,7 +359,7 @@ func connect(ctx context.Context, cfg *Config, st state) error {
 		}
 		defer l.Close()
 		egressAddr := net.JoinHostPort(hubAddr.String(), strconv.Itoa(egress.Port))
-		go forward(ctx, l, func(ctx context.Context) (net.Conn, error) {
+		go fwd.TCP(ctx, l, func(ctx context.Context) (net.Conn, error) {
 			return tun.DialContext(ctx, "tcp", egressAddr)
 		})
 	}
@@ -367,13 +370,44 @@ func connect(ctx context.Context, cfg *Config, st state) error {
 	rand.Read(boot)
 	configURL := "http://" + net.JoinHostPort(hubAddr.String(), "80") + "/node/config?boot=" + hex.EncodeToString(boot)
 	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{DialContext: tun.DialContext}}
+	// Viewers' media arrives through the tunnel on the room's media port.
+	mediaPort, stopMedia := 0, func() {}
+	defer func() { stopMedia() }()
+	forwardMedia := func(port int) error {
+		stopMedia()
+		mediaPort, stopMedia = port, func() {}
+		if port == 0 {
+			return nil
+		}
+		pc, err := tun.ListenUDP(port)
+		if err != nil {
+			return err
+		}
+		l, err := tun.Listen(port)
+		if err != nil {
+			pc.Close()
+			return err
+		}
+		mctx, cancel := context.WithCancel(ctx)
+		target := net.JoinHostPort(cfg.RoomHost, strconv.Itoa(port))
+		var d net.Dialer
+		go fwd.UDP(mctx, pc, func(ctx context.Context) (net.Conn, error) { return d.DialContext(ctx, "udp", target) }, time.Minute)
+		go fwd.TCP(mctx, l, func(ctx context.Context) (net.Conn, error) { return d.DialContext(ctx, "tcp", target) })
+		stopMedia = func() { cancel(); pc.Close(); l.Close() }
+		return nil
+	}
+
 	failures, connected := 0, false
 	var lostSince time.Time
-	var env string
+	// What the room was started with, if it ran before.
+	previous, _ := os.ReadFile(cfg.EnvFile)
+	env := string(previous)
 	for {
 		var res struct {
 			Room      string `json:"room"`
 			NekoToken string `json:"nekoToken"`
+			MediaPort int    `json:"mediaPort"`
+			PublicIP  string `json:"publicIp"`
 			Error     string `json:"error"`
 		}
 		// The check is also what brings the tunnel back after the server
@@ -387,7 +421,12 @@ func connect(ctx context.Context, cfg *Config, st state) error {
 				cfg.say("Connected to %s as room %q.", st.Hub, res.Room)
 			}
 			connected, failures, lostSince = true, 0, time.Time{}
-			next := fmt.Sprintf("COZYCAST_ROOM='%s'\nCOZYCAST_NEKO_TOKEN='%s'\n", res.Room, res.NekoToken)
+			next := roomEnv(res.Room, res.NekoToken, res.MediaPort, res.PublicIP)
+			if res.MediaPort != mediaPort {
+				if err := forwardMedia(res.MediaPort); err != nil {
+					return err
+				}
+			}
 			if next != env {
 				if env != "" {
 					cfg.say("The room's settings changed; restart the room container.")
@@ -446,36 +485,6 @@ func hubEndpoint(ctx context.Context, st state) (netip.AddrPort, error) {
 	return netip.AddrPortFrom(ip, uint16(st.TunnelPort)), nil
 }
 
-// forward hands every connection on l to a connection from dial, until
-// ctx ends.
-func forward(ctx context.Context, l net.Listener, dial func(context.Context) (net.Conn, error)) {
-	for {
-		c, err := l.Accept()
-		if err != nil {
-			return
-		}
-		go func() {
-			defer c.Close()
-			dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			up, err := dial(dialCtx)
-			cancel()
-			if err != nil {
-				return
-			}
-			defer up.Close()
-			// Stopping the agent ends its connections too.
-			stop := context.AfterFunc(ctx, func() { c.Close(); up.Close() })
-			defer stop()
-			// Either side ending ends both (the deferred closes stop the
-			// other copy).
-			done := make(chan struct{}, 2)
-			go func() { io.Copy(up, c); done <- struct{}{} }()
-			go func() { io.Copy(c, up); done <- struct{}{} }()
-			<-done
-		}()
-	}
-}
-
 // PortsFromEnv parses "8080=room:8080,8081=room:8081".
 func PortsFromEnv(s string) (map[int]string, error) {
 	m := map[int]string{}
@@ -488,4 +497,19 @@ func PortsFromEnv(s string) (map[int]string, error) {
 		m[p] = target
 	}
 	return m, nil
+}
+
+// roomEnv is the room's settings for its entrypoint (COZYCAST_ENV_FILE):
+// its name and neko token, and for viewers' media the server's address and
+// the port the server forwards here. neko only answers connectivity checks
+// (ICE lite): the server's address is the only one it has.
+func roomEnv(room, token string, mediaPort int, publicIP string) string {
+	env := fmt.Sprintf("COZYCAST_ROOM='%s'\nCOZYCAST_NEKO_TOKEN='%s'\n", room, token)
+	if mediaPort != 0 {
+		env += fmt.Sprintf("NEKO_WEBRTC_UDPMUX='%d'\nNEKO_WEBRTC_TCPMUX='%d'\nNEKO_WEBRTC_ICELITE='true'\n", mediaPort, mediaPort)
+	}
+	if ip, err := netip.ParseAddr(publicIP); err == nil {
+		env += fmt.Sprintf("NEKO_WEBRTC_NAT1TO1='%s'\n", ip)
+	}
+	return env
 }

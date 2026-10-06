@@ -36,6 +36,7 @@ func main() {
 		Forward:  forward,
 		// The room's only way out (compose.node.yaml).
 		ProxyListen: env("COZYCAST_PROXY_LISTEN", ":3128"),
+		RoomHost:    env("COZYCAST_ROOM_HOST", "room"),
 		Out:         os.Stdout,
 	})
 	if errors.Is(err, node.ErrRejected) {

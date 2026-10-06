@@ -71,6 +71,7 @@ type RegisteredRoom struct {
 	NodeKey       string
 	TunnelAddress string
 	NodeEndpoint  string
+	MediaPort     int // the server's public port for its media; 0 if none
 }
 
 // Paired reports whether the room is connected through the tunnel.
@@ -78,13 +79,15 @@ func (r RegisteredRoom) Paired() bool { return r.NodeKey != "" }
 
 var ErrRoomExists = errors.New("room already registered")
 
-const registeredRoomColumns = "name, neko_url, neko_token, created_by, created_at, node_key, tunnel_address, node_endpoint"
+const registeredRoomColumns = "name, neko_url, neko_token, created_by, created_at, node_key, tunnel_address, node_endpoint, media_port"
 
 func scanRegisteredRoom(row interface{ Scan(...any) error }) (RegisteredRoom, error) {
 	var room RegisteredRoom
 	var nodeKey, tunnelAddress, nodeEndpoint sql.NullString
-	err := row.Scan(&room.Name, &room.NekoURL, &room.NekoToken, &room.CreatedBy, &room.CreatedAt, &nodeKey, &tunnelAddress, &nodeEndpoint)
+	var mediaPort sql.NullInt64
+	err := row.Scan(&room.Name, &room.NekoURL, &room.NekoToken, &room.CreatedBy, &room.CreatedAt, &nodeKey, &tunnelAddress, &nodeEndpoint, &mediaPort)
 	room.NodeKey, room.TunnelAddress, room.NodeEndpoint = nodeKey.String, tunnelAddress.String, nodeEndpoint.String
+	room.MediaPort = int(mediaPort.Int64)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrNotFound
 	}
@@ -114,9 +117,10 @@ func (s *Store) RegisteredRoom(ctx context.Context, name string) (RegisteredRoom
 
 func (s *Store) CreateRegisteredRoom(ctx context.Context, room *RegisteredRoom) error {
 	room.CreatedAt = s.unix()
-	_, err := s.db.ExecContext(ctx, "INSERT INTO registered_rooms ("+registeredRoomColumns+") VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+	_, err := s.db.ExecContext(ctx, "INSERT INTO registered_rooms ("+registeredRoomColumns+") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		room.Name, room.NekoURL, room.NekoToken, room.CreatedBy, room.CreatedAt,
-		nullString(room.NodeKey), nullString(room.TunnelAddress), nullString(room.NodeEndpoint))
+		nullString(room.NodeKey), nullString(room.TunnelAddress), nullString(room.NodeEndpoint),
+		sql.NullInt64{Int64: int64(room.MediaPort), Valid: room.MediaPort != 0})
 	if isUniqueViolation(err) {
 		return ErrRoomExists
 	}
@@ -131,6 +135,16 @@ func (s *Store) UpdateRegisteredRoom(ctx context.Context, room RegisteredRoom) e
 // SetNodeEndpoint remembers where a paired room's node was last seen.
 func (s *Store) SetNodeEndpoint(ctx context.Context, name, endpoint string) error {
 	res, err := s.db.ExecContext(ctx, "UPDATE registered_rooms SET node_endpoint = ? WHERE name = ? AND node_key IS NOT NULL", nullString(endpoint), name)
+	return registeredRoomResult(res, err)
+}
+
+// SetMediaPort gives a paired room its media port (for rooms paired before
+// there were media ports).
+func (s *Store) SetMediaPort(ctx context.Context, name string, port int) error {
+	res, err := s.db.ExecContext(ctx, "UPDATE registered_rooms SET media_port = ? WHERE name = ? AND node_key IS NOT NULL", port, name)
+	if isUniqueViolation(err) {
+		return ErrRoomExists
+	}
 	return registeredRoomResult(res, err)
 }
 

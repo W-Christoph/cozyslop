@@ -276,6 +276,11 @@ func (t *Tunnel) Owns(rawURL string) bool {
 	return err == nil && t.cfg.Network.Contains(addr.Unmap())
 }
 
+// ListenUDP receives datagrams on this end's tunnel address.
+func (t *Tunnel) ListenUDP(port int) (net.PacketConn, error) {
+	return t.net.ListenUDPAddrPort(netip.AddrPortFrom(t.address, uint16(port)))
+}
+
 // Listen accepts TCP connections on this end's tunnel address.
 func (t *Tunnel) Listen(port int) (net.Listener, error) {
 	return t.net.ListenTCPAddrPort(netip.AddrPortFrom(t.address, uint16(port)))

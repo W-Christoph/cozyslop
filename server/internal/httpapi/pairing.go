@@ -7,10 +7,12 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"time"
 
 	"cozycast/internal/config"
+	"cozycast/internal/fwd"
 	"cozycast/internal/pairing"
 	"cozycast/internal/store"
 	"cozycast/internal/tunnel"
@@ -220,14 +222,21 @@ func (s *Server) pairNewRoom(ctx context.Context, w http.ResponseWriter, name st
 		return "", err
 	}
 	var used []netip.Addr
+	var usedPorts []int
 	for _, room := range rooms {
 		if a, err := netip.ParseAddr(room.TunnelAddress); err == nil {
 			used = append(used, a)
 		}
+		usedPorts = append(usedPorts, room.MediaPort)
 	}
 	addr, err := tunnel.NextAddress(s.tunnel.Network(), s.tunnel.Address(), used)
 	if err != nil {
 		writeError(w, http.StatusConflict, "No tunnel address is free; see COZYCAST_TUNNEL_NET.")
+		return "", errAnswered
+	}
+	mediaPort, ok := fwd.FreePort(s.mediaPorts[0], s.mediaPorts[1], usedPorts)
+	if !ok {
+		writeError(w, http.StatusConflict, "No media port is free; see COZYCAST_MEDIA_PORTS.")
 		return "", errAnswered
 	}
 	token, err := newRoomToken()
@@ -241,7 +250,7 @@ func (s *Server) pairNewRoom(ctx context.Context, w http.ResponseWriter, name st
 	}
 	rc.Source = "paired"
 	room := store.RegisteredRoom{Name: name, NekoURL: nekoURL, NekoToken: token, CreatedBy: &by,
-		NodeKey: key.String(), TunnelAddress: addr.String()}
+		NodeKey: key.String(), TunnelAddress: addr.String(), MediaPort: mediaPort}
 	if err := s.store.CreateRegisteredRoom(ctx, &room); err != nil {
 		if errors.Is(err, store.ErrRoomExists) {
 			writeError(w, http.StatusConflict, "That room already exists.")
@@ -258,7 +267,20 @@ func (s *Server) pairNewRoom(ctx context.Context, w http.ResponseWriter, name st
 		_ = s.store.DeleteRegisteredRoom(ctx, name)
 		return "", err
 	}
+	s.openMedia(room)
 	return name, nil
+}
+
+// openMedia forwards a paired room's media port to it. Without it the room
+// works, but viewers get no picture; the log says why.
+func (s *Server) openMedia(room store.RegisteredRoom) {
+	if s.media == nil || room.MediaPort == 0 {
+		return
+	}
+	target := net.JoinHostPort(room.TunnelAddress, strconv.Itoa(room.MediaPort))
+	if err := s.media.Open(room.Name, room.MediaPort, target); err != nil {
+		s.log.Error("forward media port", "room", room.Name, "port", room.MediaPort, "err", err)
+	}
 }
 
 // replaceNode gives a paired room a new computer. Caller holds roomMu.
@@ -321,7 +343,16 @@ func (s *Server) NodeHandler() http.Handler {
 		for _, room := range rooms {
 			if room.Paired() && room.TunnelAddress == host {
 				s.nodeCheckedIn(room.Name, r.URL.Query().Get("boot"))
-				writeJSON(w, http.StatusOK, map[string]string{"room": room.Name, "nekoToken": room.NekoToken})
+				res := map[string]any{"room": room.Name, "nekoToken": room.NekoToken}
+				// For neko: viewers send media to the server's address
+				// and this port, which the server forwards here.
+				if room.MediaPort != 0 {
+					res["mediaPort"] = room.MediaPort
+				}
+				if s.publicIP.IsValid() {
+					res["publicIp"] = s.publicIP.String()
+				}
+				writeJSON(w, http.StatusOK, res)
 				return
 			}
 		}

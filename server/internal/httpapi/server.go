@@ -10,12 +10,14 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"cozycast/internal/auth"
+	"cozycast/internal/fwd"
 	"cozycast/internal/hub"
 	"cozycast/internal/pairing"
 	"cozycast/internal/ratelimit"
@@ -39,11 +41,19 @@ type Deps struct {
 	SourceURL string
 	// Tunnel to rooms on other machines; nil when off.
 	Tunnel *tunnel.Tunnel
+	// Paired rooms' media: forwarded ports, the address viewers reach
+	// them on (invalid if unknown) and the ports to give out.
+	Media      *fwd.Ports
+	PublicIP   netip.Addr
+	MediaPorts [2]int
 }
 
 type Server struct {
 	buildRoom      RoomBuilder
 	tunnel         *tunnel.Tunnel
+	media          *fwd.Ports
+	publicIP       netip.Addr
+	mediaPorts     [2]int
 	pairing        *pairing.Manager // nil when the tunnel is off
 	nodeMu         sync.Mutex
 	nodeBoots      map[string]string // room: the boot ID its computer last checked in with
@@ -91,6 +101,9 @@ func New(d Deps) *Server {
 		pairLimit:      ratelimit.New(10, time.Minute),
 		buildRoom:      d.BuildRoom,
 		tunnel:         d.Tunnel,
+		media:          d.Media,
+		publicIP:       d.PublicIP,
+		mediaPorts:     d.MediaPorts,
 		store:          d.Store,
 		auth:           d.Auth,
 		hub:            d.Hub,

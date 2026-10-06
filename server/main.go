@@ -7,11 +7,13 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/netip"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	"cozycast/internal/config"
 	"cozycast/internal/docker"
 	"cozycast/internal/egress"
+	"cozycast/internal/fwd"
 	"cozycast/internal/httpapi"
 	"cozycast/internal/hub"
 	"cozycast/internal/legacy"
@@ -134,9 +137,13 @@ func run(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	var media *fwd.Ports
 	if tun != nil {
 		defer tun.Close()
 		go rememberEndpoints(ctx, db, tun)
+		if media, err = openMedia(ctx, db, cfg, tun); err != nil {
+			return err
+		}
 	}
 	buildRoom := roomBuilder(cfg, tun)
 	rooms, err := loadRooms(ctx, db, cfg, buildRoom)
@@ -170,6 +177,9 @@ func run(args []string, out io.Writer) error {
 		BuildRoom:   buildRoom,
 		Store:       db,
 		Tunnel:      tun,
+		Media:       media,
+		PublicIP:    cfg.PublicIP,
+		MediaPorts:  cfg.MediaPorts,
 		Auth:        auth.New(db, cfg.TrustProxy),
 		Hub:         h,
 		Web:         web,
@@ -390,6 +400,44 @@ func openTunnel(ctx context.Context, db *store.Store, cfg config.Config) (*tunne
 	}
 	slog.Info("tunnel listening", "port", tun.Port(), "address", tun.Address(), "network", tun.Network())
 	return tun, nil
+}
+
+// openMedia forwards every paired room's media port into the tunnel,
+// giving rooms paired before media ports existed one.
+func openMedia(ctx context.Context, db *store.Store, cfg config.Config, tun *tunnel.Tunnel) (*fwd.Ports, error) {
+	if !cfg.PublicIP.IsValid() {
+		slog.Warn("COZYCAST_PUBLIC_IP is not set: viewers get no picture from paired rooms")
+	}
+	media := &fwd.Ports{Dial: tun.DialContext}
+	registered, err := db.RegisteredRooms(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var used []int
+	for _, rc := range registered {
+		used = append(used, rc.MediaPort)
+	}
+	for _, rc := range registered {
+		if !rc.Paired() {
+			continue
+		}
+		if rc.MediaPort == 0 {
+			port, ok := fwd.FreePort(cfg.MediaPorts[0], cfg.MediaPorts[1], used)
+			if !ok {
+				slog.Error("no media port free for paired room; see COZYCAST_MEDIA_PORTS", "room", rc.Name)
+				continue
+			}
+			if err := db.SetMediaPort(ctx, rc.Name, port); err != nil {
+				return nil, err
+			}
+			rc.MediaPort, used = port, append(used, port)
+		}
+		target := net.JoinHostPort(rc.TunnelAddress, strconv.Itoa(rc.MediaPort))
+		if err := media.Open(rc.Name, rc.MediaPort, target); err != nil {
+			slog.Error("forward media port", "room", rc.Name, "port", rc.MediaPort, "err", err)
+		}
+	}
+	return media, nil
 }
 
 // nodePeer is a paired room's node as a tunnel peer. A node that was seen

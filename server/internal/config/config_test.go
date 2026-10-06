@@ -136,3 +136,24 @@ func TestTunnelConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestMediaConfig(t *testing.T) {
+	t.Setenv("COZYCAST_NEKO_API_TOKEN", "test-secret")
+	cfg, err := FromEnv()
+	if err != nil || cfg.PublicIP.IsValid() || cfg.MediaPorts != [2]int{52100, 52109} {
+		t.Fatalf("defaults: %+v %v", cfg.MediaPorts, err)
+	}
+	t.Setenv("COZYCAST_PUBLIC_IP", "203.0.113.10")
+	t.Setenv("COZYCAST_MEDIA_PORTS", "40000-40000")
+	if cfg, err = FromEnv(); err != nil || cfg.PublicIP.String() != "203.0.113.10" || cfg.MediaPorts != [2]int{40000, 40000} {
+		t.Fatalf("set: %+v %v %v", cfg.PublicIP, cfg.MediaPorts, err)
+	}
+	for _, bad := range [][2]string{{"PUBLIC_IP", "host.example"}, {"MEDIA_PORTS", "52109-52100"}, {"MEDIA_PORTS", "52100"}, {"MEDIA_PORTS", "0-10"}} {
+		t.Setenv("COZYCAST_PUBLIC_IP", "")
+		t.Setenv("COZYCAST_MEDIA_PORTS", "")
+		t.Setenv("COZYCAST_"+bad[0], bad[1])
+		if _, err := FromEnv(); err == nil {
+			t.Errorf("accepted %s=%s", bad[0], bad[1])
+		}
+	}
+}

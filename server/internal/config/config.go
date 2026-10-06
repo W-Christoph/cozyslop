@@ -44,6 +44,10 @@ type Config struct {
 	// TunnelPort is 0. The server takes TunnelNet's first address.
 	TunnelPort int
 	TunnelNet  netip.Prefix
+	// What paired rooms' media goes through: the server's public address,
+	// announced to viewers, and its ports for them, one per room.
+	PublicIP   netip.Addr // invalid if not set
+	MediaPorts [2]int     // first and last
 }
 
 func FromEnv() (Config, error) {
@@ -89,6 +93,20 @@ func FromEnv() (Config, error) {
 	c.TunnelNet, err = netip.ParsePrefix(env("COZYCAST_TUNNEL_NET", "10.77.0.0/24"))
 	if err != nil || !c.TunnelNet.Addr().Is4() || c.TunnelNet.Bits() > 30 || c.TunnelNet != c.TunnelNet.Masked() {
 		return c, errors.New("COZYCAST_TUNNEL_NET must be an IPv4 network like 10.77.0.0/24, /30 or larger")
+	}
+
+	if ip := os.Getenv("COZYCAST_PUBLIC_IP"); ip != "" {
+		if c.PublicIP, err = netip.ParseAddr(ip); err != nil {
+			return c, errors.New("COZYCAST_PUBLIC_IP must be an IP address")
+		}
+	}
+	first, last, ok := strings.Cut(env("COZYCAST_MEDIA_PORTS", "52100-52109"), "-")
+	c.MediaPorts[0], err = strconv.Atoi(first)
+	if err == nil {
+		c.MediaPorts[1], err = strconv.Atoi(last)
+	}
+	if !ok || err != nil || c.MediaPorts[0] < 1 || c.MediaPorts[1] > 65535 || c.MediaPorts[0] > c.MediaPorts[1] {
+		return c, errors.New("COZYCAST_MEDIA_PORTS must be a port range like 52100-52109")
 	}
 
 	rooms, err := parseRooms(env("COZYCAST_ROOMS", "default=http://room-default:8080"))

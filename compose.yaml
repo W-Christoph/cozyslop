@@ -55,8 +55,11 @@ services:
       - "${HTTP_PORT:-80}:8080"
       - "${HTTPS_PORT:-443}:8443"
       # Rooms on other computers (docs/home-hosting.md): uncomment together
-      # with COZYCAST_TUNNEL_PORT below.
+      # with COZYCAST_TUNNEL_PORT below. The tunnel, and one media port per
+      # room (COZYCAST_MEDIA_PORTS); host and container ports must match.
       # - "51820:51820/udp"
+      # - "52100-52109:52100-52109/udp"
+      # - "52100-52109:52100-52109/tcp"
     environment:
       COZYCAST_NEKO_SECRET: ${NEKO_API_TOKEN}
       COZYCAST_ROOMS: default=http://room-default:8080
@@ -71,6 +74,8 @@ services:
       COZYCAST_INIT_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       # WireGuard for rooms on other computers; off unless set.
       # COZYCAST_TUNNEL_PORT: "51820"
+      # Announced to viewers of rooms on other computers.
+      COZYCAST_PUBLIC_IP: ${PUBLIC_IP}
       # Opt-in room restart control from the UI. This gives the server
       # control over Docker on the host; only needed for UI room restarts.
       # Uncomment this, the socket volume, and group_add below together.

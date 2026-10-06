@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -24,6 +25,7 @@ import (
 	"cozycast/internal/auth"
 	"cozycast/internal/config"
 	"cozycast/internal/egress"
+	"cozycast/internal/fwd"
 	"cozycast/internal/httpapi"
 	"cozycast/internal/hub"
 	"cozycast/internal/neko/nekotest"
@@ -118,7 +120,13 @@ func TestPairingEndToEnd(t *testing.T) {
 			h.Remove(r.Name, "not_found")
 		}
 	}()
-	api := httpapi.New(httpapi.Deps{Store: db, Auth: auth.New(db, false), Hub: h, Tunnel: tun, BuildRoom: roomBuilder(cfg, tun)})
+	// Media: the server's public port is on 127.0.0.1, the room's neko
+	// (an echo here) on 127.0.0.2 behind the agent, both on the same port.
+	mediaPort := freeUDPPort(t)
+	media := &fwd.Ports{Host: "127.0.0.1", Dial: tun.DialContext}
+	publicIP := netip.MustParseAddr("203.0.113.10")
+	api := httpapi.New(httpapi.Deps{Store: db, Auth: auth.New(db, false), Hub: h, Tunnel: tun, BuildRoom: roomBuilder(cfg, tun),
+		Media: media, PublicIP: publicIP, MediaPorts: [2]int{mediaPort, mediaPort}})
 	srv := httptest.NewServer(api.Handler())
 	defer srv.Close()
 	l, err := tun.Listen(80)
@@ -180,7 +188,8 @@ func TestPairingEndToEnd(t *testing.T) {
 		done := make(chan error, 1)
 		go func() {
 			done <- node.Run(actx, node.Config{Hub: srv.URL, Name: "home", StateDir: stateDir, EnvFile: envFile,
-				Forward: map[int]string{8080: roomAddr}, ProxyListen: proxyAddr, Out: out, CheckEvery: 100 * time.Millisecond, RetryEvery: 100 * time.Millisecond})
+				Forward: map[int]string{8080: roomAddr}, ProxyListen: proxyAddr, RoomHost: "127.0.0.2",
+				Out: out, CheckEvery: 100 * time.Millisecond, RetryEvery: 100 * time.Millisecond})
 		}()
 		return stop, done
 	}
@@ -224,6 +233,32 @@ func TestPairingEndToEnd(t *testing.T) {
 	m := regexp.MustCompile(`(?m)^COZYCAST_ROOM='living-room'\nCOZYCAST_NEKO_TOKEN='([A-Za-z0-9_-]+)'$`).FindStringSubmatch(env)
 	if m == nil {
 		t.Fatalf("env file:\n%s", env)
+	}
+	// neko announces the server's address and the media port.
+	for _, line := range []string{
+		fmt.Sprintf("NEKO_WEBRTC_UDPMUX='%d'", mediaPort), fmt.Sprintf("NEKO_WEBRTC_TCPMUX='%d'", mediaPort),
+		"NEKO_WEBRTC_ICELITE='true'", "NEKO_WEBRTC_NAT1TO1='203.0.113.10'",
+	} {
+		if !strings.Contains(env, line+"\n") {
+			t.Fatalf("env file lacks %s:\n%s", line, env)
+		}
+	}
+	// A viewer's media reaches neko through the server and the computer,
+	// over UDP and TCP, and the answers come back.
+	echoMedia(t, "127.0.0.2", mediaPort)
+	viewerUDP, err := net.Dial("udp", net.JoinHostPort("127.0.0.1", fmt.Sprint(mediaPort)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer viewerUDP.Close()
+	eventually(t, "media over UDP", func() bool { return exchange(viewerUDP, "rtp") == "echo:rtp" })
+	viewerTCP, err := net.Dial("tcp", net.JoinHostPort("127.0.0.1", fmt.Sprint(mediaPort)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer viewerTCP.Close()
+	if got := exchange(viewerTCP, "ice-tcp"); got != "echo:ice-tcp" {
+		t.Fatalf("media over TCP: %q", got)
 	}
 	if fi, _ := os.Stat(envFile); fi.Mode().Perm() != 0o600 {
 		t.Fatalf("env file mode %v", fi.Mode())
@@ -323,4 +358,60 @@ func TestPairingEndToEnd(t *testing.T) {
 	if call("GET", "/api/admin/pairing", nil, &pending); len(pending) != 0 {
 		t.Fatalf("asked again: %+v", pending)
 	}
+}
+
+// echoMedia stands in for neko's media port: UDP and TCP, answering
+// "echo:" and what it got.
+func echoMedia(t *testing.T, host string, port int) {
+	addr := net.JoinHostPort(host, fmt.Sprint(port))
+	pc, err := net.ListenPacket("udp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { pc.Close() })
+	go func() {
+		buf := make([]byte, 2048)
+		for {
+			n, from, err := pc.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			pc.WriteTo(append([]byte("echo:"), buf[:n]...), from)
+		}
+	}()
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close() })
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer c.Close()
+				buf := make([]byte, 2048)
+				for {
+					n, err := c.Read(buf)
+					if err != nil {
+						return
+					}
+					c.Write(append([]byte("echo:"), buf[:n]...))
+				}
+			}()
+		}
+	}()
+}
+
+// exchange sends msg and returns the answer, "" if none came.
+func exchange(c net.Conn, msg string) string {
+	c.SetDeadline(time.Now().Add(time.Second))
+	if _, err := c.Write([]byte(msg)); err != nil {
+		return ""
+	}
+	buf := make([]byte, 2048)
+	n, _ := c.Read(buf)
+	return string(buf[:n])
 }

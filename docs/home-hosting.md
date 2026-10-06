@@ -1,7 +1,7 @@
 # Home hosting (planned)
 
-A planned feature, built in steps (see Build order; steps 1 to 4 are
-done). Someone lends a computer at
+A feature built in steps (see Build order; steps 1 to 5 are done, so a
+lent computer runs a room for viewers). Someone lends a computer at
 home to run a room. The main server (the hub, on a VPS) does everything
 else: viewers, and the websites the room opens, only ever see the hub's
 address. The home network and IP address stay hidden, and the home needs
@@ -143,9 +143,12 @@ tunnel.
 
 Server settings: `COZYCAST_TUNNEL_PORT` (UDP; tunnels are off without it,
 since Docker's published ports bypass host firewalls like ufw),
-`COZYCAST_TUNNEL_NET` (`10.77.0.0/24`). To come: `COZYCAST_PUBLIC_IP` (the
-hub's address for media), `COZYCAST_MEDIA_PORTS` (`52100-52199`, one per
-paired room, UDP and TCP).
+`COZYCAST_TUNNEL_NET` (`10.77.0.0/24`), `COZYCAST_PUBLIC_IP` (the hub's
+address, announced to viewers; compose passes `PUBLIC_IP`),
+`COZYCAST_MEDIA_PORTS` (`52100-52109`, one per paired room, UDP and TCP,
+published with the same numbers on the host). Each paired room gets its
+port when accepted (rooms paired earlier at the next start); removing the
+room closes it.
 
 ## The node
 
@@ -195,16 +198,18 @@ cannot even look names up through the home's resolver.
   address), carrier-grade NAT, multicast and reserved ranges, which covers
   the tunnel network and the hub's Docker networks, and port 25.
 - **Media**: until the relay exists, the hub forwards each paired room's
-  media port (UDP and TCP, public) to the room's neko through the tunnel.
-  neko announces the hub's IP (`NEKO_WEBRTC_NAT1TO1`) and that port, so
-  viewers connect to the hub. Each viewer's stream still crosses the home
+  media port (UDP and TCP, public) through the tunnel to the agent, which
+  forwards it to the room's neko (`internal/fwd`: one flow per viewer for
+  UDP, ended after a minute of silence). neko announces the hub's IP
+  (`NEKO_WEBRTC_NAT1TO1`) and that port, with ICE lite, so viewers connect
+  to the hub. Each viewer's stream still crosses the home
   upload (viewers × bitrate) until the relay. This is neko's own documented
   setup for SSH port forwarding ([networking](https://neko.m1k1o.net/docs/v3/customization/networking)):
   `NAT1TO1` set to the address viewers use, one multiplexed port forwarded.
   Its examples also set `NEKO_WEBRTC_ICELITE=1`, which suits a room that
-  only ever announces the hub's address; to be tested for paired rooms.
+  only ever announces the hub's address; paired rooms use it.
 
-### Built so far (steps 3 and 4)
+### Built so far (steps 3 to 5)
 
 `compose.node.yaml` runs the agent (`node/Dockerfile`, `server/cmd/node`)
 and the room. The agent keeps its key and pairing in its volume, writes
@@ -219,6 +224,13 @@ until its state is deleted. The room's network is as described in "The
 room's network"; checked in the sandbox from inside the room: no direct
 connection, no DNS, the host and the home router out of reach, its Firefox
 using the proxy.
+
+The settings the agent fetches include the room's media port and the hub's
+address; the agent writes them as neko's `NEKO_WEBRTC_UDPMUX`, `TCPMUX`,
+`NAT1TO1` and `ICELITE`, and forwards the port from the tunnel to the room.
+When they change, the agent's log asks to restart the room container (the
+agent cannot restart it). Before this, a paired room's neko looked up its
+public address itself and announced the home's to every viewer.
 
 ## When something goes offline
 
@@ -421,10 +433,10 @@ Each step works on its own and is tested before the next.
    private address refused) and from inside a room container in the
    sandbox. Still to see on a real VPS: a website reporting the hub's
    address (the sandbox's hub has no internet).
-5. **Media through the hub.** Forwarded media ports. Done when a viewer
-   sees the room and only ever the hub's address (also in the browser's
-   WebRTC details). Needs a real VPS; the development sandbox has no
-   incoming UDP.
+5. **Media through the hub** (done). Forwarded media ports. Tested end to
+   end in one process (UDP and TCP both ways) and in the sandbox with
+   headless Chromium: connected over UDP to the hub's address and port,
+   1280×720 at 30 fps, first picture after about 3 s.
 6. **Measure the node.** One room with a video playing, CPU per stream
    setting, home upload with several viewers.
 7. **Input over the WebSocket**, then **the relay** (see above). After this

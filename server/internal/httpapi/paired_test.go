@@ -2,11 +2,13 @@ package httpapi_test
 
 import (
 	"context"
+	"net"
 	"net/http/httptest"
 	"net/netip"
 	"testing"
 
 	"cozycast/internal/auth"
+	"cozycast/internal/fwd"
 	"cozycast/internal/httpapi"
 	"cozycast/internal/hub"
 	"cozycast/internal/neko"
@@ -55,7 +57,15 @@ func TestPairedRoomAdmin(t *testing.T) {
 			h.Remove(r.Name, "not_found")
 		}
 	})
-	srv := httptest.NewServer(httpapi.New(httpapi.Deps{Store: st, Auth: auth.New(st, false), Hub: h, Tunnel: tun}).Handler())
+	// Its media port, forwarded since startup.
+	media := &fwd.Ports{Host: "127.0.0.1", Dial: tun.DialContext}
+	free, _ := net.Listen("tcp", "127.0.0.1:0")
+	mediaAddr := free.Addr().String()
+	free.Close()
+	if err := media.Open("home", free.Addr().(*net.TCPAddr).Port, "10.77.0.2:52100"); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(httpapi.New(httpapi.Deps{Store: st, Auth: auth.New(st, false), Hub: h, Tunnel: tun, Media: media}).Handler())
 	t.Cleanup(srv.Close)
 	a := &apiTest{t: t, st: st, srv: srv, h: h}
 	a.user("root", true)
@@ -79,6 +89,10 @@ func TestPairedRoomAdmin(t *testing.T) {
 	a.call(admin, "DELETE", "/api/admin/rooms/home", nil, 204, nil)
 	if tun.HasPeer(nodeKey.Public()) {
 		t.Fatal("removed room's node still has a tunnel")
+	}
+	if c, err := net.Dial("tcp", mediaAddr); err == nil {
+		c.Close()
+		t.Fatal("removed room's media port still open")
 	}
 	if _, err := st.RegisteredRoom(ctx, "home"); err == nil {
 		t.Fatal("registration kept")

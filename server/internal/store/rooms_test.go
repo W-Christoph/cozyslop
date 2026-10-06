@@ -152,10 +152,23 @@ func TestPairedRooms(t *testing.T) {
 	if p := got["plain"]; p.Paired() || p.TunnelAddress != "" || p.NodeEndpoint != "" {
 		t.Fatalf("plain: %+v", p)
 	}
+	if err := s.SetMediaPort(ctx, "home", 52100); err != nil {
+		t.Fatal(err)
+	}
+	if h, _ := s.RegisteredRoom(ctx, "home"); h.MediaPort != 52100 {
+		t.Fatalf("media port: %+v", h)
+	}
+	if err := s.SetMediaPort(ctx, "plain", 52101); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("media port for an unpaired room: %v", err)
+	}
+	second := RegisteredRoom{Name: "home2", NekoURL: "http://10.77.0.3:8080", NekoToken: "f", NodeKey: "key-9", TunnelAddress: "10.77.0.3", MediaPort: 52100}
+	if err := s.CreateRegisteredRoom(ctx, &second); err == nil {
+		t.Fatal("two rooms share a media port")
+	}
 	if err := s.ReplaceNode(ctx, "home", "key-3"); err != nil {
 		t.Fatal(err)
 	}
-	if h, _ := s.RegisteredRoom(ctx, "home"); h.NodeKey != "key-3" || h.TunnelAddress != "10.77.0.2" || h.NodeEndpoint != "" || h.NekoToken != "b" {
+	if h, _ := s.RegisteredRoom(ctx, "home"); h.NodeKey != "key-3" || h.TunnelAddress != "10.77.0.2" || h.NodeEndpoint != "" || h.NekoToken != "b" || h.MediaPort != 52100 {
 		t.Fatalf("replaced: %+v", h)
 	}
 	if err := s.ReplaceNode(ctx, "plain", "key-4"); !errors.Is(err, ErrNotFound) {

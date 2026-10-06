@@ -231,6 +231,9 @@ func (s *Server) adminDeleteRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.hub.Remove(room.Name, "not_found")
+	if s.media != nil {
+		s.media.Close(room.Name)
+	}
 	if room.Paired() && s.tunnel != nil {
 		// Cut the node off at once; it has to pair again.
 		if key, err := tunnel.ParseKey(room.NodeKey); err == nil {

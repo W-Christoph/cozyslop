@@ -192,7 +192,8 @@ free tunnel address and a random neko token; replacing keeps both, and the
 old computer's key stops working at once.
 
 Inside the tunnel only, at `http://<server tunnel address>/node/config?boot=<id>`,
-a paired computer gets `{"room","nekoToken"}`, recognized by its tunnel
+a paired computer gets `{"room","nekoToken","mediaPort","publicIp"}` (the
+last two when known), recognized by its tunnel
 address. A new `boot` ID (the agent started again) makes the server
 reconnect to that room at once.
 

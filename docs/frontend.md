@@ -106,8 +106,8 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
 
 ## Admin rooms
 
-The Rooms tab at `/admin/rooms` lists room sources, neko addresses, connection
-state and people counts. Admins can register a room, change its address, rotate
+The Rooms tab at `/admin/rooms` lists room sources, connection state and
+people counts. Neko addresses are never shown: Change address starts empty. Admins can register a room, change its address, rotate
 its token or remove it; configured rooms are read-only and refer to
 `COZYCAST_ROOMS`. Add and New token show the secret only in the issuing modal,
 with copy buttons for the token and the container's `COZYCAST_ROOM` /

@@ -46,11 +46,10 @@ export function RoomsTab() {
       {error && <Notice tone="error">{error}</Notice>}
       {message && <Notice tone="success">{message}</Notice>}
       {!loading && !error && rooms.length === 0 && <EmptyState icon="monitor" title="No rooms">Add a room to connect a neko container.</EmptyState>}
-      {!loading && rooms.length > 0 && <AdminTable headings={['Room', 'Source', 'Neko address', 'Connection', 'People', 'Actions']}>
+      {!loading && rooms.length > 0 && <AdminTable headings={['Room', 'Source', 'Connection', 'People', 'Actions']}>
         {rooms.map((room) => <tr key={room.name}>
           <td><a class={styles.name} href={`/room/${encodeURIComponent(room.name)}`}>{room.name}</a></td>
           <td data-label="Source"><Badge>{room.source === 'configured' ? 'Configured' : 'Registered'}</Badge></td>
-          <td class={styles.address} data-label="Neko">{room.nekoUrl}</td>
           <td data-label="Connection"><Badge tone={room.connected ? 'success' : 'warning'}>{room.connected ? 'Connected' : 'Not reachable'}</Badge></td>
           <td data-label="People">{room.userCount}</td>
           <td>{room.source === 'configured' ? <span class={styles.note}>Defined in <code>COZYCAST_ROOMS</code>.</span> : <div class={styles.actions}>

@@ -1584,7 +1584,8 @@ test('admin reset link action generates a private link and copies it', async (t)
   assert.match(nodes(render()).filter(n => n.type?.name === 'Notice')[0].props.children.join(''), /24 hours, works once, and replaces earlier links/)
 })
 
-const registeredRoom = { name: 'extra', source: 'registered', nekoUrl: 'http://10.0.0.2:8080', connected: false, userCount: 0 }
+const registeredRoom = { name: 'extra', source: 'registered', connected: false, userCount: 0 }
+const roomAddress = 'http://10.0.0.2:8080'
 const configuredRoom = { ...registeredRoom, name: 'default', source: 'configured', connected: true, userCount: 3 }
 const roomReply = (data, status = 200) => ({ ok: status < 400, status, json: async () => data })
 const formSubmit = (node) => nodes(node).find(n => n.type === 'form').props.onSubmit({ preventDefault() {} })
@@ -1616,7 +1617,7 @@ test('rooms list shows connection, people and links; configured rows are read-on
   assert.ok(named(render(), 'Spinner'))
   await settle()
   const table = named(render(), 'AdminTable'), rows = nodes(table).filter(n => n.type === 'tr')
-  assert.deepEqual(table.props.headings, ['Room', 'Source', 'Neko address', 'Connection', 'People', 'Actions'])
+  assert.deepEqual(table.props.headings, ['Room', 'Source', 'Connection', 'People', 'Actions'])
   assert.deepEqual(rows.map(row => nodes(row).find(n => n.type === 'a').props.href), ['/room/default', '/room/extra'])
   assert.deepEqual(nodes(rows[0]).filter(n => n.type?.name === 'Badge').map(n => n.props.children), ['Configured', 'Connected'])
   assert.equal(nodes(rows[0]).find(n => n.props?.['data-label'] === 'People').props.children, 3)
@@ -1683,9 +1684,9 @@ test('add room validates before calling the API and shows server errors inline',
   formSubmit(render()); await settle()
   assert.equal(requests.length, 0)
   assert.match(named(render(), 'Notice').props.children, /Neko URL/)
-  fieldInput(render(), 'Neko URL').props.onInput({ currentTarget: { value: registeredRoom.nekoUrl } })
+  fieldInput(render(), 'Neko URL').props.onInput({ currentTarget: { value: roomAddress } })
   formSubmit(render()); await settle()
-  assert.deepEqual(requests, [['/api/admin/rooms', { name: 'extra', nekoUrl: registeredRoom.nekoUrl }]])
+  assert.deepEqual(requests, [['/api/admin/rooms', { name: 'extra', nekoUrl: roomAddress }]])
   assert.equal(named(render(), 'Notice').props.children, 'That room already exists.')
   assert.equal(named(render(), 'Input').props.value, 'extra', 'failed requests keep the form editable')
 })
@@ -1700,7 +1701,7 @@ test('add room shows token once, copies token and environment, and saves no secr
   const props = { action: { mode: 'add' }, onClose: () => closed++, onSaved: room => saved.push(room), onRemoved() {} }
   const render = () => f.render(RoomModal, props)
   fieldInput(render(), 'Name').props.onInput({ currentTarget: { value: 'extra' } })
-  fieldInput(render(), 'Neko URL').props.onInput({ currentTarget: { value: registeredRoom.nekoUrl } })
+  fieldInput(render(), 'Neko URL').props.onInput({ currentTarget: { value: roomAddress } })
   formSubmit(render()); await settle()
   assert.deepEqual(saved, [registeredRoom])
   assert.equal('nekoToken' in saved[0], false)
@@ -1725,23 +1726,23 @@ test('add room shows token once, copies token and environment, and saves no secr
   assert.equal(fieldInput(reopened, 'Token'), undefined)
 })
 
-test('changing a room address validates its single field, patches and closes', async (t) => {
+test('changing a room address starts empty, validates its single field, patches and closes', async (t) => {
   const f = fixture(t), requests = [], saved = []
   let closed = 0
   globals(t, { fetch: async (path, init) => {
     requests.push([path, init.method, JSON.parse(init.body)])
-    return roomReply({ ...registeredRoom, nekoUrl: 'https://neko.example/prefix' })
+    return roomReply(registeredRoom)
   } })
   const render = () => f.render(RoomModal, { action: { mode: 'address', room: registeredRoom }, onClose: () => closed++, onSaved: room => saved.push(room), onRemoved() {} })
   assert.equal(nodes(render()).filter(n => n.type?.name === 'Input').length, 1)
-  assert.equal(fieldInput(render(), 'Neko URL').props.value, registeredRoom.nekoUrl)
+  assert.equal(fieldInput(render(), 'Neko URL').props.value, '', 'the current address is never shown')
   fieldInput(render(), 'Neko URL').props.onInput({ currentTarget: { value: 'https://neko.example#' } })
   formSubmit(render()); await settle()
   assert.equal(requests.length, 0)
   fieldInput(render(), 'Neko URL').props.onInput({ currentTarget: { value: 'https://neko.example/prefix' } })
   formSubmit(render()); await settle()
   assert.deepEqual(requests, [['/api/admin/rooms/extra', 'PATCH', { nekoUrl: 'https://neko.example/prefix' }]])
-  assert.equal(saved[0].nekoUrl, 'https://neko.example/prefix')
+  assert.deepEqual(saved, [registeredRoom])
   assert.equal(closed, 1)
 })
 

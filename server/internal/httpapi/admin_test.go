@@ -469,13 +469,13 @@ func TestAdminRoomRegistrations(t *testing.T) {
 		a.error(admin, route.method, "/api/admin/rooms/missing"+route.suffix, map[string]string{"nekoUrl": "http://neko"}, 404, "Unknown room.")
 	}
 	var created struct {
-		Name, Source, NekoURL, NekoToken string
-		Connected                        bool
-		UserCount                        int
+		Name, Source, NekoToken string
+		Connected               bool
+		UserCount               int
 	}
-	a.call(admin, "POST", "/api/admin/rooms", map[string]string{"name": "extra", "nekoUrl": "http://localhost:1"}, 201, &created)
+	data := a.call(admin, "POST", "/api/admin/rooms", map[string]string{"name": "extra", "nekoUrl": "http://localhost:1"}, 201, &created)
 	raw, err := base64.RawURLEncoding.DecodeString(created.NekoToken)
-	if err != nil || len(raw) != 32 || created.Name != "extra" || created.Source != "registered" || created.Connected || created.UserCount != 0 {
+	if err != nil || len(raw) != 32 || created.Name != "extra" || created.Source != "registered" || created.Connected || created.UserCount != 0 || strings.Contains(string(data), "localhost") {
 		t.Fatalf("create: %+v token bytes=%d err=%v", created, len(raw), err)
 	}
 	saved, err := a.st.RegisteredRoom(ctx, "extra")
@@ -488,7 +488,8 @@ func TestAdminRoomRegistrations(t *testing.T) {
 		for _, path := range []string{"/api/admin/rooms", "/api/rooms"} {
 			var list []map[string]any
 			data := a.call(admin, "GET", path, nil, 200, &list)
-			if len(list) != want || strings.Contains(strings.ToLower(string(data)), "token") || strings.Contains(string(data), created.NekoToken) {
+			// Neither the token nor the room's address is ever listed.
+			if len(list) != want || strings.Contains(strings.ToLower(string(data)), "token") || strings.Contains(string(data), created.NekoToken) || strings.Contains(string(data), "://") {
 				t.Fatalf("list %s: %s", path, data)
 			}
 		}
@@ -497,8 +498,8 @@ func TestAdminRoomRegistrations(t *testing.T) {
 	a.call(admin, "PATCH", "/api/admin/rooms/extra", map[string]string{"nekoUrl": "relative"}, 400, nil)
 	fake := nekotest.New(t, created.NekoToken)
 	patched := a.call(admin, "PATCH", "/api/admin/rooms/extra", map[string]string{"nekoUrl": fake.URL()}, 200, nil)
-	if strings.Contains(strings.ToLower(string(patched)), "token") {
-		t.Fatalf("patch leaked token: %s", patched)
+	if strings.Contains(strings.ToLower(string(patched)), "token") || strings.Contains(string(patched), "://") {
+		t.Fatalf("patch leaked token or address: %s", patched)
 	}
 	waitCtx, stop := context.WithTimeout(ctx, 5*time.Second)
 	defer stop()

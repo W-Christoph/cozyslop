@@ -88,7 +88,6 @@ export interface AdminUser extends Me {
 export interface AdminRoom {
   name: string
   source: 'configured' | 'registered'
-  nekoUrl: string
   connected: boolean
   userCount: number
 }

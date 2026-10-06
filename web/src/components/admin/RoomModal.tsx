@@ -18,7 +18,7 @@ export function RoomModal({ action, onClose, onSaved, onRemoved }: {
 }) {
   const { mode } = action
   const [name, setName] = useState(mode === 'add' ? '' : action.room.name),
-    [nekoUrl, setNekoUrl] = useState(mode === 'add' ? '' : action.room.nekoUrl)
+    [nekoUrl, setNekoUrl] = useState('')
   const [token, setToken] = useState(''),
     [error, setError] = useState(''),
     [message, setMessage] = useState(''),
@@ -45,8 +45,7 @@ export function RoomModal({ action, onClose, onSaved, onRemoved }: {
           : mode === 'address' ? await adminRooms.changeAddress(name, nekoUrl)
           : await adminRooms.newToken(name)
         // Do not pass the issuance response (and its token) into table state.
-        onSaved({ name: room.name, source: room.source, nekoUrl: room.nekoUrl,
-          connected: room.connected, userCount: room.userCount })
+        onSaved({ name: room.name, source: room.source, connected: room.connected, userCount: room.userCount })
         if ('nekoToken' in room && typeof room.nekoToken === 'string') setToken(room.nekoToken)
         else onClose()
       }
@@ -94,7 +93,7 @@ export function RoomModal({ action, onClose, onSaved, onRemoved }: {
         {mode === 'add' && <Field label="Name" hint="Letters, digits, underscores or hyphens.">
           <Input required autoComplete="off" value={name} disabled={busy} onInput={(e) => setName(e.currentTarget.value)} />
         </Field>}
-        <Field label="Neko URL" hint="An http or https address, optionally with a path prefix; no credentials, query or fragment.">
+        <Field label="Neko URL" hint="Where the server reaches the room's neko (http or https, optionally with a path). Only the server uses it; it is not shown again.">
           <Input required type="url" placeholder="http://10.0.0.2:8080" value={nekoUrl} disabled={busy} onInput={(e) => setNekoUrl(e.currentTarget.value)} />
         </Field>
         {mode === 'address' && <Notice>Changing the address disconnects people in the room. They can reopen it to reconnect.</Notice>}

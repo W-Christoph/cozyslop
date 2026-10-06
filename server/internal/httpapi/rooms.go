@@ -12,16 +12,17 @@ import (
 	"cozycast/internal/store"
 )
 
+// adminRoom leaves out the neko address: it can be a home machine's, and
+// admins set it without needing to see it again (like the token).
 type adminRoom struct {
 	Name      string `json:"name"`
 	Source    string `json:"source"`
-	NekoURL   string `json:"nekoUrl"`
 	Connected bool   `json:"connected"`
 	UserCount int    `json:"userCount"`
 }
 
 func toAdminRoom(r *hub.Room) adminRoom {
-	return adminRoom{r.Name, r.Source, r.Neko().BaseURL().String(), r.Neko().Connected(), r.UserCount()}
+	return adminRoom{r.Name, r.Source, r.Neko().Connected(), r.UserCount()}
 }
 
 func newRoomToken() (string, error) {

@@ -147,7 +147,7 @@ All endpoints use the usual admin authentication and JSON error format.
 
 | Endpoint | Body | Success | Errors |
 |---|---|---|---|
-| `GET /api/admin/rooms` | None | 200 sorted array of `{name,source,nekoUrl,connected,userCount}` for all live rooms; source is `configured` or `registered`; connected means the authenticated neko event stream is working; no tokens | Common admin errors |
+| `GET /api/admin/rooms` | None | 200 sorted array of `{name,source,connected,userCount}` for all live rooms; source is `configured` or `registered`; connected means the authenticated neko event stream is working; no tokens or addresses | Common admin errors |
 | `POST /api/admin/rooms` | `{"name":"extra","nekoUrl":"http://room-extra:8080"}` | 201 room fields above plus `nekoToken`, returned once | 400 invalid name/URL; 409 `"That room already exists."` (including configured names) |
 | `PATCH /api/admin/rooms/{room}` | `{"nekoUrl":"https://neko.example/prefix"}` | 200 room fields, no token; replaces connection immediately | 400 invalid URL; 404 `"Unknown room."`; 409 configured room |
 | `POST /api/admin/rooms/{room}/token` | None | 200 room fields plus a fresh `nekoToken`, returned once; replaces connection immediately | 404 unknown; 409 configured room |
@@ -157,6 +157,8 @@ Names contain one or more ASCII letters, digits, underscores or hyphens.
 URLs must be absolute `http`/`https` with a hostname and no credentials,
 query (including an empty `?`) or fragment. A path prefix is allowed.
 Neko does not need to be reachable at registration; the hub retries.
+The address is write-only: no response returns it, so a room at home does
+not show its address to admins either.
 Configured rooms reject changes with `"This room is managed in COZYCAST_ROOMS."`.
 Configuration wins at startup over a stored registration of the same name.
 

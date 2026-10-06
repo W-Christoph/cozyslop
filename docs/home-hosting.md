@@ -1,6 +1,6 @@
 # Home hosting (planned)
 
-A planned feature, built in steps (see Build order; steps 1 to 3 are
+A planned feature, built in steps (see Build order; steps 1 to 4 are
 done). Someone lends a computer at
 home to run a room. The main server (the hub, on a VPS) does everything
 else: viewers, and the websites the room opens, only ever see the hub's
@@ -149,40 +149,37 @@ paired room, UDP and TCP).
 
 ## The node
 
-`compose.node.yaml` has three services:
+`compose.node.yaml` has two services and no special permissions:
 
-- **net**: does nothing but hold the network namespace (a pause
-  container). The other two join it (`network_mode: service:net`), so it
-  survives the agent restarting.
-- **agent**: Go, built from this repository (`cozycast-node` image). Needs
-  `NET_ADMIN` and `/dev/net/tun`, inside its own namespace only. It runs
-  WireGuard (wireguard-go on a TUN device), sets the routes and firewall,
-  writes the room's environment, and keeps reconnecting.
-- **room**: the usual worker image. Its entrypoint waits for the file the
-  agent writes (`COZYCAST_ENV_FILE`, with `COZYCAST_ROOM`,
-  `COZYCAST_NEKO_TOKEN`, `NEKO_WEBRTC_NAT1TO1`, `NEKO_WEBRTC_UDPMUX`,
-  `NEKO_WEBRTC_TCPMUX`), reads it, then starts as today. Nothing secret is
-  in the compose file. A change that needs the room restarted (a new hub
-  IP) is announced in the agent's log.
+- **agent**: Go, built from this repository (`node/Dockerfile`,
+  `server/cmd/node`). It runs WireGuard in userspace (like the hub), keeps
+  its key and pairing in its volume, writes the room's name and neko token
+  to a file the room's entrypoint waits for (`COZYCAST_ENV_FILE`), and
+  keeps reconnecting.
+- **room**: the usual worker image, nothing secret in the compose file.
 
-### Networking in the namespace
+### The room's network
 
-Fail closed: without the tunnel the room has no network at all.
+The room sits on a Docker network marked `internal`: no route anywhere,
+not to the internet, the computer it runs on or the home network, and no
+DNS for outside names. The only thing it can reach is the agent, which is
+also on the computer's normal network to reach the hub.
 
-- Default route: the tunnel. The only other route is to the hub's public
-  address, for the tunnel itself.
-- nftables, set by the agent:
-  - out through the home network (`eth0`): only WireGuard to the hub, and
-    DNS to look up the hub, both only from the agent's user (root; the
-    desktop user cannot become root).
-  - in from the tunnel: only the hub's address, only neko (8080), the title
-    and play helpers (8081, 8082) and the media port.
-  - nothing in from the home network.
-- DNS for the room: the resolvers from the config, reached through the
-  tunnel.
+- **In**: the agent forwards ports 8080 to 8082 (neko, the title and play
+  helpers) of its tunnel address to the room. Nothing else from the tunnel
+  reaches the room or the home network.
+- **Out**: the room's programs use an HTTP proxy, `agent:3128` (the
+  `http_proxy` variables; Firefox follows them, as do curl, VLC and most
+  others). The agent carries each connection through the tunnel to the
+  hub's proxy, which opens it from the VPS (see "The hub side"). Names are
+  looked up there too.
+- With the tunnel down there is no way out at all: the room never falls
+  back to the home connection.
+- What does not work: programs that ignore proxies, and anything but TCP
+  (WebRTC calls inside the room's browser, for instance).
 
-The room cannot reach the home router, other devices or the host PC
-(`ideas.md`, "Isolate the room from the LAN").
+Docker 26 and later give internal networks no outside DNS, so the room
+cannot even look names up through the home's resolver.
 
 ## The hub side
 
@@ -191,12 +188,12 @@ The room cannot reach the home router, other devices or the host PC
   places that today use the default HTTP client: the observer WebSocket
   (`neko/events.go`), the proxied WebSocket and file transfers
   (`httpapi/proxy.go`), and the title and play helpers.
-- **The room's internet**: the hub's network stack accepts the room's
-  TCP and UDP connections to anywhere and opens them again from the hub
-  (gVisor's TCP and UDP forwarders), so websites see the hub's address.
-  Refused: private, loopback, link-local and carrier-grade NAT ranges, the
-  cloud metadata address, the tunnel network (no node reaches another) and
-  the hub's own address. UDP flows time out after a minute of silence.
+- **The room's internet**: an HTTP proxy (`internal/egress`, CONNECT and
+  plain HTTP) on the hub's tunnel address, port 3128, so websites see the
+  hub's address. It looks names up itself and connects to the address it
+  checked. Refused (403): private, loopback, link-local (the cloud metadata
+  address), carrier-grade NAT, multicast and reserved ranges, which covers
+  the tunnel network and the hub's Docker networks, and port 25.
 - **Media**: until the relay exists, the hub forwards each paired room's
   media port (UDP and TCP, public) to the room's neko through the tunnel.
   neko announces the hub's IP (`NEKO_WEBRTC_NAT1TO1`) and that port, so
@@ -207,7 +204,7 @@ The room cannot reach the home router, other devices or the host PC
   Its examples also set `NEKO_WEBRTC_ICELITE=1`, which suits a room that
   only ever announces the hub's address; to be tested for paired rooms.
 
-### Built so far (step 3)
+### Built so far (steps 3 and 4)
 
 `compose.node.yaml` runs the agent (`node/Dockerfile`, `server/cmd/node`)
 and the room. The agent keeps its key and pairing in its volume, writes
@@ -218,7 +215,10 @@ WireGuard's session alive. Each start sends a new boot ID with the check, so
 the server drops connections through the old tunnel at once (including
 requests in flight and kept-alive connections) instead of finding them dead
 at its next ping. A rejected computer remembers it and does not ask again
-until its state is deleted.
+until its state is deleted. The room's network is as described in "The
+room's network"; checked in the sandbox from inside the room: no direct
+connection, no DNS, the host and the home router out of reach, its Firefox
+using the proxy.
 
 ## When something goes offline
 
@@ -227,7 +227,7 @@ Nothing here needs anyone to do anything; everything retries forever.
 | What happens | Effect |
 |---|---|
 | Home network drops, PC sleeps, home IP changes | WireGuard keepalive (25 s) re-establishes the tunnel when the network is back; roaming is built in. |
-| Agent crashes or restarts | Docker restarts it; the namespace (`net`) and the room keep running; the agent recreates the tunnel and rules. The room has no network in between. |
+| Agent crashes or restarts | Docker restarts it; the room keeps running, without network in between; the server reconnects as soon as the agent checks in again. |
 | Room container restarts | The hub's existing reconnect (`neko.WatchHost`, backoff up to 10 s) picks it up. |
 | Hub restarts | Peers are loaded from the database with where each node was last seen, so the hub starts the handshake itself as soon as it needs neko (tested). Keepalives alone would not do: WireGuard only renews a session that stopped answering when it has real data to send, so a node would otherwise wait up to two minutes. The agent's regular check over the tunnel is the second way back. |
 | Node never comes back | The room shows offline; an admin can remove it, or accept a new request as its replacement. |
@@ -255,18 +255,20 @@ it can come first.
 ## Security
 
 - The hub can only reach neko, its two helpers and the media port of
-  each room; the node's firewall enforces it, not just the hub.
-- The room's only way out is the tunnel; with it down there is no
-  network, and it never falls back to the home connection. It cannot open
-  the home router or other devices. Needed before anyone else gets the
-  remote.
+  each room: the agent forwards those and nothing else.
+- The room's only way out is the agent's proxy into the tunnel; with it
+  down there is no network, and it never falls back to the home
+  connection. It cannot open the home router, other devices or the
+  computer it runs on: Docker gives its network no route. Needed before
+  anyone else gets the remote.
 - Websites see the hub's address, never the home IP. The costs: streaming
   sites treat datacenter addresses worse (blocks, sign-in prompts), and
   abuse complaints about what a room opens go to the VPS account.
 - The neko token crosses only the tunnel. Admin pages and API never show
   room addresses or tokens of paired rooms.
 - A compromised hub can control the room (as today) but cannot reach the
-  home network: the node's firewall, not the hub, decides that.
+  home network: the agent forwards only the room's ports, and the room has
+  no route.
 - Client IPs for bans and rate limits are unaffected: browsers connect to
   the hub directly.
 - Pairing is open to anyone who knows the hub's address, so it is capped,
@@ -411,14 +413,14 @@ Each step works on its own and is tested before the next.
    working tunnel. Tested end to end in one process and with real
    containers in the sandbox: accepted without copying anything; back
    after an agent restart in 1 s, the whole computer in 3 s, the server in
-   13 s. For now the agent forwards neko's ports from the tunnel to the
-   room container (no `NET_ADMIN`); the room still has its own network
-   until step 4.
-4. **The node's network.** The namespace, firewall and routes, the room's
-   environment file, and the hub's forwarding of the room's connections.
-   Done when a website opened in the room sees the hub's address, the
-   room's browser cannot open the home router, and the room has no network
-   with the tunnel down.
+   13 s. The agent forwards neko's ports from the tunnel to the room
+   container.
+4. **The node's network** (done). The room on an internal network, the
+   agent's proxy and the hub's way out (`internal/egress`). Tested end to
+   end in one process (a page fetched through agent, tunnel and hub; a
+   private address refused) and from inside a room container in the
+   sandbox. Still to see on a real VPS: a website reporting the hub's
+   address (the sandbox's hub has no internet).
 5. **Media through the hub.** Forwarded media ports. Done when a viewer
    sees the room and only ever the hub's address (also in the browser's
    WebRTC details). Needs a real VPS; the development sandbox has no
@@ -433,6 +435,13 @@ Each step works on its own and is tested before the next.
    agent starts room containers itself on request.
 
 ## Alternatives considered
+
+- **A network namespace with routes and a firewall** on the node, instead
+  of an internal network and a proxy: every program in the room would
+  reach the internet, UDP included, but the agent would need `NET_ADMIN`
+  and `/dev/net/tun`, one more thing to get right on a lent computer
+  (Docker Desktop on Windows, for instance). The proxy needs nothing, and
+  isolation comes from Docker itself.
 
 - **One HTTPS connection** from the node instead of WireGuard (a
   multiplexed WebSocket): works where UDP is blocked and needs no

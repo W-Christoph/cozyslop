@@ -7,6 +7,11 @@
 # The agent's log shows a code; an admin accepts it under Admin > Rooms.
 # From then on the room reconnects by itself, across restarts of this
 # computer and of the server.
+#
+# The room has no way out of its own: it sits on a network with no route
+# anywhere (not to the internet, this computer or the home network) and
+# reaches only the agent. Its apps browse through the agent's proxy, which
+# leads through the tunnel to the server: websites see the server's address.
 
 name: cozycast-node
 
@@ -21,6 +26,11 @@ services:
       COZYCAST_HUB: ${COZYCAST_HUB:-}
       # The name proposed to the admin, who can change it.
       COZYCAST_ROOM_NAME: ${COZYCAST_ROOM_NAME:-home}
+    networks:
+      # Out to the server.
+      - default
+      # In from the room: its proxy, and neko for the server.
+      - room
     volumes:
       # Keys and pairing. Deleting it means pairing again.
       - state:/state
@@ -36,10 +46,19 @@ services:
       - no-new-privileges:true
     depends_on:
       - agent
+    networks:
+      - room
     # The same settings as the rooms in compose.yaml; keep them in step.
     environment:
       # Name and neko token come from the agent once paired.
       COZYCAST_ENV_FILE: /run/cozycast/room.env
+      # The only way out. Firefox follows these, as do most other programs.
+      http_proxy: http://agent:3128
+      https_proxy: http://agent:3128
+      HTTP_PROXY: http://agent:3128
+      HTTPS_PROXY: http://agent:3128
+      no_proxy: localhost,127.0.0.1
+      NO_PROXY: localhost,127.0.0.1
       NEKO_DESKTOP_SCREEN: ${SCREEN:-1280x720@30}
       NEKO_MEMBER_PROVIDER: object
       NEKO_SESSION_COOKIE_ENABLED: "false"
@@ -62,6 +81,11 @@ services:
     volumes:
       - room-env:/run/cozycast:ro
       - home:/home/cozycast
+
+networks:
+  # No route out (internal): the room reaches the agent and nothing else.
+  room:
+    internal: true
 
 volumes:
   state:

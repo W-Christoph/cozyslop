@@ -193,7 +193,8 @@ docker compose -f compose.node.yaml logs -f agent
 
 The log shows a code. An admin compares it under Admin > Rooms > Requests
 and accepts; nothing else is copied. The computer reconnects by itself after
-restarts on either side.
+restarts on either side. The room cannot reach that computer or its home
+network: it browses through the server, so websites see the server's address.
 
 ## Stream settings
 

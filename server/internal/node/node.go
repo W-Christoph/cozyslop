@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"cozycast/internal/egress"
 	"cozycast/internal/pairing"
 	"cozycast/internal/tunnel"
 )
@@ -37,7 +38,10 @@ type Config struct {
 	// Forward maps ports on this computer's tunnel address to where the
 	// room listens (neko 8080, title 8081, play 8082).
 	Forward map[int]string
-	Out     io.Writer // messages for the person running it
+	// ProxyListen is where the room's apps find their HTTP proxy, e.g.
+	// ":3128"; it is carried to the server's, the room's only way out.
+	ProxyListen string
+	Out         io.Writer // messages for the person running it
 
 	CheckEvery time.Duration // how often the server is asked for settings; 15 s
 	RetryEvery time.Duration // waits after failures; 5 s
@@ -341,7 +345,20 @@ func connect(ctx context.Context, cfg *Config, st state) error {
 			return err
 		}
 		defer l.Close()
-		go forward(ctx, l, target)
+		go forward(ctx, l, func(ctx context.Context) (net.Conn, error) {
+			return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "tcp", target)
+		})
+	}
+	if cfg.ProxyListen != "" {
+		l, err := net.Listen("tcp", cfg.ProxyListen)
+		if err != nil {
+			return err
+		}
+		defer l.Close()
+		egressAddr := net.JoinHostPort(hubAddr.String(), strconv.Itoa(egress.Port))
+		go forward(ctx, l, func(ctx context.Context) (net.Conn, error) {
+			return tun.DialContext(ctx, "tcp", egressAddr)
+		})
 	}
 
 	// A new boot ID tells the server this agent started anew, so that it
@@ -429,8 +446,9 @@ func hubEndpoint(ctx context.Context, st state) (netip.AddrPort, error) {
 	return netip.AddrPortFrom(ip, uint16(st.TunnelPort)), nil
 }
 
-// forward hands every connection on l to target, until ctx ends.
-func forward(ctx context.Context, l net.Listener, target string) {
+// forward hands every connection on l to a connection from dial, until
+// ctx ends.
+func forward(ctx context.Context, l net.Listener, dial func(context.Context) (net.Conn, error)) {
 	for {
 		c, err := l.Accept()
 		if err != nil {
@@ -438,7 +456,9 @@ func forward(ctx context.Context, l net.Listener, target string) {
 		}
 		go func() {
 			defer c.Close()
-			up, err := net.DialTimeout("tcp", target, 5*time.Second)
+			dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			up, err := dial(dialCtx)
+			cancel()
 			if err != nil {
 				return
 			}

@@ -34,7 +34,9 @@ func main() {
 		StateDir: env("COZYCAST_STATE_DIR", "/state"),
 		EnvFile:  env("COZYCAST_ENV_FILE", "/run/cozycast/room.env"),
 		Forward:  forward,
-		Out:      os.Stdout,
+		// The room's only way out (compose.node.yaml).
+		ProxyListen: env("COZYCAST_PROXY_LISTEN", ":3128"),
+		Out:         os.Stdout,
 	})
 	if errors.Is(err, node.ErrRejected) {
 		// Stay up: Docker would only restart it.

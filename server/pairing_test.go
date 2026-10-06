@@ -11,6 +11,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,6 +23,7 @@ import (
 
 	"cozycast/internal/auth"
 	"cozycast/internal/config"
+	"cozycast/internal/egress"
 	"cozycast/internal/httpapi"
 	"cozycast/internal/hub"
 	"cozycast/internal/neko/nekotest"
@@ -124,6 +126,17 @@ func TestPairingEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	go http.Serve(l, api.NodeHandler())
+	// The way out, allowed to reach only the test's "internet" (a loopback
+	// site); everything else counts as a private network.
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "a website") }))
+	defer site.Close()
+	wayOut := egress.New()
+	wayOut.Allow = func(ip netip.Addr) bool { return ip == netip.MustParseAddr("127.0.0.1") }
+	el, err := tun.Listen(egress.Port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go http.Serve(el, wayOut)
 
 	// An admin, logged in.
 	hash, _ := auth.HashPassword("password123")
@@ -154,6 +167,12 @@ func TestPairingEndToEnd(t *testing.T) {
 
 	// The computer at home: an agent in front of a room that is not up yet.
 	room, roomAddr := newRelay(t)
+	pl, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxyAddr := pl.Addr().String()
+	pl.Close()
 	stateDir := t.TempDir()
 	envFile := filepath.Join(t.TempDir(), "room.env")
 	agent := func(out io.Writer) (context.CancelFunc, chan error) {
@@ -161,7 +180,7 @@ func TestPairingEndToEnd(t *testing.T) {
 		done := make(chan error, 1)
 		go func() {
 			done <- node.Run(actx, node.Config{Hub: srv.URL, Name: "home", StateDir: stateDir, EnvFile: envFile,
-				Forward: map[int]string{8080: roomAddr}, Out: out, CheckEvery: 100 * time.Millisecond, RetryEvery: 100 * time.Millisecond})
+				Forward: map[int]string{8080: roomAddr}, ProxyListen: proxyAddr, Out: out, CheckEvery: 100 * time.Millisecond, RetryEvery: 100 * time.Millisecond})
 		}()
 		return stop, done
 	}
@@ -225,6 +244,24 @@ func TestPairingEndToEnd(t *testing.T) {
 		call("GET", "/api/admin/rooms", nil, &rooms)
 		return len(rooms) == 1 && rooms[0].Name == "living-room" && rooms[0].Connected
 	})
+
+	// The room's apps reach the internet only through the agent's proxy, the
+	// tunnel and the server; private addresses stay out of reach.
+	proxyURL, _ := url.Parse("http://" + proxyAddr)
+	browser := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
+	res, err := browser.Get(site.URL)
+	if err != nil {
+		t.Fatal("browsing through the tunnel:", err)
+	}
+	page, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if string(page) != "a website" {
+		t.Fatalf("page: %q", page)
+	}
+	_, sitePort, _ := net.SplitHostPort(strings.TrimPrefix(site.URL, "http://"))
+	if res, err := browser.Get("http://127.0.0.2:" + sitePort); err != nil || res.StatusCode != http.StatusForbidden {
+		t.Fatalf("private address through the tunnel: %v %v", res, err)
+	}
 
 	// The computer restarts: no code, straight back.
 	observerDials := func() int {

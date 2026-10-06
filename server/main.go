@@ -18,6 +18,7 @@ import (
 	"cozycast/internal/auth"
 	"cozycast/internal/config"
 	"cozycast/internal/docker"
+	"cozycast/internal/egress"
 	"cozycast/internal/httpapi"
 	"cozycast/internal/hub"
 	"cozycast/internal/legacy"
@@ -179,7 +180,7 @@ func run(args []string, out io.Writer) error {
 	handler := api.Handler()
 
 	var servers []*http.Server
-	errc := make(chan error, 3)
+	errc := make(chan error, 4)
 	serve := func(srv *http.Server, tls bool) {
 		servers = append(servers, srv)
 		go func() {
@@ -193,18 +194,23 @@ func run(args []string, out io.Writer) error {
 	}
 
 	if tun != nil {
-		// Paired computers fetch their room's settings inside the tunnel.
-		l, err := tun.Listen(80)
-		if err != nil {
-			return err
-		}
-		nodeSrv := newServer("", api.NodeHandler())
-		servers = append(servers, nodeSrv)
-		go func() {
-			if err := nodeSrv.Serve(l); !errors.Is(err, http.ErrServerClosed) {
-				errc <- err
+		// Inside the tunnel only: paired computers fetch their room's
+		// settings, and their rooms reach the internet through the proxy.
+		egressProxy := egress.New()
+		egressProxy.Log = slog.Default()
+		for port, h := range map[int]http.Handler{80: api.NodeHandler(), egress.Port: egressProxy} {
+			l, err := tun.Listen(port)
+			if err != nil {
+				return err
 			}
-		}()
+			srv := newServer("", h)
+			servers = append(servers, srv)
+			go func() {
+				if err := srv.Serve(l); !errors.Is(err, http.ErrServerClosed) {
+					errc <- err
+				}
+			}()
+		}
 	}
 	if len(cfg.Domains) == 0 {
 		serve(newServer(cfg.Listen, handler), false)

@@ -328,10 +328,6 @@ func (r *Room) setPresence(c *Client, change func()) {
 	before := r.userLocked(c.m)
 	change()
 	after := r.userLocked(c.m)
-	if before.Active && !after.Active {
-		c.m.lastSeen = time.Now().UnixMilli()
-		after.LastSeen = c.m.lastSeen
-	}
 	if after != before {
 		r.broadcastLocked(userMsg{Type: "user_updated", User: after}, nil)
 	}

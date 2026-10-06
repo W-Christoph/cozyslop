@@ -101,7 +101,7 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
   actions appear on tap and dismiss outside, reserving space only when visible.
   Personal settings carries the license footer, including on phones.
 - The room sidebar contains only chat; its toolbar button shows unread messages
-  while closed. Avatar cards show identity, away time, remote and sound state
+  while closed. Avatar cards show identity, remote and sound state
   on hover, focus or tap. The volume track shows its current level.
 
 ## Password reset links

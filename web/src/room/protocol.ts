@@ -34,7 +34,6 @@ export interface User {
   active: boolean
   muted: boolean
   joinedAt: number
-  lastSeen: number // unix ms
 }
 
 export interface ChatMessage {

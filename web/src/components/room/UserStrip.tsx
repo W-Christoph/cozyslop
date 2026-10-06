@@ -4,7 +4,6 @@ import type { User } from '../../room/protocol'
 import { useRoomStore } from './RoomContext'
 import { UserAvatar } from './UserAvatar'
 import { userIdentity, type HoverName } from './UserHoverName'
-import { awayTime } from './UserCard'
 import styles from './UserStrip.module.css'
 
 export function UserStrip({ left, fullscreen, hover, onHover }: { left: boolean; fullscreen: boolean; hover: HoverName | null; onHover: (hover: HoverName | null) => void }) {
@@ -43,7 +42,7 @@ export function UserStrip({ left, fullscreen, hover, onHover }: { left: boolean;
       role="list" aria-label="Room users">
       {Array.from(store.users.value.values()).map((user) => <div class={styles.user} role="listitem" key={user.key}>
         <div class={styles.avatar} tabIndex={0} aria-label={[user.nickname, userIdentity(user),
-          !user.active && `away since ${awayTime(user.lastSeen)}`, store.remoteHolder.value === user.key && 'has the remote',
+          !user.active && 'away', store.remoteHolder.value === user.key && 'has the remote',
           showIfMuted && user.muted && 'sound off'].filter(Boolean).join(', ')}
           onPointerEnter={(e) => { if (e.pointerType === 'mouse' && !pinned.current) showHover(e, user) }}
           onPointerLeave={() => { if (!pinned.current) onHover(null) }}

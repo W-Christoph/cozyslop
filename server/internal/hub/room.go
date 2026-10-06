@@ -81,7 +81,6 @@ type member struct {
 	given    rights.Grant  // by an admin to an anonymous person; gone when they leave
 	rights   rights.Rights
 	joinedAt int64 // unix ms
-	lastSeen int64 // unix ms; when the member was last active
 	clients  map[string]*Client
 }
 
@@ -426,7 +425,7 @@ func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
 	m := r.members[key]
 	isNew := m == nil
 	if isNew {
-		m = &member{key: key, anonID: id.AnonID, joinedAt: now, lastSeen: now, clients: make(map[string]*Client)}
+		m = &member{key: key, anonID: id.AnonID, joinedAt: now, clients: make(map[string]*Client)}
 		r.members[key] = m
 	}
 	m.user, m.perm = id.User, in.Perm
@@ -998,7 +997,6 @@ func (r *Room) userLocked(m *member) User {
 		Key:       m.key,
 		Admin:     m.rights.Admin,
 		JoinedAt:  m.joinedAt,
-		LastSeen:  m.lastSeen,
 		Anonymous: m.user == nil,
 		Muted:     true,
 	}

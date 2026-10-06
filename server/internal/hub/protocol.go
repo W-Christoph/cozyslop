@@ -22,7 +22,6 @@ type User struct {
 	Active    bool   `json:"active"` // tab visible
 	Muted     bool   `json:"muted"`  // not listening to the stream
 	JoinedAt  int64  `json:"joinedAt"`
-	LastSeen  int64  `json:"lastSeen"` // unix ms; when they were last active
 }
 
 // ChatMessage is a chat line as sent to browsers.

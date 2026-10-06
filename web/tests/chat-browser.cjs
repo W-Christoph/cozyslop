@@ -3,7 +3,7 @@
 const { chromium, expect } = require(process.env.PLAYWRIGHT_MODULE || 'playwright/test')
 const assert = require('node:assert/strict')
 const base = process.env.CHAT_TEST_URL || 'http://127.0.0.1:5174'
-const self = { key: 'u:1', username: 'alice', nickname: 'A lice', nameColor: '#f90', avatarUrl: '', anonymous: false, admin: true, active: true, muted: false, joinedAt: 1, lastSeen: 1000 }
+const self = { key: 'u:1', username: 'alice', nickname: 'A lice', nameColor: '#f90', avatarUrl: '', anonymous: false, admin: true, active: true, muted: false, joinedAt: 1 }
 const bob = { ...self, key: 'u:2', username: 'bob', nickname: 'Bob', nameColor: '#4aa', admin: false }
 const anon = { ...bob, key: 'a:abcd1234', username: '', nickname: 'Guest', anonymous: true }
 const settings = { name: 'Chat test', access: 'public', hidden: false, remoteOwnership: false, defaultRemote: true, defaultImage: true, defaultUpload: false, screen: '', quality: 'medium' }
@@ -177,12 +177,11 @@ const checks = [], errors = []
 
     h.send({ type: 'user_updated', user: { ...bob, active: false, muted: true } })
     h.send({ type: 'remote', holder: bob.key })
-    const avatar = p.locator('[aria-label="Room users"] [tabindex="0"][aria-label*="away since"]')
+    const avatar = p.locator('[aria-label="Room users"] [tabindex="0"][aria-label*=", away"]')
     await avatar.hover()
     const card = p.getByRole('tooltip')
-    await expect(card).toContainText('Away since'); await expect(card).toContainText('Has the remote'); await expect(card).toContainText('Sound off')
-    await expect(card.locator('time')).toHaveAttribute('dateTime', new Date(bob.lastSeen).toISOString())
-    await expect(avatar).toHaveAttribute('aria-label', /Bob, bob, away since .*, has the remote, sound off/)
+    await expect(card).not.toContainText('Away'); await expect(card).toContainText('Has the remote'); await expect(card).toContainText('Sound off')
+    await expect(avatar).toHaveAttribute('aria-label', /Bob, bob, away, has the remote, sound off/)
     await p.mouse.move(0, 0); await expect(card).toHaveCount(0)
     await avatar.focus(); await expect(card).toBeVisible()
     await input.focus(); await expect(card).toHaveCount(0)

@@ -314,8 +314,8 @@ func TestJoinWelcomeAndTabs(t *testing.T) {
 	requireEqual(t, w.Self.Anonymous, false)
 	requireEqual(t, w.Self.Active, true)
 	requireEqual(t, w.Self.Muted, false)
-	if w.Self.JoinedAt <= 0 || w.Self.LastSeen <= 0 {
-		t.Fatal("missing presence timestamps")
+	if w.Self.JoinedAt <= 0 {
+		t.Fatal("missing join time")
 	}
 	requireEqual(t, w.Rights, rights.Rights{Remote: true, Image: true, Upload: true})
 	requireEqual(t, w.Settings, set)

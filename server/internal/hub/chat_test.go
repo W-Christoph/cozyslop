@@ -222,7 +222,7 @@ func TestTypingAndPresence(t *testing.T) {
 	c, a := f.join(id)
 	tab, b := f.join(id)
 	_, watch := f.join(anon("watcher"))
-	w := a.wait(t, "welcome").(welcomeMsg)
+	a.wait(t, "welcome")
 	f.r.Handle(f.ctx, c, ClientMsg{Type: "typing", Typing: true})
 	m := watch.wait(t, "typing").(typingMsg)
 	requireEqual(t, m.Key, id.Key())
@@ -240,9 +240,6 @@ func TestTypingAndPresence(t *testing.T) {
 	u := watch.wait(t, "user_updated").(userMsg).User
 	requireEqual(t, u.Active, false)
 	requireEqual(t, u.Muted, false)
-	if u.LastSeen < w.Self.LastSeen {
-		t.Fatal("lastSeen went backwards")
-	}
 	f.r.Handle(f.ctx, c, ClientMsg{Type: "activity", Active: true})
 	requireEqual(t, watch.wait(t, "user_updated").(userMsg).User.Active, true)
 	before = watch.count("user_updated")

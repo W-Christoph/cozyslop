@@ -339,8 +339,22 @@ Start with 1.
 
 ## Hardware (node)
 
-The first node is a donated desktop PC. The notes below were written for
-an **Orange Pi 5** (RK3588S, eight cores), the other candidate.
+Everything is built to run on ARM (arm64) as well as x86, but is tested on
+x86 only:
+
+- The room image builds on neko's images, which exist for arm64 (checked:
+  Firefox, the x264 encoder and the paths the room image uses are all
+  there; Debian 13, where its added packages exist for arm64 too). It is
+  built on the computer itself (`compose.node.yaml` has `build:`), so an
+  ARM computer builds its own.
+- The server and agent images cross-compile: `docker buildx build
+  --platform linux/arm64` works on an x86 machine without emulation
+  (checked: arm64 binaries).
+- If a computer is too weak, the room's settings go down to 500 kbit/s, a
+  quarter of the pixels (stream size 50%) and x264's `ultrafast`; the
+  desktop's resolution and frame rate can drop too.
+
+The notes below were written for an **Orange Pi 5** (RK3588S, eight cores).
 
 - It was too weak to run the original CozyCast (the owner's experience).
   Whether it carries one neko room is the first thing to measure.
@@ -354,7 +368,6 @@ an **Orange Pi 5** (RK3588S, eight cores), the other candidate.
   Rockchip's GStreamer plugin. Not verified. A VP8 path also needs VP8
   pipelines in the worker, which sets H.264 today.
 - No official Widevine on ARM Linux, so DRM sites likely do not play.
-- Not verified: that `worker/Dockerfile` builds on ARM.
 - Hardware encoding moves the encoder off the CPU. Firefox in the room still
   decodes and draws on the CPU.
 - Not measured: how many rooms the box carries. The benchmark script in
@@ -367,6 +380,31 @@ If the Orange Pi 5 turns out too weak:
   (Widevine).
 - Not a **Raspberry Pi 5**: no hardware H.264 encoder, and neko has no image
   for its GPU. CPU only.
+
+## Trying it out (x86)
+
+On the VPS, in `.env`: `PUBLIC_IP` (the VPS's address), and ideally
+`DOMAIN` for HTTPS. In `compose.yaml`, uncomment `COZYCAST_TUNNEL_PORT` and
+the ports `51820/udp` and `52100-52109` (UDP and TCP); open them in the
+VPS's firewall too. `docker compose up -d --build`.
+
+On the home computer (Docker, nothing opened in the router):
+`COZYCAST_HUB=<domain or IP> docker compose -f compose.node.yaml up -d --build`,
+then `docker compose -f compose.node.yaml logs -f agent` for the code; accept
+it under Admin > Rooms.
+
+Worth checking:
+
+- The room plays for a viewer elsewhere; in the browser's WebRTC details
+  (`chrome://webrtc-internals`, `about:webrtc`) the only remote address is
+  the VPS's.
+- A "what is my IP" site opened in the room shows the VPS's address.
+- In the room's terminal: `curl --noproxy '*' http://<router address>`
+  fails, and so does the router through the proxy (403).
+- Restart the home computer, the agent, then the VPS: the room comes back
+  by itself each time; viewers see "offline" in between.
+- The home upload while two or three people watch (one stream each until
+  the relay).
 
 ## VPS (hub)
 
@@ -437,8 +475,9 @@ Each step works on its own and is tested before the next.
    end in one process (UDP and TCP both ways) and in the sandbox with
    headless Chromium: connected over UDP to the hub's address and port,
    1280×720 at 30 fps, first picture after about 3 s.
-6. **Measure the node.** One room with a video playing, CPU per stream
-   setting, home upload with several viewers.
+6. **ARM** (done, untested). Images built for arm64 as well; see Hardware.
+   Measured on the real computer once it runs: CPU per stream setting,
+   home upload with several viewers.
 7. **Input over the WebSocket**, then **the relay** (see above). After this
    the home upload is one stream per watched room.
 8. **Hardware encoding**, only if step 6 shows software encoding is too

@@ -73,7 +73,8 @@ services:
       NEKO_DESKTOP_FILE_CHOOSER_DIALOG: "false"
       COZYCAST_X264_PRESET: ${X264_PRESET:-veryfast}
       COZYCAST_X264_PRESETS: ${X264_PRESETS:-ultrafast superfast veryfast}
-      COZYCAST_STREAM_BITRATES: ${STREAM_BITRATES:-1000 1500 2500 4000 6000 8000}
+      # Down to 500 kbit/s, for a weak computer or a slow home upload.
+      COZYCAST_STREAM_BITRATES: ${STREAM_BITRATES:-500 1000 1500 2500 4000 6000 8000}
       COZYCAST_STREAM_SCALES: ${STREAM_SCALES:-100 75 67 50}
       NEKO_CAPTURE_VIDEO_SHOW_POINTER: "true"
       # Viewers' media through the server comes in step 5 of

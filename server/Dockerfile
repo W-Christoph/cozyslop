@@ -1,13 +1,16 @@
 # Build context: cozycast-next/ (the server embeds the web build).
+# Builds for any platform (e.g. --platform linux/arm64) without emulation:
+# the build stages run on the building machine and Go cross-compiles.
 
-FROM node:22-alpine AS web
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
 RUN mkdir -p ../server/webui/dist && npm run build
 
-FROM golang:1.26-alpine AS server
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS server
+ARG TARGETOS TARGETARCH
 WORKDIR /src/server
 COPY server/go.mod server/go.sum ./
 RUN go mod download
@@ -17,7 +20,7 @@ COPY --from=web /src/server/webui/dist ./webui/dist
 # every build compiles all dependencies again, the SQLite driver alone for
 # minutes on a small server.
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /cozycast .
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /cozycast .
 # The image has no shell; prepare the data dir here so a fresh volume is
 # owned by the nonroot user.
 RUN mkdir /data

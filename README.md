@@ -179,6 +179,22 @@ it wins at startup with a warning; the registration stays in the database.
 The existing configured-room requirement remains: an empty environment value
 uses the default room, and a list containing no entries is rejected.
 
+## A room on someone else's computer
+
+Someone can lend a computer to run a room while the server stays the only
+thing the internet sees ([home hosting](docs/home-hosting.md); work in
+progress: the room's video does not reach viewers yet). The server needs
+`COZYCAST_TUNNEL_PORT` and that UDP port open. On the other computer:
+
+```bash
+COZYCAST_HUB=cozy.example.com docker compose -f compose.node.yaml up -d --build
+docker compose -f compose.node.yaml logs -f agent
+```
+
+The log shows a code. An admin compares it under Admin > Rooms > Requests
+and accepts; nothing else is copied. The computer reconnects by itself after
+restarts on either side.
+
 ## Stream settings
 
 `SCREEN` in `.env` sets the shared container default; clearing a room's

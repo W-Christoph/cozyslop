@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -51,7 +52,15 @@ type Client struct {
 	token     string
 	http      *http.Client
 	transport http.RoundTripper
-	stream    *http.Client // for WebSockets: no overall timeout
+	own       *http.Transport // transport only this client uses (with dial); nil otherwise
+	stream    *http.Client    // for WebSockets: no overall timeout
+
+	reconnect chan struct{} // Reconnect's request to the observer
+	mu        sync.Mutex
+	dropWatch context.CancelFunc // ends the observer's current connection
+	// Requests in flight end when Reconnect cancels their generation.
+	gen       context.Context
+	cancelGen context.CancelFunc
 }
 
 // DialFunc opens connections to neko, e.g. through a tunnel.
@@ -65,20 +74,27 @@ func NewClient(baseURL, apiToken string, dial DialFunc) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("neko: invalid base url %q: %w", baseURL, err)
 	}
-	transport := http.DefaultTransport
+	gen, cancelGen := context.WithCancel(context.Background())
+	var transport http.RoundTripper = http.DefaultTransport
+	var own *http.Transport
 	if dial != nil {
-		transport = &http.Transport{
+		own = &http.Transport{
 			DialContext:         dial,
 			MaxIdleConnsPerHost: 4,
 			IdleConnTimeout:     90 * time.Second,
 		}
+		transport = own
 	}
 	return &Client{
 		base:      u,
 		token:     apiToken,
 		http:      &http.Client{Timeout: 10 * time.Second, Transport: transport},
 		transport: transport,
+		own:       own,
 		stream:    &http.Client{Transport: transport},
+		reconnect: make(chan struct{}, 1),
+		gen:       gen,
+		cancelGen: cancelGen,
 	}, nil
 }
 
@@ -137,6 +153,12 @@ func (c *Client) Healthy(ctx context.Context) bool {
 }
 
 func (c *Client) do(ctx context.Context, method, path string, in, out any, admin bool) error {
+	c.mu.Lock()
+	gen := c.gen
+	c.mu.Unlock()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	defer context.AfterFunc(gen, cancel)()
 	var body io.Reader
 	if in != nil {
 		b, err := json.Marshal(in)

@@ -179,7 +179,7 @@ func run(args []string, out io.Writer) error {
 	handler := api.Handler()
 
 	var servers []*http.Server
-	errc := make(chan error, 2)
+	errc := make(chan error, 3)
 	serve := func(srv *http.Server, tls bool) {
 		servers = append(servers, srv)
 		go func() {
@@ -192,6 +192,20 @@ func run(args []string, out io.Writer) error {
 		}()
 	}
 
+	if tun != nil {
+		// Paired computers fetch their room's settings inside the tunnel.
+		l, err := tun.Listen(80)
+		if err != nil {
+			return err
+		}
+		nodeSrv := newServer("", api.NodeHandler())
+		servers = append(servers, nodeSrv)
+		go func() {
+			if err := nodeSrv.Serve(l); !errors.Is(err, http.ErrServerClosed) {
+				errc <- err
+			}
+		}()
+	}
 	if len(cfg.Domains) == 0 {
 		serve(newServer(cfg.Listen, handler), false)
 	} else {

@@ -171,6 +171,31 @@ history (under normal retention); registering its name again restores them.
 The public `GET /api/rooms` reflects registrations and removals immediately.
 These APIs register connections only; they do not create containers.
 
+## Pairing computers
+
+Rooms on other computers (`docs/home-hosting.md`). All answer 503 when
+`COZYCAST_TUNNEL_PORT` is not set.
+
+| Endpoint | Caller | Body | Success | Errors |
+|---|---|---|---|---|
+| `POST /api/nodes/pair` | the computer's agent; 10 per minute per IP | `{"name":"home","nodeKey":"<WireGuard public key, base64>"}` | 201 `{id,secret,hubKey,nonce,tunnelPort,expiresAt}`; the same key while pending gets the same request | 400 invalid name/key; 409 key already paired; 429 too many (20 pending, 3 per IP) |
+| `GET /api/nodes/pair/{id}` | the agent, `Authorization: Bearer <secret>` | None | long poll up to 25 s: `{"status":"pending"\|"rejected"\|"expired"}`, or `{"status":"accepted",room,address,hubAddress,network}` | 404 unknown or forgotten |
+| `GET /api/admin/pairing` | admin | None | 200 pending `[{id,name,code,ip,createdAt,expiresAt}]`, oldest first | |
+| `POST /api/admin/pairing/{id}/accept` | admin | `{"name":"room"}` or `{"replace":"paired-room"}` | 200 the room (as in the room list) | 400 invalid name, or neither/both given; 404 no longer waiting; 409 name taken, room not paired, no tunnel address free |
+| `DELETE /api/admin/pairing/{id}` | admin | None | 204 | 404 no longer waiting |
+
+The code (`XXXX-XXXX`) is never sent to the computer: the agent computes it
+from `hubKey`, its own key and `nonce` (`pairing.Code`), so a swapped key
+shows a different code. Requests expire after 10 minutes; answers are kept 10
+more minutes for the agent to collect. Accepting a new room gives it the next
+free tunnel address and a random neko token; replacing keeps both, and the
+old computer's key stops working at once.
+
+Inside the tunnel only, at `http://<server tunnel address>/node/config?boot=<id>`,
+a paired computer gets `{"room","nekoToken"}`, recognized by its tunnel
+address. A new `boot` ID (the agent started again) makes the server
+reconnect to that room at once.
+
 ## Admin room settings and moderation
 
 All callers: admin.

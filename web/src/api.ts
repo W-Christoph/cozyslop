@@ -105,6 +105,23 @@ export const adminRooms = {
   remove: (name: string) => api.del<void>(`/api/admin/rooms/${encodeURIComponent(name)}`),
 }
 
+// A computer asking to run a room (docs/home-hosting.md, "Pairing").
+export interface PairingRequest {
+  id: string
+  name: string // proposed room name
+  code: string // the computer shows the same one
+  ip: string
+  createdAt: number // unix ms
+  expiresAt: number
+}
+
+export const adminPairing = {
+  list: () => api.get<PairingRequest[]>('/api/admin/pairing'),
+  accept: (id: string, target: { name: string } | { replace: string }) =>
+    api.post<AdminRoom>(`/api/admin/pairing/${encodeURIComponent(id)}/accept`, target),
+  reject: (id: string) => api.del<void>(`/api/admin/pairing/${encodeURIComponent(id)}`),
+}
+
 export interface Permission {
   room: string
   username: string

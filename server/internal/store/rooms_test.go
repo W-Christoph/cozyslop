@@ -152,4 +152,13 @@ func TestPairedRooms(t *testing.T) {
 	if p := got["plain"]; p.Paired() || p.TunnelAddress != "" || p.NodeEndpoint != "" {
 		t.Fatalf("plain: %+v", p)
 	}
+	if err := s.ReplaceNode(ctx, "home", "key-3"); err != nil {
+		t.Fatal(err)
+	}
+	if h, _ := s.RegisteredRoom(ctx, "home"); h.NodeKey != "key-3" || h.TunnelAddress != "10.77.0.2" || h.NodeEndpoint != "" || h.NekoToken != "b" {
+		t.Fatalf("replaced: %+v", h)
+	}
+	if err := s.ReplaceNode(ctx, "plain", "key-4"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("replace on an unpaired room: %v", err)
+	}
 }

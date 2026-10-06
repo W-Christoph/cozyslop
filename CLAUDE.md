@@ -25,6 +25,8 @@
   patching neko.
 - `server/`: Go. The server is the only neko admin; browsers get per-tab
   neko member tokens and reach neko only through the allowlisted proxy.
+- `node/`: image of the agent (`server/cmd/node`) for a room on another
+  computer (`compose.node.yaml`, `docs/home-hosting.md`).
 - `web/`: Preact + TypeScript + Vite. Colours and spacing come from
   `src/styles/tokens.css`; every component has its own `.module.css`.
 - The old CozyCast code (`../` when checked out inside the cozycast repo) is

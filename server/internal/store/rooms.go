@@ -134,6 +134,16 @@ func (s *Store) SetNodeEndpoint(ctx context.Context, name, endpoint string) erro
 	return registeredRoomResult(res, err)
 }
 
+// ReplaceNode moves a paired room to another computer: a new node key; the
+// tunnel address and neko token stay.
+func (s *Store) ReplaceNode(ctx context.Context, name, nodeKey string) error {
+	res, err := s.db.ExecContext(ctx, "UPDATE registered_rooms SET node_key = ?, node_endpoint = NULL WHERE name = ? AND node_key IS NOT NULL", nodeKey, name)
+	if isUniqueViolation(err) {
+		return ErrRoomExists
+	}
+	return registeredRoomResult(res, err)
+}
+
 // DeleteRegisteredRoom keeps settings, permissions and chat history.
 func (s *Store) DeleteRegisteredRoom(ctx context.Context, name string) error {
 	res, err := s.db.ExecContext(ctx, "DELETE FROM registered_rooms WHERE name = ?", name)

@@ -11,7 +11,8 @@
 #    the desktop size), COZYCAST_X264_PRESETS (fastest first) and
 #    COZYCAST_X264_PRESET (the default), or set NEKO_CAPTURE_VIDEO_PIPELINES
 #    yourself to skip this.
-# 2. The room's neko admin token: supplied as COZYCAST_NEKO_TOKEN, or
+# 2. The room's neko admin token: supplied as COZYCAST_NEKO_TOKEN (directly,
+#    or in COZYCAST_ENV_FILE written by the agent of a paired room), or
 #    derived from COZYCAST_NEKO_SECRET and the room's name (COZYCAST_ROOM),
 #    the same way the server does it
 #    (config.NekoToken). neko runs as the desktop's user, so whoever holds
@@ -69,6 +70,18 @@ stream_pipelines() {
 
 if [ -z "${NEKO_CAPTURE_VIDEO_PIPELINES:-}" ]; then
     stream_pipelines
+fi
+
+# A room on another computer (compose.node.yaml) gets its name and token
+# from the agent, which fetches them from the server once paired.
+if [ -n "${COZYCAST_ENV_FILE:-}" ]; then
+    while [ ! -s "$COZYCAST_ENV_FILE" ]; do
+        echo "entrypoint: waiting for the agent to pair with the server"
+        sleep 5
+    done
+    set -a
+    . "$COZYCAST_ENV_FILE"
+    set +a
 fi
 
 if [ -n "${COZYCAST_NEKO_TOKEN:-}" ]; then

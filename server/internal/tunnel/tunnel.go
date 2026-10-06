@@ -134,7 +134,13 @@ func Open(cfg Config) (*Tunnel, error) {
 	log := slog.With("component", "wireguard")
 	dev := device.NewDevice(tdev, conn.NewDefaultBind(), &device.Logger{
 		Verbosef: func(string, ...any) {},
-		Errorf:   func(format string, args ...any) { log.Warn(fmt.Sprintf(format, args...)) },
+		Errorf: func(format string, args ...any) {
+			msg := fmt.Sprintf(format, args...)
+			// Expected for every computer that is off: the room shows offline.
+			if !strings.Contains(msg, "no known endpoint") {
+				log.Warn(msg)
+			}
+		},
 	})
 	t := &Tunnel{dev: dev, net: tnet, cfg: cfg, address: cfg.Address}
 	err = dev.IpcSet(fmt.Sprintf("private_key=%s\nlisten_port=%d\n", hex.EncodeToString(cfg.PrivateKey[:]), cfg.Port))

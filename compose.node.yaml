@@ -1,0 +1,70 @@
+# A room on this computer for a CozyCast server elsewhere
+# (docs/home-hosting.md). Nothing to configure but the server's address:
+#
+#   COZYCAST_HUB=cozy.example.com docker compose -f compose.node.yaml up -d --build
+#   docker compose -f compose.node.yaml logs -f agent
+#
+# The agent's log shows a code; an admin accepts it under Admin > Rooms.
+# From then on the room reconnects by itself, across restarts of this
+# computer and of the server.
+
+name: cozycast-node
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: node/Dockerfile
+    image: cozycast-node
+    restart: unless-stopped
+    environment:
+      COZYCAST_HUB: ${COZYCAST_HUB:-}
+      # The name proposed to the admin, who can change it.
+      COZYCAST_ROOM_NAME: ${COZYCAST_ROOM_NAME:-home}
+    volumes:
+      # Keys and pairing. Deleting it means pairing again.
+      - state:/state
+      - room-env:/run/cozycast
+
+  room:
+    build: ./worker
+    image: cozycast-worker
+    restart: unless-stopped
+    shm_size: 2gb
+    # As in compose.yaml: whoever holds the remote stays an ordinary user.
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - agent
+    # The same settings as the rooms in compose.yaml; keep them in step.
+    environment:
+      # Name and neko token come from the agent once paired.
+      COZYCAST_ENV_FILE: /run/cozycast/room.env
+      NEKO_DESKTOP_SCREEN: ${SCREEN:-1280x720@30}
+      NEKO_MEMBER_PROVIDER: object
+      NEKO_SESSION_COOKIE_ENABLED: "false"
+      NEKO_SESSION_IMPLICIT_HOSTING: "false"
+      NEKO_SESSION_INACTIVE_CURSORS: "false"
+      NEKO_CHAT_ENABLED: "false"
+      NEKO_FILETRANSFER_ENABLED: "true"
+      NEKO_FILETRANSFER_DIR: /home/cozycast/Downloads
+      NEKO_FILETRANSFER_USER_UPLOAD: "true"
+      NEKO_FILETRANSFER_USER_DOWNLOAD: "true"
+      NEKO_DESKTOP_UPLOAD_DROP: "false"
+      NEKO_DESKTOP_FILE_CHOOSER_DIALOG: "false"
+      COZYCAST_X264_PRESET: ${X264_PRESET:-veryfast}
+      COZYCAST_X264_PRESETS: ${X264_PRESETS:-ultrafast superfast veryfast}
+      COZYCAST_STREAM_BITRATES: ${STREAM_BITRATES:-1000 1500 2500 4000 6000 8000}
+      COZYCAST_STREAM_SCALES: ${STREAM_SCALES:-100 75 67 50}
+      NEKO_CAPTURE_VIDEO_SHOW_POINTER: "true"
+      # Viewers' media through the server comes in step 5 of
+      # docs/home-hosting.md; until then the room has no media setup here.
+    volumes:
+      - room-env:/run/cozycast:ro
+      - home:/home/cozycast
+
+volumes:
+  state:
+  room-env:
+  # The room desktop's home folder (files, Firefox profile).
+  home:

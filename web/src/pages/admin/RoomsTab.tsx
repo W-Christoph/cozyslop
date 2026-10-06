@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { adminRooms, type AdminRoom } from '../../api'
 import { Button } from '../../components/Button'
 import { AdminTable } from '../../components/admin/AdminTable'
+import { PairingRequests } from '../../components/admin/PairingRequests'
 import { RoomModal, type RoomAction } from '../../components/admin/RoomModal'
 import { Badge } from '../../components/ui/Badge'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -55,11 +56,15 @@ export function RoomsTab() {
     setMessage(`${room.name} ${action?.mode === 'add' ? 'added' : 'updated'}.`)
   }
   return (
-    <Section title="Rooms" description="Manage room connections. Adding a room registers its address; start its container separately."
+    <Section title="Rooms" description="Manage room connections. Computers that run a room elsewhere ask to be paired and appear under Requests."
       actions={<>
         <Button icon="refresh" disabled={loading} onClick={() => setRefresh((value) => value + 1)}>Refresh</Button>
         <Button variant="primary" icon="plus" disabled={loading} onClick={() => setAction({ mode: 'add' })}>Add room</Button>
       </>}>
+      <PairingRequests rooms={rooms} onAccepted={(room) => {
+        setRooms((list) => [...list.filter((r) => r.name !== room.name), room].sort((a, b) => a.name.localeCompare(b.name)))
+        setMessage(`${room.name} accepted. It shows as Online once its computer has connected.`)
+      }} />
       {loading && <Spinner label="Loading rooms…" />}
       {error && <Notice tone="error">{error}</Notice>}
       {message && <Notice tone="success">{message}</Notice>}

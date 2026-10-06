@@ -17,6 +17,7 @@ import (
 
 	"cozycast/internal/auth"
 	"cozycast/internal/hub"
+	"cozycast/internal/pairing"
 	"cozycast/internal/ratelimit"
 	"cozycast/internal/rights"
 	"cozycast/internal/store"
@@ -43,7 +44,10 @@ type Deps struct {
 type Server struct {
 	buildRoom      RoomBuilder
 	tunnel         *tunnel.Tunnel
-	roomMu         sync.Mutex // registration mutations
+	pairing        *pairing.Manager // nil when the tunnel is off
+	nodeMu         sync.Mutex
+	nodeBoots      map[string]string // room: the boot ID its computer last checked in with
+	roomMu         sync.Mutex        // registration mutations
 	store          *store.Store
 	auth           *auth.Service
 	hub            *hub.Hub
@@ -64,6 +68,7 @@ type Server struct {
 	loginLimit    *ratelimit.Limiter // per IP: login attempts
 	resetLimit    *ratelimit.Limiter // per IP: reset link checks and redemptions
 	registerLimit *ratelimit.Limiter // per IP: account creations
+	pairLimit     *ratelimit.Limiter // per IP: pairing requests
 }
 
 func New(d Deps) *Server {
@@ -76,7 +81,14 @@ func New(d Deps) *Server {
 		}
 	}
 	socketCtx, stopSockets := context.WithCancel(context.Background())
+	var pm *pairing.Manager
+	if d.Tunnel != nil {
+		pm = pairing.NewManager(d.Tunnel.PublicKey())
+	}
 	return &Server{
+		pairing:        pm,
+		nodeBoots:      make(map[string]string),
+		pairLimit:      ratelimit.New(10, time.Minute),
 		buildRoom:      d.BuildRoom,
 		tunnel:         d.Tunnel,
 		store:          d.Store,
@@ -125,6 +137,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/admin/rooms/{room}", s.adminChangeRoom)
 	mux.HandleFunc("POST /api/admin/rooms/{room}/token", s.adminChangeRoom)
 	mux.HandleFunc("DELETE /api/admin/rooms/{room}", s.adminDeleteRoom)
+
+	mux.HandleFunc("POST /api/nodes/pair", s.createPairing)
+	mux.HandleFunc("GET /api/nodes/pair/{id}", s.pairingStatus)
+	mux.HandleFunc("GET /api/admin/pairing", s.adminListPairing)
+	mux.HandleFunc("POST /api/admin/pairing/{id}/accept", s.adminAcceptPairing)
+	mux.HandleFunc("DELETE /api/admin/pairing/{id}", s.adminRejectPairing)
 
 	mux.HandleFunc("GET /api/admin/rooms/{room}/settings", s.adminGetRoomSettings)
 	mux.HandleFunc("PUT /api/admin/rooms/{room}/settings", s.adminSaveRoomSettings)

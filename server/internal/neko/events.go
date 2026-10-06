@@ -58,6 +58,9 @@ func (c *Client) WatchHost(ctx context.Context, onConnect func(Init), onDisconne
 		if up {
 			onDisconnect()
 		}
+		// Kept-alive connections may be as dead as this one (the other
+		// end of a tunnel restarted).
+		c.closeIdle()
 		log.Warn("neko event stream ended, reconnecting", "err", err)
 		if time.Since(start) > time.Minute {
 			backoff = time.Second
@@ -66,8 +69,37 @@ func (c *Client) WatchHost(ctx context.Context, onConnect func(Init), onDisconne
 		case <-ctx.Done():
 			return
 		case <-time.After(backoff):
+		case <-c.reconnect:
+			backoff = time.Second
+			continue
 		}
 		backoff = min(backoff*2, 10*time.Second)
+	}
+}
+
+func (c *Client) closeIdle() {
+	if c.own != nil {
+		c.own.CloseIdleConnections()
+	}
+}
+
+// Reconnect drops the observer's connection and connects again at once:
+// for when neko is known to be back but the old connection may not have
+// noticed yet that it is dead (a paired room's computer restarted).
+// Requests in flight end too, and kept-alive connections are dropped.
+func (c *Client) Reconnect() {
+	select {
+	case c.reconnect <- struct{}{}:
+	default:
+	}
+	c.mu.Lock()
+	drop, cancelGen := c.dropWatch, c.cancelGen
+	c.gen, c.cancelGen = context.WithCancel(context.Background())
+	c.mu.Unlock()
+	cancelGen()
+	c.closeIdle()
+	if drop != nil {
+		drop()
 	}
 }
 
@@ -85,6 +117,14 @@ func (c *Client) watchHostOnce(ctx context.Context, onConnect func(Init), onHost
 		return err
 	}
 	ctx, cancel := context.WithCancel(ctx)
+	c.mu.Lock()
+	c.dropWatch = cancel
+	c.mu.Unlock()
+	// A Reconnect from before this connection was meant for this one.
+	select {
+	case <-c.reconnect:
+	default:
+	}
 	pingDone := make(chan struct{})
 	go func() {
 		defer close(pingDone)

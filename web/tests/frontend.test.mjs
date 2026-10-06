@@ -73,11 +73,12 @@ const server = await createServer({
 let readableNameColor, cropKeyboard, useDialogFocus, Button, ButtonLink, Modal, Input, FormActions, AvatarChooser, ProfileEditor, SettingsDialog, profileChanged, userIdentity, ChatPanel, MessageGroup, MessageList, ChatPreview, MediaModal, RemoteScreen, AccountRow, NekoClient, KickedScreen, DesktopUploadStatus, PermissionRow, PermissionFields, PermissionTable, BanDate, Notice, blankPermission, config, App, useRoom, VideoArea
 let ChatInput, MessageEditor
 let useDesktopPaste, PasteDialog, useMobileKeyboard, RoomSection, ResetPasswordPage, ResetLinkModal, LoginPage
-let AdminPage, RoomsTab, RoomModal, roomNameError, nekoUrlError
+let AdminPage, RoomsTab, RoomModal, roomNameError, nekoUrlError, PairingRequests, PairingAnswer
 try {
   ;({ AdminPage } = await server.ssrLoadModule('/src/pages/admin/AdminPage.tsx'))
   ;({ RoomsTab } = await server.ssrLoadModule('/src/pages/admin/RoomsTab.tsx'))
   ;({ RoomModal } = await server.ssrLoadModule('/src/components/admin/RoomModal.tsx'))
+  ;({ PairingRequests, PairingAnswer } = await server.ssrLoadModule('/src/components/admin/PairingRequests.tsx'))
   ;({ roomNameError, nekoUrlError } = await server.ssrLoadModule('/src/components/admin/roomValidation.ts'))
   ;({ ResetPasswordPage } = await server.ssrLoadModule('/src/pages/ResetPasswordPage.tsx'))
   ;({ ResetLinkModal } = await server.ssrLoadModule('/src/components/admin/ResetLinkModal.tsx'))
@@ -1840,4 +1841,67 @@ test('login shows the password reset confirmation', (t) => {
   assert.equal(named(f.render(LoginPage), 'Notice').props.children, 'Password changed. Log in with your new password.')
   f.me = { username: 'bob' }
   assert.equal(named(f.render(LoginPage), 'Notice').props.children, 'Password changed. Log in with your new password.')
+})
+
+const pairingRequest = { id: 'r1', name: 'home', code: 'K7F2-9QXD', ip: '203.0.113.7', createdAt: Date.now() - 3 * 60_000, expiresAt: Date.now() + 7 * 60_000 }
+
+test('pairing requests show code, name and origin, refresh often, and hide when there are none', async (t) => {
+  const f = fixture(t)
+  let list = [pairingRequest]
+  const intervals = roomRefresh(t, async () => roomReply(list))
+  const render = () => f.render(PairingRequests, { rooms: [], onAccepted() {} })
+  render(); await settle()
+  const section = render()
+  assert.equal(section.props.title, 'Requests')
+  const item = nodes(section).find(n => n.type === 'li')
+  assert.ok(nodes(item).some(n => n.props?.children === 'K7F2-9QXD'))
+  assert.ok(nodes(item).some(n => n.props?.children === 'home'))
+  assert.match(JSON.stringify(nodes(item).find(n => n.props?.class?.includes?.('meta'))?.props.children), /203\.0\.113\.7.*3 min ago/)
+  assert.deepEqual([...intervals.values()].map(([, ms]) => ms), [3_000])
+  list = []
+  ;[...intervals.values()][0][0](); await settle()
+  assert.equal(render(), null)
+  f.unmount()
+  assert.equal(intervals.size, 0)
+})
+
+test('accepting names a new room, or gives a paired room a new computer', async (t) => {
+  const f = fixture(t), requests = [], done = []
+  globals(t, { fetch: async (path, init) => {
+    requests.push([path, init.method, init.body && JSON.parse(init.body)])
+    return roomReply({ name: 'living-room', source: 'paired', connected: false, userCount: 0 })
+  } })
+  const props = { mode: 'accept', request: pairingRequest, rooms: [configuredRoom], onClose() {}, onDone: room => done.push(room) }
+  let render = () => f.render(PairingAnswer, props)
+  assert.ok(nodes(render()).some(n => n.props?.children === 'K7F2-9QXD'), 'the code is shown to compare')
+  assert.equal(named(render(), 'RadioCards'), undefined, 'no paired room to replace')
+  assert.equal(fieldInput(render(), 'Room name').props.value, 'home')
+  fieldInput(render(), 'Room name').props.onInput({ currentTarget: { value: 'bad name' } })
+  await button(render().props.footer, 'Accept').props.onClick(); await settle()
+  assert.equal(requests.length, 0)
+  assert.match(named(render(), 'Notice').props.children, /Room names/)
+  fieldInput(render(), 'Room name').props.onInput({ currentTarget: { value: 'living-room' } })
+  await button(render().props.footer, 'Accept').props.onClick(); await settle()
+  assert.deepEqual(requests, [['/api/admin/pairing/r1/accept', 'POST', { name: 'living-room' }]])
+  assert.equal(done[0].name, 'living-room')
+
+  f.unmount()
+  const g = fixture(t)
+  requests.length = 0
+  render = () => g.render(PairingAnswer, { ...props, rooms: [configuredRoom, { ...offlineRoom, name: 'old-pc' }] })
+  named(render(), 'RadioCards').props.onChange('replace')
+  const select = nodes(render()).find(n => n.type?.name === 'Select')
+  assert.equal(select.props.value, 'old-pc')
+  await button(render().props.footer, 'Accept').props.onClick(); await settle()
+  assert.deepEqual(requests, [['/api/admin/pairing/r1/accept', 'POST', { replace: 'old-pc' }]])
+})
+
+test('rejecting asks first and explains it is final', async (t) => {
+  const f = fixture(t), requests = [], done = []
+  globals(t, { fetch: async (path, init) => { requests.push([path, init.method]); return { ok: true, status: 204, json: async () => null } } })
+  const render = () => f.render(PairingAnswer, { mode: 'reject', request: pairingRequest, rooms: [], onClose() {}, onDone: room => done.push(room) })
+  assert.ok(nodes(render()).some(n => typeof n.props?.children === 'string' && /will not ask again/.test(n.props.children)))
+  await button(render().props.footer, 'Reject').props.onClick(); await settle()
+  assert.deepEqual(requests, [['/api/admin/pairing/r1', 'DELETE']])
+  assert.deepEqual(done, [null])
 })

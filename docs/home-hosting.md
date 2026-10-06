@@ -1,6 +1,6 @@
 # Home hosting (planned)
 
-A planned feature, built in steps (see Build order; steps 1 and 2 are
+A planned feature, built in steps (see Build order; steps 1 to 3 are
 done). Someone lends a computer at
 home to run a room. The main server (the hub, on a VPS) does everything
 else: viewers, and the websites the room opens, only ever see the hub's
@@ -207,6 +207,19 @@ The room cannot reach the home router, other devices or the host PC
   Its examples also set `NEKO_WEBRTC_ICELITE=1`, which suits a room that
   only ever announces the hub's address; to be tested for paired rooms.
 
+### Built so far (step 3)
+
+`compose.node.yaml` runs the agent (`node/Dockerfile`, `server/cmd/node`)
+and the room. The agent keeps its key and pairing in its volume, writes
+`COZYCAST_ROOM` and `COZYCAST_NEKO_TOKEN` to a file the room's entrypoint
+waits for (`COZYCAST_ENV_FILE`), and forwards ports 8080 to 8082 of its
+tunnel address to the room. It checks in every 15 s; the check also keeps
+WireGuard's session alive. Each start sends a new boot ID with the check, so
+the server drops connections through the old tunnel at once (including
+requests in flight and kept-alive connections) instead of finding them dead
+at its next ping. A rejected computer remembers it and does not ask again
+until its state is deleted.
+
 ## When something goes offline
 
 Nothing here needs anyone to do anything; everything retries forever.
@@ -394,9 +407,13 @@ Each step works on its own and is tested before the next.
    from the database, neko reached through the tunnel. Tested with a second
    in-process WireGuard endpoint serving a fake neko; a node container
    follows with the agent in step 3.
-3. **Pairing.** The API, the Requests list and the agent's code, up to a
-   working tunnel. Done when a fresh node is accepted without copying
-   anything, and keeps working across restarts of both sides.
+3. **Pairing** (done). The API, the Requests list and the agent, up to a
+   working tunnel. Tested end to end in one process and with real
+   containers in the sandbox: accepted without copying anything; back
+   after an agent restart in 1 s, the whole computer in 3 s, the server in
+   13 s. For now the agent forwards neko's ports from the tunnel to the
+   room container (no `NET_ADMIN`); the room still has its own network
+   until step 4.
 4. **The node's network.** The namespace, firewall and routes, the room's
    environment file, and the hub's forwarding of the room's connections.
    Done when a website opened in the room sees the hub's address, the

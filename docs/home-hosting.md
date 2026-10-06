@@ -1,47 +1,259 @@
-# Home hosting with a relay (planned)
+# Home hosting (planned)
 
-A planned feature; nothing here is built yet. It lets someone run the rooms
-on a small box at home that provides only the computing. All traffic goes
-through a VPS: viewers, and the websites the room opens, see the VPS's
-address, as if the rooms ran there. The home network and IP address stay
-hidden, and the home upload speed does not limit the number of viewers.
+A planned feature; nothing here is built yet. Someone lends a computer at
+home to run a room. The main server (the hub, on a VPS) does everything
+else: viewers, and the websites the room opens, only ever see the hub's
+address. The home network and IP address stay hidden, and the home needs
+no port forwarding.
 
-The default deployment runs on one machine, and neko sends every viewer
-their own copy of the stream. At home that means port forwarding, a visible home IP,
-and an upload of viewers × bitrate (10 viewers at 2.5 Mbit/s = 25 Mbit/s).
+Adding the room takes no copying of tokens or addresses: the host enters
+the hub's address, their terminal shows a code, an admin sees a request
+with the same code on the admin page and accepts it. From then on the room
+reconnects by itself whenever it or the hub restarts or the network drops.
+
+The default deployment stays as it is: one machine, rooms in
+`compose.yaml`. Rooms added by URL and token (README, "Adding a room
+without a restart") stay too, for rooms on the hub's own network.
 
 ## Overview
 
-Two machines. The VPS is the only thing the internet sees; the home box does
-the computing and only dials out.
-
 ```
-viewers  ──HTTPS + WebRTC──▶ hub (VPS)  ◀══ WireGuard, home dials out ══ node (home box)
-websites ◀─room's browsing── Go server                                   Docker
-                             media relay                                 neko room containers
-                             NAT for the rooms                           video encoding
-                             SQLite, Let's Encrypt
+viewers  ──HTTPS + WebRTC──▶ hub (VPS)  ◀══ WireGuard, home dials out ══ node (home PC)
+websites ◀─room's browsing── Go server                                   agent
+                             WireGuard (userspace)                       room (neko)
+                             media forwarding
+                             NAT for the rooms
 ```
 
-- **hub**: the existing Go server (accounts, chat, permissions, UI, HTTPS,
-  SQLite) plus a media relay inside it. Low CPU, high bandwidth.
-- **node**: Docker with the unmodified neko room containers. No open ports,
-  no port forwarding; works behind carrier NAT.
-- **tunnel**: WireGuard. The node connects to the hub. The server reaches
-  each room's neko API through it (rooms are already URLs in
-  `COZYCAST_ROOMS` or database registrations), and the relay pulls media
-  through it. It is also the room containers' only route to the internet:
-  the hub does the NAT.
+- **hub**: the existing Go server. New: a WireGuard endpoint inside the
+  process ([wireguard-go](https://git.zx2c4.com/wireguard-go) with gVisor's
+  network stack), so the VPS needs no root, kernel module or extra
+  container, only one more UDP port. Built and checked in the sandbox: it
+  adds about 6 MB to the server binary.
+- **node**: the home PC, with Docker and `compose.node.yaml`: a small
+  **agent** container and one room container. The agent runs on the home
+  PC, never on the VPS: it dials out, keeps the tunnel up and locks down
+  the room's network. The room is the usual
+  unmodified neko image. No open ports.
+- **tunnel**: WireGuard from the agent to the hub. It is the room's only
+  network: the server reaches the room's neko through it, viewers' media
+  goes through it, and the room's browsing leaves through the hub.
 
-The home line then carries one stream per watched room up, whatever the
-number of viewers, and what the room's browser downloads. Viewers and
-websites only ever see the hub's address.
+One node runs one room. Several rooms at one home means several nodes
+(each its own compose project); managing them from the admin page is
+later work (see Build order).
 
-Single-machine deployments stay as they are: the relay is an option
-(`COZYCAST_RELAY` or similar), and without it browsers talk to neko directly
-as today.
+## Pairing
+
+### What the host does
+
+```bash
+COZYCAST_HUB=cozy.example.com docker compose -f compose.node.yaml up -d
+docker compose -f compose.node.yaml logs -f agent
+```
+
+```
+Pairing with cozy.example.com as "christoph-pc".
+Code: K7F2-9QXD
+Ask an admin to accept this code under Admin > Rooms. Waiting...
+Accepted as room "christoph-pc". Tunnel up, room starting.
+```
+
+`COZYCAST_ROOM_NAME` proposes a name (default: the machine's host name).
+Once paired, the agent remembers everything in its volume; later starts
+connect without a code.
+
+### What the admin does
+
+The Rooms tab gets a **Requests** list: proposed name, code, the
+requester's IP address and how long ago it arrived. The admin compares the
+code with the one the host reads out to them (chat, voice), then:
+
+- **Accept**: as a new room (name editable), or as the new host of an
+  existing paired room (keeps its chat, settings and permissions; for a
+  reinstalled or replaced PC).
+- **Reject**: the agent shows "Rejected" and stops.
+
+Requests expire after 10 minutes. At most 20 are pending, 3 per IP
+address, and creating them is rate limited, so strangers cannot flood the
+list.
+
+### The code
+
+Both sides compute it from the same three values:
+
+```
+code = first 40 bits of SHA-256("cozycast-pair" || hubKey || nodeKey || nonce),
+       Crockford base32, shown as XXXX-XXXX
+```
+
+`hubKey` and `nodeKey` are the two WireGuard public keys and `nonce` is
+random per request, from the hub. If anyone in between swapped a key, the
+two codes differ. With a domain (HTTPS) TLS already proves the hub's
+identity; without one the code is the only check, so the agent warns
+when pairing over plain HTTP:
+
+```
+Warning: cozy.example.com is plain HTTP. Compare the code carefully;
+anyone between you and the server could otherwise pose as it.
+```
+
+### Messages
+
+All over the hub's normal HTTP(S) address. Nothing secret crosses them.
+
+| Request | Body / answer |
+|---|---|
+| `POST /api/nodes/pair` | `{"name":"christoph-pc","nodeKey":"<base64>"}` → 201 `{"id","secret","hubKey","nonce","tunnelPort","expiresAt"}`. The same key while still pending returns the same request with a new expiry. |
+| `GET /api/nodes/pair/{id}`, `Authorization: Bearer <secret>` | Long poll, up to 30 s: `{"status":"pending"}`, `"rejected"`, `"expired"`, or `{"status":"accepted","address":"10.77.0.2","hubAddress":"10.77.0.1"}`. 404 when the hub no longer knows the request (expired, hub restarted): the agent asks again and shows the new code. |
+| `GET /api/admin/pairing` | Admin: pending requests `{id,name,code,ip,createdAt}`. |
+| `POST /api/admin/pairing/{id}/accept` | Admin: `{"name":"christoph-pc"}` or `{"replace":"oldroom"}`. |
+| `DELETE /api/admin/pairing/{id}` | Admin: reject. |
+
+Pending requests live in memory only. Accepting stores the node.
+
+After acceptance the agent brings up the tunnel and fetches its room's
+settings from the hub **inside the tunnel**, at
+`http://10.77.0.1/node/config` (a listener on the tunnel only):
+
+```json
+{"room":"christoph-pc","nekoToken":"...","publicIp":"203.0.113.10",
+ "mediaPort":52100,"dns":["9.9.9.9","1.1.1.1"]}
+```
+
+The agent fetches it again after every reconnect, so the hub can change
+these without pairing again. The neko token only ever travels inside the
+tunnel.
+
+### Stored on the hub
+
+- The hub's WireGuard key pair, created on first start in the data
+  directory. Losing it means every node pairs again.
+- Per paired room (the `registered_rooms` table, migration 0009 is not
+  committed yet and can still change): node public key, tunnel address,
+  media port, neko token, last handshake. The neko URL is derived
+  (`http://<tunnel address>:8080`) and never shown, like other room
+  addresses.
+- Removing the room in the admin page removes the WireGuard peer at once:
+  the node is cut off. Pairing it again needs a new request.
+
+New server settings: `COZYCAST_TUNNEL_LISTEN` (`:51820`, UDP),
+`COZYCAST_TUNNEL_NET` (`10.77.0.0/24`), `COZYCAST_PUBLIC_IP` (the hub's
+address for media), `COZYCAST_MEDIA_PORTS` (`52100-52199`, one per paired
+room, UDP and TCP).
+
+## The node
+
+`compose.node.yaml` has three services:
+
+- **net**: does nothing but hold the network namespace (a pause
+  container). The other two join it (`network_mode: service:net`), so it
+  survives the agent restarting.
+- **agent**: Go, built from this repository (`cozycast-node` image). Needs
+  `NET_ADMIN` and `/dev/net/tun`, inside its own namespace only. It runs
+  WireGuard (wireguard-go on a TUN device), sets the routes and firewall,
+  writes the room's environment, and keeps reconnecting.
+- **room**: the usual worker image. Its entrypoint waits for the file the
+  agent writes (`COZYCAST_ENV_FILE`, with `COZYCAST_ROOM`,
+  `COZYCAST_NEKO_TOKEN`, `NEKO_WEBRTC_NAT1TO1`, `NEKO_WEBRTC_UDPMUX`,
+  `NEKO_WEBRTC_TCPMUX`), reads it, then starts as today. Nothing secret is
+  in the compose file. A change that needs the room restarted (a new hub
+  IP) is announced in the agent's log.
+
+### Networking in the namespace
+
+Fail closed: without the tunnel the room has no network at all.
+
+- Default route: the tunnel. The only other route is to the hub's public
+  address, for the tunnel itself.
+- nftables, set by the agent:
+  - out through the home network (`eth0`): only WireGuard to the hub, and
+    DNS to look up the hub, both only from the agent's user (root; the
+    desktop user cannot become root).
+  - in from the tunnel: only the hub's address, only neko (8080), the title
+    and play helpers (8081, 8082) and the media port.
+  - nothing in from the home network.
+- DNS for the room: the resolvers from the config, reached through the
+  tunnel.
+
+The room cannot reach the home router, other devices or the host PC
+(`ideas.md`, "Isolate the room from the LAN").
+
+## The hub side
+
+- **Reaching neko**: `neko.NewClient` gets a dial function; for paired
+  rooms it dials through the tunnel. The same transport is used by the
+  places that today use the default HTTP client: the observer WebSocket
+  (`neko/events.go`), the proxied WebSocket and file transfers
+  (`httpapi/proxy.go`), and the title and play helpers.
+- **The room's internet**: the hub's network stack accepts the room's
+  TCP and UDP connections to anywhere and opens them again from the hub
+  (gVisor's TCP and UDP forwarders), so websites see the hub's address.
+  Refused: private, loopback, link-local and carrier-grade NAT ranges, the
+  cloud metadata address, the tunnel network (no node reaches another) and
+  the hub's own address. UDP flows time out after a minute of silence.
+- **Media**: until the relay exists, the hub forwards each paired room's
+  media port (UDP and TCP, public) to the room's neko through the tunnel.
+  neko announces the hub's IP (`NEKO_WEBRTC_NAT1TO1`) and that port, so
+  viewers connect to the hub. Each viewer's stream still crosses the home
+  upload (viewers × bitrate) until the relay.
+
+## When something goes offline
+
+Nothing here needs anyone to do anything; everything retries forever.
+
+| What happens | Effect |
+|---|---|
+| Home network drops, PC sleeps, home IP changes | WireGuard keepalive (25 s) re-establishes the tunnel when the network is back; roaming is built in. |
+| Agent crashes or restarts | Docker restarts it; the namespace (`net`) and the room keep running; the agent recreates the tunnel and rules. The room has no network in between. |
+| Room container restarts | The hub's existing reconnect (`neko.WatchHost`, backoff up to 30 s) picks it up. |
+| Hub restarts | Peers are loaded from the database; nodes reconnect with their next keepalive. |
+| Node never comes back | The room shows offline; an admin can remove it, or accept a new request as its replacement. |
+
+What viewers see, new:
+
+- The server tells tabs when the desktop goes away and comes back:
+  `{"type":"desktop","state":"offline"}` after 5 s without neko (short
+  blips stay silent), and `{"type":"desktop","state":"online"}` when the
+  observer is connected again. Today tabs only notice their own neko
+  socket closing and retry with backoff up to 30 s.
+- While offline the video area says "The room's desktop is offline. It
+  comes back by itself." Chat, the user list and settings keep working:
+  they live on the hub.
+- On `online` tabs ask for a neko token at once instead of waiting for
+  their backoff.
+
+Admins see per room: Online, Offline since <time>, or Waiting for host
+(paired, never connected), and the time of the last tunnel handshake.
+The Rooms tab refreshes this by itself.
+
+This also helps rooms on the hub's own machine (a crashed container), so
+it can come first.
+
+## Security
+
+- The hub can only reach neko, its two helpers and the media port of
+  each room; the node's firewall enforces it, not just the hub.
+- The room's only way out is the tunnel; with it down there is no
+  network, and it never falls back to the home connection. It cannot open
+  the home router or other devices. Needed before anyone else gets the
+  remote.
+- Websites see the hub's address, never the home IP. The costs: streaming
+  sites treat datacenter addresses worse (blocks, sign-in prompts), and
+  abuse complaints about what a room opens go to the VPS account.
+- The neko token crosses only the tunnel. Admin pages and API never show
+  room addresses or tokens of paired rooms.
+- A compromised hub can control the room (as today) but cannot reach the
+  home network: the node's firewall, not the hub, decides that.
+- Client IPs for bans and rate limits are unaffected: browsers connect to
+  the hub directly.
+- Pairing is open to anyone who knows the hub's address, so it is capped,
+  rate limited and expires; nothing happens until an admin accepts a
+  matching code.
 
 ## The media relay
+
+Later: until then the hub forwards each viewer's stream from the node.
 
 Kurento and later LiveKit had this role in the old CozyCast: the worker sent
 one stream, the media server made the copies. The rewrite dropped it because
@@ -69,8 +281,8 @@ inside the Go server, not as another service.
   nothing.
 - One media port (UDP and TCP) on the hub for all rooms, instead of one per
   room.
-- neko's `NEKO_WEBRTC_NAT1TO1` becomes the node's tunnel address. Its media
-  port is not published at home.
+- It replaces the per-room media forwarding: neko's `NEKO_WEBRTC_NAT1TO1`
+  becomes the node's tunnel address, and only the relay talks to it.
 
 ### Input
 
@@ -89,39 +301,10 @@ peer connection to neko, so input needs another path. Two options:
 
 Start with 1.
 
-## Room management
-
-Today containers are started separately (usually services in `compose.yaml`);
-the admin API can register room connections without a server restart.
-Restarting a configured room from the UI needs the Docker socket on the server (`architecture.md`, "Room WebSocket").
-With two machines the socket is on the node.
-
-A small agent on the node dials out to the hub and accepts only: create,
-start, stop, restart and delete a room container, and report its state. The
-hub never gets the Docker socket, so a compromised VPS can manage rooms but
-not take over the home box. Creating rooms from the admin page
-(`ideas.md`) builds on this. Several nodes can feed one hub.
-
-## Security
-
-- The node's firewall lets the tunnel reach only the room containers' neko
-  port and media port.
-- The tunnel is the room containers' only route out, DNS included. The
-  room's browser cannot open the home router or other devices (`ideas.md`,
-  "Isolate the room from the LAN"), and with the tunnel down the room has
-  no network: it never falls back to the home connection. Needed before
-  anyone else gets the remote.
-- Websites see the hub's address, never the home IP. The costs: streaming
-  sites treat datacenter addresses worse (blocks, sign-in prompts), and
-  abuse complaints about what a room opens go to the VPS account.
-- The neko admin token crosses the tunnel, never the open internet.
-- Client IPs for bans and rate limits are unaffected: browsers connect to
-  the hub directly.
-
 ## Hardware (node)
 
-The target is an **Orange Pi 5** (RK3588S, eight cores), because one is
-already there.
+The first node is a donated desktop PC. The notes below were written for
+an **Orange Pi 5** (RK3588S, eight cores), the other candidate.
 
 - It was too weak to run the original CozyCast (the owner's experience).
   Whether it carries one neko room is the first thing to measure.
@@ -192,50 +375,49 @@ addresses: the room browses from the VPS either way.
 
 ## Build order
 
-Each step works on its own.
+Each step works on its own and is tested before the next.
 
-1. **Measure the Orange Pi 5.** Build the room image on ARM, run one room
-   with a video playing and software x264, note CPU use per stream setting.
-   Decides the hardware before anything else is built. Done when there is a
-   stream setting the box plays smoothly, or it is ruled out.
-2. **Split deployment.** `compose.hub.yaml` and `compose.node.yaml`, a
-   WireGuard setup guide, `COZYCAST_ROOMS` pointing at tunnel addresses.
-   Media still goes viewer → hub → node by port forwarding on the hub, so
-   upload is still viewers × bitrate. Done when a room at home plays for a
-   viewer who sees only the hub's address.
-3. **Tunnel-only networking** on the node: the room containers' default
-   route is the tunnel, the hub does the NAT. Done when a website opened in
-   the room sees the hub's address, the room's browser cannot open the
-   router, and the room has no network with the tunnel down.
-4. **Input over the WebSocket.** Useful by itself as a fallback when the data
-   channel fails. Done when the remote works with the data channel disabled.
-5. **The relay.** The main work, roughly a week. Cannot be tested in the
-   development sandbox (no UDP); needs a real hub and node. Done when home
-   upload stays at one stream with several viewers, a new viewer gets a
-   picture within a second, and a viewer with packet loss does not disturb
-   the others.
-6. **Hardware encoding**, only if step 1 shows software encoding is too
-   slow. On the Orange Pi 5: vendor kernel, a worker variant with
-   Rockchip's GStreamer plugin, H.264 or VP8 pipelines in
-   `worker/entrypoint.sh`. On an Intel mini PC: a worker variant on neko's
-   Intel image, `/dev/dri` passed into the container, VA-API pipelines.
-   Done when a watched room uses the hardware encoder and CPU use drops.
-7. **Node agent** and room creation from the admin page.
+1. **Offline handling.** The `desktop` messages, the offline notice, an
+   immediate reconnect, and online/offline in the Rooms tab. Useful for
+   every deployment. Done when stopping and starting a room container
+   shows offline and then brings the picture back by itself.
+2. **Tunnel in the hub.** Userspace WireGuard, the hub key, peers from the
+   database, neko reached through the tunnel. Tested with a second
+   in-process WireGuard endpoint, then with a node container on the same
+   machine.
+3. **Pairing.** The API, the Requests list and the agent's code, up to a
+   working tunnel. Done when a fresh node is accepted without copying
+   anything, and keeps working across restarts of both sides.
+4. **The node's network.** The namespace, firewall and routes, the room's
+   environment file, and the hub's forwarding of the room's connections.
+   Done when a website opened in the room sees the hub's address, the
+   room's browser cannot open the home router, and the room has no network
+   with the tunnel down.
+5. **Media through the hub.** Forwarded media ports. Done when a viewer
+   sees the room and only ever the hub's address (also in the browser's
+   WebRTC details). Needs a real VPS; the development sandbox has no
+   incoming UDP.
+6. **Measure the node.** One room with a video playing, CPU per stream
+   setting, home upload with several viewers.
+7. **Input over the WebSocket**, then **the relay** (see above). After this
+   the home upload is one stream per watched room.
+8. **Hardware encoding**, only if step 6 shows software encoding is too
+   slow (see Hardware).
+9. **Several rooms per node** and room creation from the admin page: the
+   agent starts room containers itself on request.
 
 ## Alternatives considered
 
+- **One HTTPS connection** from the node instead of WireGuard (a
+  multiplexed WebSocket): works where UDP is blocked and needs no
+  `NET_ADMIN`, but media would go over TCP, and only the room's Firefox
+  could browse through the hub (as a proxy), not the whole room.
+- **Kernel WireGuard on the VPS**: needs root or `NET_ADMIN` for the server
+  and iptables for the NAT; the userspace version needs neither.
+- **Tokens and addresses copied by hand** (what registering by URL does):
+  error-prone for a host who is not an admin, and needs an address the hub
+  can reach, which a home PC without port forwarding does not have.
 - **A neko plugin** instead of the outside server: a plugin lives in one
   room and cannot hold accounts or cross-room state; neko's docs call
   external plugins experimental and tie them to the exact neko build.
 - **TURN (coturn)**: hides the home IP but forwards each viewer's copy; the
-  home upload stays viewers × bitrate.
-- **LiveKit or Kurento again** as the relay: they do far more than forward
-  one stream, and bring back the services the rewrite removed (ingress,
-  Redis, a large UDP port range). Worth reconsidering if the forwarder's
-  loss handling turns out to be hard to get right.
-- **Mesh VPN** (Tailscale, ZeroTier): no VPS, nothing exposed, but every
-  viewer installs a client, and upload is still viewers × bitrate. Fine for
-  a few friends.
-- **Lower bitrate or stream size**: a room setting today; shrinks the upload
-  without removing the limit.
-- **Rooms on the VPS**: no home box at all; see Cost.

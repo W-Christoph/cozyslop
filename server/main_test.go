@@ -126,7 +126,7 @@ func TestShutdownWaitsForRoomHandlers(t *testing.T) {
 				w.WriteHeader(http.StatusNotFound)
 			}))
 			defer func() { unblock(); desktop.Close() }()
-			nc, err := neko.NewClient(desktop.URL, "x")
+			nc, err := neko.NewClient(desktop.URL, "x", nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -381,7 +381,7 @@ func TestLoadConfiguredAndRegisteredRooms(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	defer slog.SetDefault(previous)
 	rooms, err := loadRooms(ctx, st, cfg, func(name, nekoURL, token string) (hub.RoomConfig, error) {
-		return hub.BuildRoomConfig(name, nekoURL, token, cfg.DefaultScreen)
+		return hub.BuildRoomConfig(name, nekoURL, token, cfg.DefaultScreen, nil)
 	})
 	if err != nil || len(rooms) != 2 {
 		t.Fatalf("rooms: %+v %v", rooms, err)

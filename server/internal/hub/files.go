@@ -16,8 +16,6 @@ import (
 // download them through neko's file transfer; deleting and playing are
 // asked of the server, which does them for a tab that may.
 
-var playClient = &http.Client{Timeout: 15 * time.Second}
-
 // fileAction deletes or plays a file of the Downloads folder for a tab and
 // tells the tab how that went.
 func (r *Room) fileAction(ctx context.Context, c *Client, action, name string) {
@@ -77,7 +75,7 @@ func (r *Room) playFile(ctx context.Context, name string) error {
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+r.playToken)
-	res, err := playClient.Do(req)
+	res, err := (&http.Client{Timeout: 15 * time.Second, Transport: r.neko.Transport()}).Do(req)
 	if err != nil {
 		// Restarting, or a room image from before the helper.
 		r.log.Warn("play file", "err", err)

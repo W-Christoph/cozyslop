@@ -414,7 +414,7 @@ func TestStartLoadsSettingsBeforeAdmission(t *testing.T) {
 	requireOK(t, err)
 	requireOK(t, s.SaveRoomSettings(ctx, store.RoomSettings{Name: "main", Access: "invite"}))
 	fake := nekotest.New(t, "secret")
-	nc, err := neko.NewClient(fake.URL(), "secret")
+	nc, err := neko.NewClient(fake.URL(), "secret", nil)
 	requireOK(t, err)
 
 	// Settings are in place when Start returns, not some time later.

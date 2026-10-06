@@ -20,6 +20,7 @@ import (
 	"cozycast/internal/ratelimit"
 	"cozycast/internal/rights"
 	"cozycast/internal/store"
+	"cozycast/internal/tunnel"
 )
 
 type RoomBuilder func(name, nekoURL, token string) (hub.RoomConfig, error)
@@ -35,10 +36,13 @@ type Deps struct {
 	// SourceURL is where users get this server's source code; the AGPL
 	// requires offering it to everyone using the server over the network.
 	SourceURL string
+	// Tunnel to rooms on other machines; nil when off.
+	Tunnel *tunnel.Tunnel
 }
 
 type Server struct {
 	buildRoom      RoomBuilder
+	tunnel         *tunnel.Tunnel
 	roomMu         sync.Mutex // registration mutations
 	store          *store.Store
 	auth           *auth.Service
@@ -68,12 +72,13 @@ func New(d Deps) *Server {
 	}
 	if d.BuildRoom == nil {
 		d.BuildRoom = func(name, nekoURL, token string) (hub.RoomConfig, error) {
-			return hub.BuildRoomConfig(name, nekoURL, token, "")
+			return hub.BuildRoomConfig(name, nekoURL, token, "", nil)
 		}
 	}
 	socketCtx, stopSockets := context.WithCancel(context.Background())
 	return &Server{
 		buildRoom:      d.BuildRoom,
+		tunnel:         d.Tunnel,
 		store:          d.Store,
 		auth:           d.Auth,
 		hub:            d.Hub,

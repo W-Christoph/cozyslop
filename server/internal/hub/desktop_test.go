@@ -35,7 +35,7 @@ func TestDesktopOfflineAndBack(t *testing.T) {
 		forward.ServeHTTP(w, r)
 	}))
 	t.Cleanup(link.Close)
-	nc, err := neko.NewClient(link.URL, "home-secret")
+	nc, err := neko.NewClient(link.URL, "home-secret", nil)
 	requireOK(t, err)
 	requireOK(t, f.h.Add(f.ctx, RoomConfig{Name: "home", Source: "registered", Neko: nc}))
 	r := f.h.Room("home")

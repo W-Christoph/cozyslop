@@ -255,8 +255,6 @@ const (
 	maxTitleRunes = 200
 )
 
-var titleClient = &http.Client{Timeout: titleInterval}
-
 // watchTitle keeps the room's viewers told which window is in front on the
 // desktop; their browser tab is named after it.
 func (r *Room) watchTitle(ctx context.Context) {
@@ -282,7 +280,7 @@ func (r *Room) checkTitle(ctx context.Context) {
 	if !watched {
 		return
 	}
-	title := fetchTitle(ctx, r.titleURL)
+	title := fetchTitle(ctx, r.neko.Transport(), r.titleURL)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if title != r.title {
@@ -291,12 +289,13 @@ func (r *Room) checkTitle(ctx context.Context) {
 	}
 }
 
-func fetchTitle(ctx context.Context, url string) string {
+func fetchTitle(ctx context.Context, transport http.RoundTripper, url string) string {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return ""
 	}
-	res, err := titleClient.Do(req)
+	// The helper sits next to neko, reached the same way.
+	res, err := (&http.Client{Timeout: titleInterval, Transport: transport}).Do(req)
 	if err != nil {
 		return ""
 	}

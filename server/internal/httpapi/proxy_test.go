@@ -45,7 +45,7 @@ func newProxyTest(t *testing.T, set store.RoomSettings) *proxyTest {
 		t.Fatal(err)
 	}
 	fake := nekotest.New(t, "secret")
-	nc, err := neko.NewClient(fake.URL(), "secret")
+	nc, err := neko.NewClient(fake.URL(), "secret", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -87,7 +87,7 @@ export interface AdminUser extends Me {
 
 export interface AdminRoom {
   name: string
-  source: 'configured' | 'registered'
+  source: 'configured' | 'registered' | 'paired' // paired: on another computer, through the tunnel
   connected: boolean
   offlineSince?: number // unix ms; set while viewers are told the desktop is offline
   userCount: number

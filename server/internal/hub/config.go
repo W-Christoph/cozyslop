@@ -7,9 +7,10 @@ import (
 )
 
 // BuildRoomConfig is shared by configured and registered rooms. Container
-// control is attached separately, only for locally configured rooms.
-func BuildRoomConfig(name, nekoURL, token, defaultScreen string) (RoomConfig, error) {
-	nc, err := neko.NewClient(nekoURL, token)
+// control is attached separately, only for locally configured rooms. dial
+// (nil = the network) reaches neko and its helpers, e.g. through a tunnel.
+func BuildRoomConfig(name, nekoURL, token, defaultScreen string, dial neko.DialFunc) (RoomConfig, error) {
+	nc, err := neko.NewClient(nekoURL, token, dial)
 	if err != nil {
 		return RoomConfig{}, err
 	}

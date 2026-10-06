@@ -104,3 +104,35 @@ func TestRegisteredRoomValidation(t *testing.T) {
 		t.Fatal("empty configured room list accepted")
 	}
 }
+
+func TestTunnelConfig(t *testing.T) {
+	t.Setenv("COZYCAST_NEKO_API_TOKEN", "test-secret")
+	for _, tc := range []struct {
+		port, network string
+		wantPort      int
+		wantNet       string
+		ok            bool
+	}{
+		{wantNet: "10.77.0.0/24", ok: true},
+		{port: "51820", wantPort: 51820, wantNet: "10.77.0.0/24", ok: true},
+		{port: "51820", network: "10.200.0.0/16", wantPort: 51820, wantNet: "10.200.0.0/16", ok: true},
+		{port: "0"},
+		{port: "70000"},
+		{port: "udp"},
+		{network: "10.77.0.1/24"},
+		{network: "10.77.0.0/31"},
+		{network: "fd00::/64"},
+		{network: "nonsense"},
+	} {
+		t.Setenv("COZYCAST_TUNNEL_PORT", tc.port)
+		t.Setenv("COZYCAST_TUNNEL_NET", tc.network)
+		cfg, err := FromEnv()
+		if (err == nil) != tc.ok {
+			t.Errorf("%+v: err=%v", tc, err)
+			continue
+		}
+		if tc.ok && (cfg.TunnelPort != tc.wantPort || cfg.TunnelNet.String() != tc.wantNet) {
+			t.Errorf("%+v: got %d %s", tc, cfg.TunnelPort, cfg.TunnelNet)
+		}
+	}
+}

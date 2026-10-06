@@ -108,3 +108,48 @@ func TestRegisteredRooms(t *testing.T) {
 		t.Fatalf("history lost: %+v %v", history, err)
 	}
 }
+
+func TestPairedRooms(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	plain := RegisteredRoom{Name: "plain", NekoURL: "http://neko:8080", NekoToken: "a"}
+	paired := RegisteredRoom{Name: "home", NekoURL: "http://10.77.0.2:8080", NekoToken: "b", NodeKey: "key-1", TunnelAddress: "10.77.0.2"}
+	for _, room := range []*RegisteredRoom{&plain, &paired} {
+		if err := s.CreateRegisteredRoom(ctx, room); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Unpaired rooms may all lack a key and address; paired ones are unique.
+	other := RegisteredRoom{Name: "plain2", NekoURL: "http://neko2:8080", NekoToken: "c"}
+	if err := s.CreateRegisteredRoom(ctx, &other); err != nil {
+		t.Fatal(err)
+	}
+	for _, dup := range []RegisteredRoom{
+		{Name: "dup-key", NekoURL: "http://10.77.0.3:8080", NekoToken: "d", NodeKey: "key-1", TunnelAddress: "10.77.0.3"},
+		{Name: "dup-address", NekoURL: "http://10.77.0.2:8080", NekoToken: "e", NodeKey: "key-2", TunnelAddress: "10.77.0.2"},
+	} {
+		if err := s.CreateRegisteredRoom(ctx, &dup); err == nil {
+			t.Errorf("%s accepted", dup.Name)
+		}
+	}
+	if err := s.SetNodeEndpoint(ctx, "home", "203.0.113.7:40000"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetNodeEndpoint(ctx, "plain", "203.0.113.7:40000"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("endpoint for an unpaired room: %v", err)
+	}
+	list, err := s.RegisteredRooms(ctx)
+	if err != nil || len(list) != 3 {
+		t.Fatalf("list: %+v %v", list, err)
+	}
+	got := map[string]RegisteredRoom{}
+	for _, r := range list {
+		got[r.Name] = r
+	}
+	if h := got["home"]; !h.Paired() || h.NodeKey != "key-1" || h.TunnelAddress != "10.77.0.2" || h.NodeEndpoint != "203.0.113.7:40000" {
+		t.Fatalf("paired: %+v", h)
+	}
+	if p := got["plain"]; p.Paired() || p.TunnelAddress != "" || p.NodeEndpoint != "" {
+		t.Fatalf("plain: %+v", p)
+	}
+}

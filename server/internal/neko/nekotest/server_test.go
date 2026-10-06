@@ -44,7 +44,7 @@ func TestHTTPContract(t *testing.T) {
 	s := nekotest.New(t, "admin")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	c, err := neko.NewClient(s.URL(), "admin")
+	c, err := neko.NewClient(s.URL(), "admin", nil)
 	must(t, err)
 	if !c.Healthy(ctx) {
 		t.Fatal("initially unhealthy")
@@ -152,7 +152,7 @@ func TestWebSocketAndRestart(t *testing.T) {
 	s := nekotest.New(t, "admin")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	c, err := neko.NewClient(s.URL(), "admin")
+	c, err := neko.NewClient(s.URL(), "admin", nil)
 	must(t, err)
 	must(t, c.CreateMember(ctx, "member", "password", neko.Profile{CanLogin: true}))
 	memberToken, err := c.Login(ctx, "member", "password")

@@ -1,6 +1,7 @@
 # Home hosting (planned)
 
-A planned feature, built in steps (see Build order; step 1 is done). Someone lends a computer at
+A planned feature, built in steps (see Build order; steps 1 and 2 are
+done). Someone lends a computer at
 home to run a room. The main server (the hub, on a VPS) does everything
 else: viewers, and the websites the room opens, only ever see the hub's
 address. The home network and IP address stay hidden, and the home needs
@@ -129,18 +130,22 @@ tunnel.
 
 - The hub's WireGuard key pair, created on first start in the data
   directory. Losing it means every node pairs again.
-- Per paired room (the `registered_rooms` table, migration 0009 is not
-  committed yet and can still change): node public key, tunnel address,
-  media port, neko token, last handshake. The neko URL is derived
-  (`http://<tunnel address>:8080`) and never shown, like other room
-  addresses.
+- Per paired room, in `registered_rooms` (migration 0010): node public
+  key, tunnel address, and where the node was last seen (saved every 30 s
+  when it changes). The neko URL is `http://<tunnel address>:8080` and
+  never shown, like other room addresses; any room whose address is
+  inside the tunnel network is reached through the tunnel, and admins
+  cannot register such addresses by hand. Media port to come (step 5).
+- Paired rooms appear as "Paired" in the Rooms tab and the admin API; their
+  address and token cannot be changed, only the room removed.
 - Removing the room in the admin page removes the WireGuard peer at once:
   the node is cut off. Pairing it again needs a new request.
 
-New server settings: `COZYCAST_TUNNEL_LISTEN` (`:51820`, UDP),
-`COZYCAST_TUNNEL_NET` (`10.77.0.0/24`), `COZYCAST_PUBLIC_IP` (the hub's
-address for media), `COZYCAST_MEDIA_PORTS` (`52100-52199`, one per paired
-room, UDP and TCP).
+Server settings: `COZYCAST_TUNNEL_PORT` (UDP; tunnels are off without it,
+since Docker's published ports bypass host firewalls like ufw),
+`COZYCAST_TUNNEL_NET` (`10.77.0.0/24`). To come: `COZYCAST_PUBLIC_IP` (the
+hub's address for media), `COZYCAST_MEDIA_PORTS` (`52100-52199`, one per
+paired room, UDP and TCP).
 
 ## The node
 
@@ -211,7 +216,7 @@ Nothing here needs anyone to do anything; everything retries forever.
 | Home network drops, PC sleeps, home IP changes | WireGuard keepalive (25 s) re-establishes the tunnel when the network is back; roaming is built in. |
 | Agent crashes or restarts | Docker restarts it; the namespace (`net`) and the room keep running; the agent recreates the tunnel and rules. The room has no network in between. |
 | Room container restarts | The hub's existing reconnect (`neko.WatchHost`, backoff up to 10 s) picks it up. |
-| Hub restarts | Peers are loaded from the database; nodes reconnect with their next keepalive. |
+| Hub restarts | Peers are loaded from the database with where each node was last seen, so the hub starts the handshake itself as soon as it needs neko (tested). Keepalives alone would not do: WireGuard only renews a session that stopped answering when it has real data to send, so a node would otherwise wait up to two minutes. The agent's regular check over the tunnel is the second way back. |
 | Node never comes back | The room shows offline; an admin can remove it, or accept a new request as its replacement. |
 
 What viewers see, new:
@@ -385,10 +390,10 @@ Each step works on its own and is tested before the next.
    immediate reconnect, and online/offline in the Rooms tab. Useful for
    every deployment. Done when stopping and starting a room container
    shows offline and then brings the picture back by itself.
-2. **Tunnel in the hub.** Userspace WireGuard, the hub key, peers from the
-   database, neko reached through the tunnel. Tested with a second
-   in-process WireGuard endpoint, then with a node container on the same
-   machine.
+2. **Tunnel in the hub** (done). Userspace WireGuard, the hub key, peers
+   from the database, neko reached through the tunnel. Tested with a second
+   in-process WireGuard endpoint serving a fake neko; a node container
+   follows with the agent in step 3.
 3. **Pairing.** The API, the Requests list and the agent's code, up to a
    working tunnel. Done when a fresh node is accepted without copying
    anything, and keeps working across restarts of both sides.

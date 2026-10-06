@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"os"
 	"regexp"
@@ -39,6 +40,10 @@ type Config struct {
 	WebDir        string // serve the UI from disk instead of the embedded build (dev)
 	SourceURL     string // where users can get this server's source code (AGPL)
 	MaxUploadMB   int64  // maximum chat media file size in MiB
+	// Tunnels to rooms on other machines (docs/home-hosting.md); off when
+	// TunnelPort is 0. The server takes TunnelNet's first address.
+	TunnelPort int
+	TunnelNet  netip.Prefix
 }
 
 func FromEnv() (Config, error) {
@@ -73,6 +78,17 @@ func FromEnv() (Config, error) {
 		if err != nil || size.Width <= 0 || size.Height <= 0 || size.Rate <= 0 {
 			return c, errors.New("COZYCAST_DEFAULT_SCREEN must look like 1280x720@30 with positive dimensions and frame rate")
 		}
+	}
+
+	if port := os.Getenv("COZYCAST_TUNNEL_PORT"); port != "" {
+		c.TunnelPort, err = strconv.Atoi(port)
+		if err != nil || c.TunnelPort < 1 || c.TunnelPort > 65535 {
+			return c, errors.New("COZYCAST_TUNNEL_PORT must be a UDP port number")
+		}
+	}
+	c.TunnelNet, err = netip.ParsePrefix(env("COZYCAST_TUNNEL_NET", "10.77.0.0/24"))
+	if err != nil || !c.TunnelNet.Addr().Is4() || c.TunnelNet.Bits() > 30 || c.TunnelNet != c.TunnelNet.Masked() {
+		return c, errors.New("COZYCAST_TUNNEL_NET must be an IPv4 network like 10.77.0.0/24, /30 or larger")
 	}
 
 	rooms, err := parseRooms(env("COZYCAST_ROOMS", "default=http://room-default:8080"))

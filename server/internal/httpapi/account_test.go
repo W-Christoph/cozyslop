@@ -41,7 +41,7 @@ func newAPITest(t *testing.T) *apiTest {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	nc, err := neko.NewClient("http://127.0.0.1:1", "x")
+	nc, err := neko.NewClient("http://127.0.0.1:1", "x", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

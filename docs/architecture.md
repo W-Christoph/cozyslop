@@ -204,6 +204,17 @@ drops stay silent. The observer's next successful connect announces it online
 again, and tabs ask for a token at once instead of waiting for their backoff.
 Admins see the time it went offline in the Rooms tab.
 
+## Tunnel
+
+With `COZYCAST_TUNNEL_PORT` set, the server runs one end of a WireGuard
+tunnel in the process (`internal/tunnel`: wireguard-go on gVisor's network
+stack, no root or kernel module). Paired rooms, on other computers, are
+peers; their neko URL is an address inside `COZYCAST_TUNNEL_NET`, and every
+connection to such a room (API, observer, proxied WebSockets, file
+transfers, title and play helpers) is dialed through the tunnel instead of
+the network. The server's private key is `wireguard.key` in the data
+directory. See [home-hosting.md](home-hosting.md).
+
 ## Room registration and runtime lifetime
 
 At startup the server loads configured rooms and SQLite registrations through

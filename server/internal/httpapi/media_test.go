@@ -53,7 +53,7 @@ func newMediaAPITest(t *testing.T, maxMB int64) *mediaAPITest {
 			t.Fatal(err)
 		}
 	}
-	nc, err := neko.NewClient("http://127.0.0.1:1", "x")
+	nc, err := neko.NewClient("http://127.0.0.1:1", "x", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

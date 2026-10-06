@@ -1593,7 +1593,7 @@ test('admin reset link action generates a private link and copies it', async (t)
 const registeredRoom = { name: 'extra', source: 'registered', connected: false, userCount: 0 }
 const roomAddress = 'http://10.0.0.2:8080'
 const configuredRoom = { ...registeredRoom, name: 'default', source: 'configured', connected: true, userCount: 3 }
-const offlineRoom = { ...registeredRoom, name: 'home', offlineSince: Date.UTC(2026, 9, 6, 18, 0) }
+const offlineRoom = { ...registeredRoom, name: 'home', source: 'paired', offlineSince: Date.UTC(2026, 9, 6, 18, 0) }
 const roomReply = (data, status = 200) => ({ ok: status < 400, status, json: async () => data })
 // The Rooms tab refreshes itself on an interval; tests run it by hand.
 function roomRefresh(t, fetch) {
@@ -1643,7 +1643,9 @@ test('rooms list shows connection, people and links; configured rows are read-on
   assert.ok(nodes(rows[0]).find(n => n.type === 'code' && n.props.children === 'COZYCAST_ROOMS'))
   assert.equal(nodes(rows[0]).filter(n => n.type?.name === 'Button').length, 0)
   assert.deepEqual(badges(rows[1]), ['Registered', 'Connecting'])
-  assert.deepEqual(badges(rows[2]), ['Registered', 'Offline'])
+  assert.deepEqual(badges(rows[2]), ['Paired', 'Offline'])
+  // A paired room's address and token come with pairing: it can only be removed.
+  assert.deepEqual(nodes(rows[2]).filter(n => n.type?.name === 'Button').map(n => n.props.children), ['Remove'])
   const connection = nodes(rows[2]).find(n => n.type?.name === 'Connection')
   assert.ok(nodes(connection.type(connection.props)).some(n => n.props?.children?.[0] === 'since '))
   for (const [text, mode] of [['Change address', 'address'], ['New token', 'token'], ['Remove', 'remove']]) {
@@ -1664,7 +1666,7 @@ test('rooms list shows connection, people and links; configured rows are read-on
   assert.equal(named(render(), 'Spinner'), undefined)
   await settle()
   const refreshed = nodes(named(render(), 'AdminTable')).filter(n => n.type === 'tr')
-  assert.deepEqual(badges(refreshed[0]), ['Registered', 'Online'])
+  assert.deepEqual(badges(refreshed[0]), ['Paired', 'Online'])
   f.unmount()
   assert.equal(intervals.size, 0)
 })

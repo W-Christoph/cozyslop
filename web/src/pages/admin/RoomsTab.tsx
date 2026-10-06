@@ -11,6 +11,7 @@ import { Spinner } from '../../components/ui/Spinner'
 import styles from './RoomsTab.module.css'
 
 const REFRESH_MS = 10_000
+const SOURCES = { configured: 'Configured', registered: 'Registered', paired: 'Paired' } as const
 
 function Connection({ room }: { room: AdminRoom }) {
   if (room.connected) return <Badge tone="success">Online</Badge>
@@ -66,12 +67,14 @@ export function RoomsTab() {
       {!loading && rooms.length > 0 && <AdminTable headings={['Room', 'Source', 'Connection', 'People', 'Actions']}>
         {rooms.map((room) => <tr key={room.name}>
           <td><a class={styles.name} href={`/room/${encodeURIComponent(room.name)}`}>{room.name}</a></td>
-          <td data-label="Source"><Badge>{room.source === 'configured' ? 'Configured' : 'Registered'}</Badge></td>
+          <td data-label="Source"><Badge>{SOURCES[room.source]}</Badge></td>
           <td data-label="Connection"><Connection room={room} /></td>
           <td data-label="People">{room.userCount}</td>
           <td>{room.source === 'configured' ? <span class={styles.note}>Defined in <code>COZYCAST_ROOMS</code>.</span> : <div class={styles.actions}>
-            <Button size="sm" variant="ghost" onClick={() => setAction({ mode: 'address', room })} aria-label={`Change address of ${room.name}`}>Change address</Button>
-            <Button size="sm" variant="ghost" onClick={() => setAction({ mode: 'token', room })} aria-label={`New token for ${room.name}`}>New token</Button>
+            {room.source === 'registered' && <>
+              <Button size="sm" variant="ghost" onClick={() => setAction({ mode: 'address', room })} aria-label={`Change address of ${room.name}`}>Change address</Button>
+              <Button size="sm" variant="ghost" onClick={() => setAction({ mode: 'token', room })} aria-label={`New token for ${room.name}`}>New token</Button>
+            </>}
             <Button size="sm" variant="danger-ghost" onClick={() => setAction({ mode: 'remove', room })} aria-label={`Remove ${room.name}`}>Remove</Button>
           </div>}</td>
         </tr>)}

@@ -79,7 +79,7 @@ func (c *Client) watchHostOnce(ctx context.Context, onConnect func(Init), onHost
 	}
 
 	dialCtx, dialCancel := context.WithTimeout(ctx, observerTimeout)
-	conn, _, err := websocket.Dial(dialCtx, c.SocketURL(token), nil)
+	conn, _, err := websocket.Dial(dialCtx, c.SocketURL(token), &websocket.DialOptions{HTTPClient: c.stream})
 	dialCancel()
 	if err != nil {
 		return err

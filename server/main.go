@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -20,7 +21,9 @@ import (
 	"cozycast/internal/httpapi"
 	"cozycast/internal/hub"
 	"cozycast/internal/legacy"
+	"cozycast/internal/neko"
 	"cozycast/internal/store"
+	"cozycast/internal/tunnel"
 	"cozycast/webui"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -126,9 +129,15 @@ func run(args []string, out io.Writer) error {
 		slog.Info("room container control disabled")
 	}
 
-	buildRoom := func(name, nekoURL, token string) (hub.RoomConfig, error) {
-		return hub.BuildRoomConfig(name, nekoURL, token, cfg.DefaultScreen)
+	tun, err := openTunnel(ctx, db, cfg)
+	if err != nil {
+		return err
 	}
+	if tun != nil {
+		defer tun.Close()
+		go rememberEndpoints(ctx, db, tun)
+	}
+	buildRoom := roomBuilder(cfg, tun)
 	rooms, err := loadRooms(ctx, db, cfg, buildRoom)
 	if err != nil {
 		return err
@@ -159,6 +168,7 @@ func run(args []string, out io.Writer) error {
 	api := httpapi.New(httpapi.Deps{
 		BuildRoom:   buildRoom,
 		Store:       db,
+		Tunnel:      tun,
 		Auth:        auth.New(db, cfg.TrustProxy),
 		Hub:         h,
 		Web:         web,
@@ -305,7 +315,101 @@ func loadRooms(ctx context.Context, db *store.Store, cfg config.Config, build ht
 			return nil, err
 		}
 		room.Source = "registered"
+		if rc.Paired() {
+			room.Source = "paired"
+		}
 		rooms = append(rooms, room)
 	}
 	return rooms, nil
+}
+
+// roomBuilder builds rooms whose neko is reached through the tunnel when its
+// address is inside it, and directly otherwise.
+func roomBuilder(cfg config.Config, tun *tunnel.Tunnel) httpapi.RoomBuilder {
+	return func(name, nekoURL, token string) (hub.RoomConfig, error) {
+		var dial neko.DialFunc
+		if tun.Owns(nekoURL) {
+			dial = tun.DialContext
+		}
+		return hub.BuildRoomConfig(name, nekoURL, token, cfg.DefaultScreen, dial)
+	}
+}
+
+// openTunnel starts the server's end of the tunnels to paired rooms, with
+// every paired room as a peer. nil when COZYCAST_TUNNEL_PORT is not set.
+func openTunnel(ctx context.Context, db *store.Store, cfg config.Config) (*tunnel.Tunnel, error) {
+	registered, err := db.RegisteredRooms(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.TunnelPort == 0 {
+		for _, rc := range registered {
+			if rc.Paired() {
+				slog.Warn("paired room unreachable: set COZYCAST_TUNNEL_PORT", "room", rc.Name)
+			}
+		}
+		return nil, nil
+	}
+	key, err := tunnel.LoadKey(filepath.Join(cfg.DataDir, "wireguard.key"))
+	if err != nil {
+		return nil, fmt.Errorf("tunnel key: %w", err)
+	}
+	tun, err := tunnel.Open(tunnel.Config{PrivateKey: key, Port: cfg.TunnelPort,
+		Address: cfg.TunnelNet.Addr().Next(), Network: cfg.TunnelNet})
+	if err != nil {
+		return nil, err
+	}
+	for _, rc := range registered {
+		if !rc.Paired() {
+			continue
+		}
+		if err := tun.SetPeer(nodePeer(rc)); err != nil {
+			// Its room stays offline; the others still work.
+			slog.Error("paired room unusable", "room", rc.Name, "err", err)
+		}
+	}
+	slog.Info("tunnel listening", "port", tun.Port(), "address", tun.Address(), "network", tun.Network())
+	return tun, nil
+}
+
+// nodePeer is a paired room's node as a tunnel peer. A node that was seen
+// before is reachable at once, without waiting for it to reconnect.
+func nodePeer(rc store.RegisteredRoom) tunnel.Peer {
+	key, _ := tunnel.ParseKey(rc.NodeKey)
+	addr, _ := netip.ParseAddr(rc.TunnelAddress)
+	endpoint, _ := netip.ParseAddrPort(rc.NodeEndpoint)
+	return tunnel.Peer{Key: key, Address: addr, Endpoint: endpoint}
+}
+
+// rememberEndpoints stores where each node was last seen, for nodePeer after
+// a restart.
+func rememberEndpoints(ctx context.Context, db *store.Store, tun *tunnel.Tunnel) {
+	t := time.NewTicker(30 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		saveEndpoints(ctx, db, tun)
+	}
+}
+
+func saveEndpoints(ctx context.Context, db *store.Store, tun *tunnel.Tunnel) {
+	registered, err := db.RegisteredRooms(ctx)
+	if err != nil {
+		return
+	}
+	for _, rc := range registered {
+		key, err := tunnel.ParseKey(rc.NodeKey)
+		if !rc.Paired() || err != nil {
+			continue
+		}
+		if ep := tun.Endpoint(key); ep.IsValid() && ep.String() != rc.NodeEndpoint {
+			if err := db.SetNodeEndpoint(ctx, rc.Name, ep.String()); err != nil && ctx.Err() == nil {
+				slog.Warn("remember node endpoint", "room", rc.Name, "err", err)
+			}
+		}
+	}
 }

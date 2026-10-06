@@ -62,7 +62,7 @@ func TestImplicitHostingExplicitlyApplied(t *testing.T) {
 	for _, ownership := range []bool{false, true} {
 		t.Run(fmt.Sprint(ownership), func(t *testing.T) {
 			fake := nekotest.New(t, "secret")
-			nc, err := neko.NewClient(fake.URL(), "secret")
+			nc, err := neko.NewClient(fake.URL(), "secret", nil)
 			requireOK(t, err)
 			r := newRoom(nil, "main", nc)
 			r.settings.RemoteOwnership = ownership
@@ -85,7 +85,7 @@ func TestRoomScreenDefault(t *testing.T) {
 	requireOK(t, err)
 	t.Cleanup(func() { requireOK(t, s.Close()) })
 	fake := nekotest.New(t, "secret")
-	nc, err := neko.NewClient(fake.URL(), "secret")
+	nc, err := neko.NewClient(fake.URL(), "secret", nil)
 	requireOK(t, err)
 	h := New(s, t.TempDir(), []RoomConfig{{Name: "main", Neko: nc, DefaultScreen: "1280x720@30"}})
 	r := h.Room("main")

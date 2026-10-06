@@ -66,7 +66,7 @@ func TestWatchHostLiveness(t *testing.T) {
 				<-conn.CloseRead(ctx).Done()
 			}))
 			t.Cleanup(srv.Close)
-			client, err := neko.NewClient(srv.URL, "secret")
+			client, err := neko.NewClient(srv.URL, "secret", nil)
 			if err != nil {
 				t.Fatal(err)
 			}

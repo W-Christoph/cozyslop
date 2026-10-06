@@ -65,15 +65,26 @@ type RegisteredRoom struct {
 	NekoToken string `json:"-"`
 	CreatedBy *int64
 	CreatedAt int64
+	// Set for a room on another machine, connected through the tunnel
+	// ("paired"): the node's WireGuard public key and its tunnel address.
+	// NodeEndpoint is where it was last seen ("" if never).
+	NodeKey       string
+	TunnelAddress string
+	NodeEndpoint  string
 }
+
+// Paired reports whether the room is connected through the tunnel.
+func (r RegisteredRoom) Paired() bool { return r.NodeKey != "" }
 
 var ErrRoomExists = errors.New("room already registered")
 
-const registeredRoomColumns = "name, neko_url, neko_token, created_by, created_at"
+const registeredRoomColumns = "name, neko_url, neko_token, created_by, created_at, node_key, tunnel_address, node_endpoint"
 
 func scanRegisteredRoom(row interface{ Scan(...any) error }) (RegisteredRoom, error) {
 	var room RegisteredRoom
-	err := row.Scan(&room.Name, &room.NekoURL, &room.NekoToken, &room.CreatedBy, &room.CreatedAt)
+	var nodeKey, tunnelAddress, nodeEndpoint sql.NullString
+	err := row.Scan(&room.Name, &room.NekoURL, &room.NekoToken, &room.CreatedBy, &room.CreatedAt, &nodeKey, &tunnelAddress, &nodeEndpoint)
+	room.NodeKey, room.TunnelAddress, room.NodeEndpoint = nodeKey.String, tunnelAddress.String, nodeEndpoint.String
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrNotFound
 	}
@@ -103,8 +114,9 @@ func (s *Store) RegisteredRoom(ctx context.Context, name string) (RegisteredRoom
 
 func (s *Store) CreateRegisteredRoom(ctx context.Context, room *RegisteredRoom) error {
 	room.CreatedAt = s.unix()
-	_, err := s.db.ExecContext(ctx, "INSERT INTO registered_rooms ("+registeredRoomColumns+") VALUES (?, ?, ?, ?, ?)",
-		room.Name, room.NekoURL, room.NekoToken, room.CreatedBy, room.CreatedAt)
+	_, err := s.db.ExecContext(ctx, "INSERT INTO registered_rooms ("+registeredRoomColumns+") VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		room.Name, room.NekoURL, room.NekoToken, room.CreatedBy, room.CreatedAt,
+		nullString(room.NodeKey), nullString(room.TunnelAddress), nullString(room.NodeEndpoint))
 	if isUniqueViolation(err) {
 		return ErrRoomExists
 	}
@@ -113,6 +125,12 @@ func (s *Store) CreateRegisteredRoom(ctx context.Context, room *RegisteredRoom) 
 
 func (s *Store) UpdateRegisteredRoom(ctx context.Context, room RegisteredRoom) error {
 	res, err := s.db.ExecContext(ctx, "UPDATE registered_rooms SET neko_url = ?, neko_token = ? WHERE name = ?", room.NekoURL, room.NekoToken, room.Name)
+	return registeredRoomResult(res, err)
+}
+
+// SetNodeEndpoint remembers where a paired room's node was last seen.
+func (s *Store) SetNodeEndpoint(ctx context.Context, name, endpoint string) error {
+	res, err := s.db.ExecContext(ctx, "UPDATE registered_rooms SET node_endpoint = ? WHERE name = ? AND node_key IS NOT NULL", nullString(endpoint), name)
 	return registeredRoomResult(res, err)
 }
 
@@ -132,3 +150,6 @@ func registeredRoomResult(res sql.Result, err error) error {
 	}
 	return err
 }
+
+// nullString stores "" as NULL, which unique indexes ignore.
+func nullString(s string) sql.NullString { return sql.NullString{String: s, Valid: s != ""} }

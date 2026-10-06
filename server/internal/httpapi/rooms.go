@@ -10,6 +10,7 @@ import (
 	"cozycast/internal/config"
 	"cozycast/internal/hub"
 	"cozycast/internal/store"
+	"cozycast/internal/tunnel"
 )
 
 // adminRoom leaves out the neko address: it can be a home machine's, and
@@ -67,8 +68,7 @@ func (s *Server) adminCreateRoom(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Room names must contain only letters, digits, underscores or hyphens.")
 		return
 	}
-	if err := config.ValidateNekoURL(req.NekoURL); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	if !s.validNekoURL(w, req.NekoURL) {
 		return
 	}
 	s.roomMu.Lock()
@@ -107,6 +107,20 @@ func (s *Server) adminCreateRoom(w http.ResponseWriter, r *http.Request) {
 	s.writeRoomToken(w, http.StatusCreated, req.Name, token)
 }
 
+// validNekoURL checks an address an admin gives. Addresses inside the
+// tunnel belong to paired rooms, which get theirs when pairing.
+func (s *Server) validNekoURL(w http.ResponseWriter, raw string) bool {
+	if err := config.ValidateNekoURL(raw); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return false
+	}
+	if s.tunnel.Owns(raw) {
+		writeError(w, http.StatusBadRequest, "Addresses in "+s.tunnel.Network().String()+" are for paired rooms.")
+		return false
+	}
+	return true
+}
+
 // registeredRoom rejects changes to configuration-owned rooms, including
 // registrations shadowed by COZYCAST_ROOMS at startup. Caller holds roomMu.
 func (s *Server) registeredRoom(w http.ResponseWriter, r *http.Request) (store.RegisteredRoom, bool) {
@@ -122,6 +136,12 @@ func (s *Server) registeredRoom(w http.ResponseWriter, r *http.Request) (store.R
 	}
 	if err != nil {
 		s.internalError(w, r, err)
+		return room, false
+	}
+	// A paired room's address and token come with pairing; it can only be
+	// removed (and paired again).
+	if room.Paired() && r.Method != http.MethodDelete {
+		writeError(w, http.StatusConflict, "This room is connected by pairing. Remove it and pair the computer again.")
 		return room, false
 	}
 	return room, true
@@ -153,8 +173,7 @@ func (s *Server) adminChangeRoom(w http.ResponseWriter, r *http.Request) {
 		if !readJSON(w, r, &req) {
 			return
 		}
-		if err := config.ValidateNekoURL(req.NekoURL); err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+		if !s.validNekoURL(w, req.NekoURL) {
 			return
 		}
 		room.NekoURL = req.NekoURL
@@ -212,5 +231,13 @@ func (s *Server) adminDeleteRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.hub.Remove(room.Name, "not_found")
+	if room.Paired() && s.tunnel != nil {
+		// Cut the node off at once; it has to pair again.
+		if key, err := tunnel.ParseKey(room.NodeKey); err == nil {
+			if err := s.tunnel.RemovePeer(key); err != nil {
+				s.log.Error("remove tunnel peer", "room", room.Name, "err", err)
+			}
+		}
+	}
 	w.WriteHeader(http.StatusNoContent)
 }

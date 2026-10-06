@@ -130,7 +130,7 @@ leave an existing account's password unchanged.
 | `COZYCAST_ROOMS` | `default=http://room-default:8080` | `name=url,name2=url2`; configured rooms alongside database registrations; the configured list must still contain at least one room (empty uses the default) |
 | `COZYCAST_NEKO_TOKEN` | | worker only: ready neko admin token for a registered room; takes precedence over `COZYCAST_NEKO_SECRET`; both variables are removed before starting desktop processes |
 | `COZYCAST_DEFAULT_SCREEN` | | container default screen for all rooms (`1280x720@30`); Compose sets it from `SCREEN`; empty leaves the desktop size alone when clearing the room setting |
-| `COZYCAST_DATA_DIR` | `data` | database and uploaded chat media |
+| `COZYCAST_DATA_DIR` | `data` | database, uploaded chat media and the tunnel's key (`wireguard.key`) |
 | `COZYCAST_INIT_ADMIN_PASSWORD` | | creates the `admin` account on first start; sets its password with `reset-admin` |
 | `COZYCAST_LISTEN` | `:8080` | HTTP; with a domain set it only redirects and answers Let's Encrypt |
 | `COZYCAST_TLS_LISTEN` | `:8443` | HTTPS, used when a domain is set |
@@ -144,6 +144,8 @@ leave an existing account's password unchanged.
 | `COZYCAST_DOCKER_PROJECT` | | compose project name, if it cannot be detected |
 | `COZYCAST_SOURCE_URL` | this repository | source code link shown to users (AGPL) |
 | `COZYCAST_WEB_DIR` | | serve the UI from this directory instead of the embedded build |
+| `COZYCAST_TUNNEL_PORT` | | UDP port of the WireGuard tunnel to rooms on other computers ([home hosting](docs/home-hosting.md)); off when empty |
+| `COZYCAST_TUNNEL_NET` | `10.77.0.0/24` | tunnel addresses; the server takes the first, each paired room gets one |
 
 With `COZYCAST_TRUST_PROXY=true`, use exactly one proxy in front. It must
 append the client IP to `X-Forwarded-For`, and the server must not be reachable

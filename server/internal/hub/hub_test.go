@@ -129,7 +129,7 @@ func newFixtureWithRestart(t *testing.T, set store.RoomSettings, restart func(co
 		}
 		requireOK(t, s.SaveRoomSettings(ctx, settings))
 		fake := nekotest.New(t, "admin-secret")
-		nc, err := neko.NewClient(fake.URL(), "admin-secret")
+		nc, err := neko.NewClient(fake.URL(), "admin-secret", nil)
 		requireOK(t, err)
 		configs = append(configs, RoomConfig{Name: settings.Name, Neko: nc, Restart: restart})
 		fakes = append(fakes, fake)
@@ -241,7 +241,7 @@ func TestStartup(t *testing.T) {
 			defer s.Close()
 			requireOK(t, s.SaveRoomSettings(ctx, store.RoomSettings{Name: "main", Access: "public", RemoteOwnership: ownership}))
 			fake := nekotest.New(t, "secret")
-			nc, err := neko.NewClient(fake.URL(), "secret")
+			nc, err := neko.NewClient(fake.URL(), "secret", nil)
 			requireOK(t, err)
 			for _, id := range []string{"stale", neko.ObserverID} {
 				requireOK(t, nc.CreateMember(ctx, id, "old", neko.Profile{CanLogin: true}))
@@ -417,7 +417,7 @@ func TestNekoUnavailable(t *testing.T) {
 			t.Cleanup(func() { requireOK(t, s.Close()) })
 			fake := nekotest.New(t, "admin-secret")
 			// An incorrect admin token makes member creation fail at neko.
-			nc, err := neko.NewClient(fake.URL(), "wrong-secret")
+			nc, err := neko.NewClient(fake.URL(), "wrong-secret", nil)
 			requireOK(t, err)
 			h := New(s, t.TempDir(), []RoomConfig{{Name: "main", Neko: nc}})
 			r := h.Room("main")
@@ -448,7 +448,7 @@ func TestNekoUnavailable(t *testing.T) {
 func TestRuntimeRoomLifecycle(t *testing.T) {
 	f := newFixture(t, store.RoomSettings{})
 	fake := nekotest.New(t, "runtime-secret")
-	nc, err := neko.NewClient(fake.URL(), "runtime-secret")
+	nc, err := neko.NewClient(fake.URL(), "runtime-secret", nil)
 	requireOK(t, err)
 	rc := RoomConfig{Name: "added", Source: "registered", Neko: nc}
 	requireOK(t, f.h.Add(f.ctx, rc))
@@ -517,7 +517,7 @@ func TestRemoveUnreachableRoomStopsWork(t *testing.T) {
 	f := newFixture(t, store.RoomSettings{})
 	fake := nekotest.New(t, "secret")
 	fake.SetHealthy(false)
-	nc, err := neko.NewClient(fake.URL(), "secret")
+	nc, err := neko.NewClient(fake.URL(), "secret", nil)
 	requireOK(t, err)
 	requireOK(t, f.h.Add(f.ctx, RoomConfig{Name: "offline", Neko: nc}))
 	r := f.h.Room("offline")
@@ -545,7 +545,7 @@ func TestRuntimeRoomReaders(t *testing.T) {
 	f := newFixture(t, store.RoomSettings{})
 	fake := nekotest.New(t, "admin-secret")
 	fake.SetHealthy(false)
-	nc, err := neko.NewClient(fake.URL(), "admin-secret")
+	nc, err := neko.NewClient(fake.URL(), "admin-secret", nil)
 	requireOK(t, err)
 	done := make(chan struct{})
 	var readers sync.WaitGroup
@@ -580,7 +580,7 @@ func TestRuntimeRoomBecomesReachable(t *testing.T) {
 	f := newFixture(t, store.RoomSettings{})
 	fake := nekotest.New(t, "later-secret")
 	fake.SetHealthy(false)
-	nc, err := neko.NewClient(fake.URL(), "later-secret")
+	nc, err := neko.NewClient(fake.URL(), "later-secret", nil)
 	requireOK(t, err)
 	requireOK(t, f.h.Add(f.ctx, RoomConfig{Name: "later", Source: "registered", Neko: nc}))
 	r := f.h.Room("later")

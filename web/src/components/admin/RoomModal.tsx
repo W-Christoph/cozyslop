@@ -102,7 +102,7 @@ export function RoomModal({ action, onClose, onSaved, onRemoved }: {
         <p>Replace the token for {name}? The current token will stop working and people in the room are disconnected.</p>
         <p>The room’s container must be restarted with the new token.</p>
       </> : <>
-        <p>Remove {name}? People in the room are disconnected.</p>
+        <p>Remove {name}? People in the room are disconnected.{action.room.source === 'paired' && ' Its computer is cut off and has to pair again.'}</p>
         <p>Chat history, settings and permissions are kept and return if a room with this name is added again.</p>
       </>}
       {error && <Notice tone="error">{error}</Notice>}

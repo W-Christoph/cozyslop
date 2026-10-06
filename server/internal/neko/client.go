@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -49,22 +50,46 @@ type Client struct {
 	base      *url.URL
 	token     string
 	http      *http.Client
+	transport http.RoundTripper
+	stream    *http.Client // for WebSockets: no overall timeout
 }
 
-func NewClient(baseURL, apiToken string) (*Client, error) {
+// DialFunc opens connections to neko, e.g. through a tunnel.
+type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+
+// NewClient talks to the neko at baseURL. With dial, every connection to
+// it (API, WebSockets, file transfers, the desktop's helpers) goes through
+// dial instead of the network, and never through an HTTP proxy.
+func NewClient(baseURL, apiToken string, dial DialFunc) (*Client, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("neko: invalid base url %q: %w", baseURL, err)
 	}
+	transport := http.DefaultTransport
+	if dial != nil {
+		transport = &http.Transport{
+			DialContext:         dial,
+			MaxIdleConnsPerHost: 4,
+			IdleConnTimeout:     90 * time.Second,
+		}
+	}
 	return &Client{
-		base:  u,
-		token: apiToken,
-		http:  &http.Client{Timeout: 10 * time.Second},
+		base:      u,
+		token:     apiToken,
+		http:      &http.Client{Timeout: 10 * time.Second, Transport: transport},
+		transport: transport,
+		stream:    &http.Client{Transport: transport},
 	}, nil
 }
 
 // BaseURL is the neko server address, used by the reverse proxy.
 func (c *Client) BaseURL() *url.URL { return c.base }
+
+// Transport reaches this neko and the desktop's helpers next to it.
+func (c *Client) Transport() http.RoundTripper { return c.transport }
+
+// StreamClient is for WebSockets to this neko.
+func (c *Client) StreamClient() *http.Client { return c.stream }
 
 func (c *Client) CreateMember(ctx context.Context, id, password string, p Profile) error {
 	body := map[string]any{"username": id, "password": password, "profile": p}

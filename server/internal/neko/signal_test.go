@@ -54,7 +54,7 @@ func TestSocketURL(t *testing.T) {
 		"http://room-default:8080":  "ws://room-default:8080/api/ws?token=a+b%26c",
 		"https://neko.example/base": "wss://neko.example/base/api/ws?token=a+b%26c",
 	} {
-		c, err := NewClient(base, "secret")
+		c, err := NewClient(base, "secret", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -84,7 +84,7 @@ func TestAdminTokenRedactedFromErrors(t *testing.T) {
 		http.Error(w, "bad authorization: "+r.Header.Get("Authorization"), http.StatusForbidden)
 	}))
 	defer srv.Close()
-	client, err := NewClient(srv.URL, token)
+	client, err := NewClient(srv.URL, token, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -90,6 +90,7 @@ func (s *Server) nekoProxy(w http.ResponseWriter, r *http.Request) {
 	r = r.WithContext(ctx)
 	target := rm.Neko().BaseURL()
 	proxy := &httputil.ReverseProxy{
+		Transport: rm.Neko().Transport(),
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(target)
 			pr.Out.URL.Path = strings.TrimSuffix(target.Path, "/") + "/" + path
@@ -144,7 +145,7 @@ func (s *Server) nekoSocket(w http.ResponseWriter, r *http.Request, rm *hub.Room
 	defer detach()
 
 	dialCtx, stop := context.WithTimeout(ctx, nekoDialTimeout)
-	up, _, err := websocket.Dial(dialCtx, rm.Neko().SocketURL(token), nil)
+	up, _, err := websocket.Dial(dialCtx, rm.Neko().SocketURL(token), &websocket.DialOptions{HTTPClient: rm.Neko().StreamClient()})
 	stop()
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "The room's desktop is not reachable right now.")

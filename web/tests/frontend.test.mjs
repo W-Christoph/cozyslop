@@ -797,6 +797,30 @@ test('desktop releases outside the overlay, including chorded mouse buttons', (t
   assert.equal(sent.filter(([op]) => op === 6).length, 2)
 })
 
+test('input goes on the data channel, or over the WebSocket without one', (t) => {
+  const neko = new NekoClient(), binary = [], json = []
+  neko.ws = { readyState: 1, send: (text) => json.push(JSON.parse(text)) }
+  globals(t, { WebSocket: { OPEN: 1 } })
+  const all = () => {
+    neko.move(10, 20); neko.scroll(0, -2, true); neko.buttonDown(1); neko.buttonUp(1); neko.keyDown(0x61); neko.keyUp(0x61)
+  }
+  neko.channel = { readyState: 'open', send(buffer) { binary.push(new DataView(buffer).getUint8(0)) } }
+  all()
+  assert.deepEqual(binary, [1, 2, 5, 6, 3, 4])
+  assert.deepEqual(json, [])
+  neko.channel = undefined
+  all()
+  assert.deepEqual(json, [
+    { event: 'control/move', payload: { x: 10, y: 20 } },
+    { event: 'control/scroll', payload: { delta_x: 0, delta_y: -2, control_key: true } },
+    { event: 'control/buttondown', payload: { code: 1 } },
+    { event: 'control/buttonup', payload: { code: 1 } },
+    { event: 'control/keydown', payload: { keysym: 0x61 } },
+    { event: 'control/keyup', payload: { keysym: 0x61 } },
+  ])
+  assert.equal(binary.length, 6, 'nothing more on the channel')
+})
+
 test('the desktop file list keeps well-formed entries, and download addresses are escaped', async () => {
   const neko = new NekoClient()
   const lists = []

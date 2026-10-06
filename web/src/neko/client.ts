@@ -1,5 +1,6 @@
 // Minimal client for the neko v3 protocol: WebSocket signalling, one WebRTC
-// peer for audio/video, and a data channel for low-latency input.
+// peer for audio/video, and a data channel for low-latency input (the
+// WebSocket carries input when there is no data channel).
 // Based on demodesk/neko-client (Apache-2.0), without Vue or a state store.
 
 import { Emitter } from './emitter'
@@ -128,29 +129,29 @@ export class NekoClient extends Emitter<NekoEvents> {
   }
 
   move(x: number, y: number) {
-    this.sendInput(OP_MOVE, 4, (v) => {
+    this.input(OP_MOVE, 4, (v) => {
       v.setUint16(3, x)
       v.setUint16(5, y)
-    })
+    }, 'control/move', { x, y })
   }
 
   scroll(deltaX: number, deltaY: number, controlKey = false) {
-    this.sendInput(OP_SCROLL, 5, (v) => {
+    this.input(OP_SCROLL, 5, (v) => {
       v.setInt16(3, deltaX)
       v.setInt16(5, deltaY)
       v.setUint8(7, controlKey ? 1 : 0)
-    })
+    }, 'control/scroll', { delta_x: deltaX, delta_y: deltaY, control_key: controlKey })
   }
 
   // button: 1 = left, 2 = middle, 3 = right (X11 numbering)
   buttonDown(button: number) {
     this.heldButtons.add(button)
-    this.sendInput(OP_BTN_DOWN, 4, (v) => v.setUint32(3, button))
+    this.input(OP_BTN_DOWN, 4, (v) => v.setUint32(3, button), 'control/buttondown', { code: button })
   }
 
   buttonUp(button: number) {
     if (!this.heldButtons.delete(button)) return
-    this.sendInput(OP_BTN_UP, 4, (v) => v.setUint32(3, button))
+    this.input(OP_BTN_UP, 4, (v) => v.setUint32(3, button), 'control/buttonup', { code: button })
   }
 
   releaseButtons() {
@@ -158,11 +159,11 @@ export class NekoClient extends Emitter<NekoEvents> {
   }
 
   keyDown(keysym: number) {
-    this.sendInput(OP_KEY_DOWN, 4, (v) => v.setUint32(3, keysym))
+    this.input(OP_KEY_DOWN, 4, (v) => v.setUint32(3, keysym), 'control/keydown', { keysym })
   }
 
   keyUp(keysym: number) {
-    this.sendInput(OP_KEY_UP, 4, (v) => v.setUint32(3, keysym))
+    this.input(OP_KEY_UP, 4, (v) => v.setUint32(3, keysym), 'control/keyup', { keysym })
   }
 
   // Switch the running stream to another capture pipeline. renew starts a
@@ -370,8 +371,15 @@ export class NekoClient extends Emitter<NekoEvents> {
     }
   }
 
-  private sendInput(op: number, length: number, write: (v: DataView) => void) {
-    if (this.channel?.readyState !== 'open') return
+  // Input goes on the data channel when there is one: it skips the queue
+  // behind other WebSocket messages and a lost packet only delays itself.
+  // Without one (it failed, or media comes from a relay that has none) the
+  // same event goes over the WebSocket, which neko handles alike.
+  private input(op: number, length: number, write: (v: DataView) => void, event: string, payload: unknown) {
+    if (this.channel?.readyState !== 'open') {
+      this.send(event, payload)
+      return
+    }
     const buf = new ArrayBuffer(3 + length)
     const view = new DataView(buf)
     view.setUint8(0, op)

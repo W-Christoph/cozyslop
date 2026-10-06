@@ -335,7 +335,10 @@ peer connection to neko, so input needs another path. Two options:
    (a UDP forward of the room's media port), only for the data channel. More
    moving parts.
 
-Start with 1.
+Start with 1. Built: without an open data channel the client sends every
+input event over the WebSocket (`control/move`, `scroll`, `buttondown`,
+`buttonup`, `keydown`, `keyup`); checked against neko in the sandbox (the
+pointer moved with no WebRTC connection at all).
 
 ## Hardware (node)
 

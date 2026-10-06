@@ -39,6 +39,8 @@ export class RoomStore {
   readonly stream = signal<MediaStream | null>(null)
   readonly error = signal<string | null>(null)
   readonly kicked = signal<Kick | null>(null)
+  // The server says the room's desktop is gone; it says when it is back.
+  readonly desktopOffline = signal(false)
 
   // room
   readonly self = signal<User | null>(null)
@@ -74,6 +76,7 @@ export class RoomStore {
   private fileActions: { action: 'delete' | 'play'; name: string; done: (error: string) => void }[] = []
   private nekoRetryMs = NEKO_RETRY_MS
   private nekoFailures = 0
+  private nekoUnavailable = '' // the server's last "desktop not reachable" text
   private typingTimers = new Map<string, number>()
 
   constructor(
@@ -288,7 +291,8 @@ export class RoomStore {
 
   private retryNekoToken() {
     window.clearTimeout(this.nekoRetry)
-    if (this.paused.value || this.server.value !== 'connected' || this.kicked.value) return
+    // While the desktop is offline the server's "online" brings the retry.
+    if (this.paused.value || this.server.value !== 'connected' || this.kicked.value || this.desktopOffline.value) return
     if (++this.nekoFailures >= NEKO_FAILURES_BEFORE_NOTICE && !this.restarting.value) {
       this.error.value = NEKO_FAILURE_NOTICE
     }
@@ -315,8 +319,27 @@ export class RoomStore {
           this.remoteHolder.value = msg.remote
           this.windowTitle.value = msg.windowTitle ?? ''
           this.restartAvailable.value = msg.restart
+          this.desktopOffline.value = msg.desktop === 'offline'
           this.error.value = null
         })
+        break
+      case 'desktop':
+        if (msg.state === 'offline') {
+          batch(() => {
+            this.desktopOffline.value = true
+            // The offline notice replaces the video's connection errors.
+            if (this.error.value === NEKO_FAILURE_NOTICE || this.error.value === this.nekoUnavailable) this.error.value = null
+          })
+          window.clearTimeout(this.nekoRetry)
+          break
+        }
+        this.desktopOffline.value = false
+        this.nekoRetryMs = NEKO_RETRY_MS
+        this.nekoFailures = 0
+        window.clearTimeout(this.nekoRetry)
+        if (!this.paused.value && !this.kicked.value && this.neko.status === 'disconnected') {
+          this.socket.send({ type: 'neko_token' })
+        }
         break
       case 'neko':
         window.clearTimeout(this.nekoRetry)
@@ -405,7 +428,8 @@ export class RoomStore {
         if (msg.reason === 'session') void refreshMe().catch(() => {})
         break
       case 'neko_unavailable':
-        this.error.value = msg.message
+        this.nekoUnavailable = msg.message
+        if (!this.desktopOffline.value) this.error.value = msg.message
         this.retryNekoToken()
         break
       case 'error':

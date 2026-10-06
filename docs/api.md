@@ -147,7 +147,7 @@ All endpoints use the usual admin authentication and JSON error format.
 
 | Endpoint | Body | Success | Errors |
 |---|---|---|---|
-| `GET /api/admin/rooms` | None | 200 sorted array of `{name,source,connected,userCount}` for all live rooms; source is `configured` or `registered`; connected means the authenticated neko event stream is working; no tokens or addresses | Common admin errors |
+| `GET /api/admin/rooms` | None | 200 sorted array of `{name,source,connected,offlineSince?,userCount}` for all live rooms; source is `configured` or `registered`; connected means the authenticated neko event stream is working; `offlineSince` (unix ms) is present while viewers are told the desktop is offline; no tokens or addresses | Common admin errors |
 | `POST /api/admin/rooms` | `{"name":"extra","nekoUrl":"http://room-extra:8080"}` | 201 room fields above plus `nekoToken`, returned once | 400 invalid name/URL; 409 `"That room already exists."` (including configured names) |
 | `PATCH /api/admin/rooms/{room}` | `{"nekoUrl":"https://neko.example/prefix"}` | 200 room fields, no token; replaces connection immediately | 400 invalid URL; 404 `"Unknown room."`; 409 configured room |
 | `POST /api/admin/rooms/{room}/token` | None | 200 room fields plus a fresh `nekoToken`, returned once; replaces connection immediately | 404 unknown; 409 configured room |
@@ -260,6 +260,13 @@ because neko failed sends `{"type":"neko_unavailable","message":"..."}`
 with a user-facing explanation. Clients can retry the token request while
 keeping the chat connection. A successful request sends the usual `neko`
 message with `token` and `path`.
+
+`welcome.desktop` is `"online"` or `"offline"`. When the room's neko has been
+unreachable for 5 seconds the server broadcasts
+`{"type":"desktop","state":"offline"}`, and `{"type":"desktop","state":"online"}`
+as soon as it is back. While offline, token requests get the `offline` message
+again instead of `neko_unavailable`; clients wait for `online` and then ask
+for a token. Chat and everything else keep working.
 
 See [the protocol definitions](../server/internal/hub/protocol.go) for message
 fields and types. Admission and effective rights are described in

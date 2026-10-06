@@ -49,8 +49,16 @@ type welcomeMsg struct {
 	History  []ChatMessage      `json:"history"` // oldest first; replaces what the browser had
 	Remote   *string            `json:"remote"`  // identity key of the remote holder
 	Restart  bool               `json:"restart"` // the room can be restarted (admins, trusted)
+	Desktop  string             `json:"desktop"` // "online" | "offline"
 	// Title of the window in front on the desktop; "" if unknown.
 	WindowTitle string `json:"windowTitle"`
+}
+
+// desktopMsg says the room's desktop went offline or came back. Offline tabs
+// wait for "online" instead of asking for neko tokens.
+type desktopMsg struct {
+	Type  string `json:"type"`  // "desktop"
+	State string `json:"state"` // "online" | "offline"
 }
 
 type windowTitleMsg struct {

@@ -194,7 +194,15 @@ the room's value during preparation and after every observer reconnect,
 including turning it on for rooms without remote ownership. The observer
 has a 10-second dial deadline, requires `system/init` within 10 seconds,
 and pings every 20 seconds with a 10-second deadline. Failed connections
-reconnect with backoff; healthy quiet connections have no read deadline.
+reconnect with backoff (1 s doubling to 10 s); healthy quiet connections have
+no read deadline.
+
+When the observer has been gone for 5 seconds (or the room never reached neko
+within 5 seconds of starting), the room tells every tab the desktop is offline
+(`desktop` message, `welcome.desktop`) and stops issuing neko tokens; shorter
+drops stay silent. The observer's next successful connect announces it online
+again, and tabs ask for a token at once instead of waiting for their backoff.
+Admins see the time it went offline in the Rooms tab.
 
 ## Room registration and runtime lifetime
 

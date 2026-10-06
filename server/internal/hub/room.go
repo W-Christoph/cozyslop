@@ -74,6 +74,13 @@ type Room struct {
 	title    string // of the window in front on the desktop
 
 	playURL, playToken string // the desktop's helper that plays files; set before run
+
+	// The desktop as tabs were told: offline once neko has been gone for
+	// offlineGrace. offlineSince is when it was lost (or the room started);
+	// offlineGen cancels a pending announcement.
+	offline      bool
+	offlineSince time.Time
+	offlineGen   int
 }
 
 // member is one person in the room, with all their tabs.
@@ -146,6 +153,7 @@ func (r *Room) UserCount() int {
 
 // run prepares neko and follows the remote until ctx ends.
 func (r *Room) run(ctx context.Context) {
+	r.desktopLost()
 	for {
 		if r.neko.Healthy(ctx) {
 			err := r.prepareNeko(ctx)
@@ -179,8 +187,66 @@ func (r *Room) run(ctx context.Context) {
 		r.broadcastLocked(settingsMsg{Type: "room_settings", Settings: r.publicSettingsLocked()}, nil)
 		r.pinStreamLocked(stream)
 		r.mu.Unlock()
+		r.desktopFound()
 		r.reapplyNekoSettings(ctx)
-	}, r.setHost)
+	}, r.desktopLost, r.setHost)
+}
+
+// offlineGrace is how long neko may be gone before tabs are told the
+// desktop is offline, so that short drops stay silent. A variable for tests.
+var offlineGrace = 5 * time.Second
+
+// desktopLost tells the tabs the desktop is offline unless neko is back
+// within offlineGrace.
+func (r *Room) desktopLost() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.offline {
+		r.offlineSince = time.Now()
+	}
+	r.offlineGen++
+	gen := r.offlineGen
+	time.AfterFunc(offlineGrace, func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if gen != r.offlineGen || r.offline {
+			return
+		}
+		r.offline = true
+		r.log.Warn("desktop offline")
+		r.broadcastLocked(desktopMsg{Type: "desktop", State: "offline"}, nil)
+	})
+}
+
+// desktopFound tells the tabs the desktop is back, if they heard it was gone.
+func (r *Room) desktopFound() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.offlineGen++
+	if !r.offline {
+		return
+	}
+	r.offline = false
+	r.log.Info("desktop online")
+	r.broadcastLocked(desktopMsg{Type: "desktop", State: "online"}, nil)
+}
+
+// OfflineSince is when the desktop went away, if tabs were told it is
+// offline; zero otherwise.
+func (r *Room) OfflineSince() time.Time {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.offline {
+		return time.Time{}
+	}
+	return r.offlineSince
+}
+
+func (r *Room) desktopStateLocked() string {
+	if r.offline {
+		return "offline"
+	}
+	return "online"
 }
 
 // titleInterval is how often the desktop is asked which window is in front.
@@ -474,6 +540,7 @@ func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
 		History:  r.toChat(history),
 		Remote:   r.holderLocked(),
 		Restart:  r.restart != nil,
+		Desktop:  r.desktopStateLocked(),
 
 		WindowTitle: r.title,
 	})

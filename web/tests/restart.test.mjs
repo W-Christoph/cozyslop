@@ -236,6 +236,43 @@ for (const reason of ['not_found', 'session', 'kicked', 'banned', 'account', 've
   })
 }
 
+test('an offline desktop stops retries and its errors; online asks for a token at once', (t) => {
+  const { store, room, tick, timers, welcome, delays } = fixture(t)
+  welcome(false)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    room.message({ type: 'neko_unavailable', message: 'Desktop unavailable.' })
+    tick()
+  }
+  assert.match(store.error.value, /still trying/)
+  room.message({ type: 'desktop', state: 'offline' })
+  assert.equal(store.desktopOffline.value, true)
+  assert.equal(store.error.value, null)
+  assert.equal(timers.size, 0)
+  room.message({ type: 'neko_unavailable', message: 'Desktop unavailable.' })
+  store.neko.emit('closed')
+  assert.equal(timers.size, 0)
+  assert.equal(store.error.value, null)
+  room.sent.length = 0
+  delays.length = 0
+  room.message({ type: 'desktop', state: 'online' })
+  assert.equal(store.desktopOffline.value, false)
+  assert.deepEqual(room.sent, [{ type: 'neko_token' }])
+  // Backoff starts over after the desktop came back.
+  room.message({ type: 'neko_unavailable', message: 'Desktop unavailable.' })
+  assert.deepEqual(delays, [1500])
+})
+
+test('the desktop state comes from welcome; offline keeps unrelated errors', (t) => {
+  const { store, room, welcome } = fixture(t)
+  room.message({ type: 'welcome', desktop: 'offline', self: { key: 'u:1' }, rights: {}, settings: {}, users: [], history: [], remote: null })
+  assert.equal(store.desktopOffline.value, true)
+  welcome(false)
+  assert.equal(store.desktopOffline.value, false)
+  room.message({ type: 'error', message: 'Action denied.' })
+  room.message({ type: 'desktop', state: 'offline' })
+  assert.equal(store.error.value, 'Action denied.')
+})
+
 test('room close immediately clears a pending desktop retry', (t) => {
   const { room, timers } = fixture(t)
   room.message({ type: 'neko_unavailable', message: 'Desktop unavailable.' })

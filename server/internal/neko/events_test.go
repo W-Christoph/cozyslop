@@ -75,7 +75,7 @@ func TestWatchHostLiveness(t *testing.T) {
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
-				client.WatchHost(ctx, func(init neko.Init) { connected <- init }, func(host string) { hosts <- host })
+				client.WatchHost(ctx, func(init neko.Init) { connected <- init }, func() {}, func(host string) { hosts <- host })
 			}()
 			t.Cleanup(func() {
 				cancel()

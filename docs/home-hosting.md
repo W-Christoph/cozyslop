@@ -1,6 +1,6 @@
 # Home hosting (planned)
 
-A planned feature; nothing here is built yet. Someone lends a computer at
+A planned feature, built in steps (see Build order; step 1 is done). Someone lends a computer at
 home to run a room. The main server (the hub, on a VPS) does everything
 else: viewers, and the websites the room opens, only ever see the hub's
 address. The home network and IP address stay hidden, and the home needs
@@ -196,7 +196,11 @@ The room cannot reach the home router, other devices or the host PC
   media port (UDP and TCP, public) to the room's neko through the tunnel.
   neko announces the hub's IP (`NEKO_WEBRTC_NAT1TO1`) and that port, so
   viewers connect to the hub. Each viewer's stream still crosses the home
-  upload (viewers × bitrate) until the relay.
+  upload (viewers × bitrate) until the relay. This is neko's own documented
+  setup for SSH port forwarding ([networking](https://neko.m1k1o.net/docs/v3/customization/networking)):
+  `NAT1TO1` set to the address viewers use, one multiplexed port forwarded.
+  Its examples also set `NEKO_WEBRTC_ICELITE=1`, which suits a room that
+  only ever announces the hub's address; to be tested for paired rooms.
 
 ## When something goes offline
 
@@ -206,7 +210,7 @@ Nothing here needs anyone to do anything; everything retries forever.
 |---|---|
 | Home network drops, PC sleeps, home IP changes | WireGuard keepalive (25 s) re-establishes the tunnel when the network is back; roaming is built in. |
 | Agent crashes or restarts | Docker restarts it; the namespace (`net`) and the room keep running; the agent recreates the tunnel and rules. The room has no network in between. |
-| Room container restarts | The hub's existing reconnect (`neko.WatchHost`, backoff up to 30 s) picks it up. |
+| Room container restarts | The hub's existing reconnect (`neko.WatchHost`, backoff up to 10 s) picks it up. |
 | Hub restarts | Peers are loaded from the database; nodes reconnect with their next keepalive. |
 | Node never comes back | The room shows offline; an admin can remove it, or accept a new request as its replacement. |
 
@@ -377,7 +381,7 @@ addresses: the room browses from the VPS either way.
 
 Each step works on its own and is tested before the next.
 
-1. **Offline handling.** The `desktop` messages, the offline notice, an
+1. **Offline handling** (done). The `desktop` messages, the offline notice, an
    immediate reconnect, and online/offline in the Rooms tab. Useful for
    every deployment. Done when stopping and starting a room container
    shows offline and then brings the picture back by itself.

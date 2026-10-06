@@ -18,11 +18,18 @@ type adminRoom struct {
 	Name      string `json:"name"`
 	Source    string `json:"source"`
 	Connected bool   `json:"connected"`
-	UserCount int    `json:"userCount"`
+	// Unix ms since when viewers are told the desktop is offline; absent
+	// while it is online or only briefly gone.
+	OfflineSince int64 `json:"offlineSince,omitempty"`
+	UserCount    int   `json:"userCount"`
 }
 
 func toAdminRoom(r *hub.Room) adminRoom {
-	return adminRoom{r.Name, r.Source, r.Neko().Connected(), r.UserCount()}
+	var since int64
+	if t := r.OfflineSince(); !t.IsZero() {
+		since = t.UnixMilli()
+	}
+	return adminRoom{r.Name, r.Source, r.Neko().Connected(), since, r.UserCount()}
 }
 
 func newRoomToken() (string, error) {

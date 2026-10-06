@@ -42,15 +42,21 @@ type Init struct {
 // WatchHost calls onHost with the neko session id of the remote holder
 // ("" = nobody) whenever it changes, until ctx ends. It reconnects on its own
 // and calls onConnect after every successful (re)connect, which is also the
-// first sign that neko may have restarted and lost its runtime settings.
-func (c *Client) WatchHost(ctx context.Context, onConnect func(Init), onHost func(hostID string)) {
+// first sign that neko may have restarted and lost its runtime settings, and
+// onDisconnect when a connected stream ends. Retries back off to 10 s at
+// most, so a desktop that comes back is noticed soon.
+func (c *Client) WatchHost(ctx context.Context, onConnect func(Init), onDisconnect func(), onHost func(hostID string)) {
 	log := slog.With("neko", c.base.Host)
 	backoff := time.Second
 	for ctx.Err() == nil {
 		start := time.Now()
-		err := c.watchHostOnce(ctx, onConnect, onHost)
+		up := false
+		err := c.watchHostOnce(ctx, func(init Init) { up = true; onConnect(init) }, onHost)
 		if ctx.Err() != nil {
 			return
+		}
+		if up {
+			onDisconnect()
 		}
 		log.Warn("neko event stream ended, reconnecting", "err", err)
 		if time.Since(start) > time.Minute {
@@ -61,7 +67,7 @@ func (c *Client) WatchHost(ctx context.Context, onConnect func(Init), onHost fun
 			return
 		case <-time.After(backoff):
 		}
-		backoff = min(backoff*2, 30*time.Second)
+		backoff = min(backoff*2, 10*time.Second)
 	}
 }
 

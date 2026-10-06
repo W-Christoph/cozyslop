@@ -10,6 +10,17 @@ import { Section } from '../../components/ui/Section'
 import { Spinner } from '../../components/ui/Spinner'
 import styles from './RoomsTab.module.css'
 
+const REFRESH_MS = 10_000
+
+function Connection({ room }: { room: AdminRoom }) {
+  if (room.connected) return <Badge tone="success">Online</Badge>
+  if (!room.offlineSince) return <Badge>Connecting</Badge>
+  return <>
+    <Badge tone="warning">Offline</Badge>{' '}
+    <span class={styles.note}>since {new Date(room.offlineSince).toLocaleString()}</span>
+  </>
+}
+
 export function RoomsTab() {
   const [rooms, setRooms] = useState<AdminRoom[]>([]),
     [error, setError] = useState(''),
@@ -31,7 +42,13 @@ export function RoomsTab() {
     })
     return () => { active = false }
   }, [refresh])
-
+  // Keep connection states current without the loading spinner.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void adminRooms.list().then(setRooms).catch(() => {})
+    }, REFRESH_MS)
+    return () => window.clearInterval(timer)
+  }, [])
   function saved(room: AdminRoom) {
     setRooms((list) => [...list.filter((r) => r.name !== room.name), room].sort((a, b) => a.name.localeCompare(b.name)))
     setMessage(`${room.name} ${action?.mode === 'add' ? 'added' : 'updated'}.`)
@@ -50,7 +67,7 @@ export function RoomsTab() {
         {rooms.map((room) => <tr key={room.name}>
           <td><a class={styles.name} href={`/room/${encodeURIComponent(room.name)}`}>{room.name}</a></td>
           <td data-label="Source"><Badge>{room.source === 'configured' ? 'Configured' : 'Registered'}</Badge></td>
-          <td data-label="Connection"><Badge tone={room.connected ? 'success' : 'warning'}>{room.connected ? 'Connected' : 'Not reachable'}</Badge></td>
+          <td data-label="Connection"><Connection room={room} /></td>
           <td data-label="People">{room.userCount}</td>
           <td>{room.source === 'configured' ? <span class={styles.note}>Defined in <code>COZYCAST_ROOMS</code>.</span> : <div class={styles.actions}>
             <Button size="sm" variant="ghost" onClick={() => setAction({ mode: 'address', room })} aria-label={`Change address of ${room.name}`}>Change address</Button>

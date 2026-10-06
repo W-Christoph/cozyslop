@@ -18,9 +18,12 @@ export function VideoArea({ disconnected, error, fullscreen }: { disconnected: b
   const paused = store.paused.value
   const restarting = store.restarting.value
   const loading = restarting !== null || store.server.value !== 'connected' || store.video.value !== 'connected'
+  const offline = store.desktopOffline.value
   const title = disconnected ? 'Connection lost' : restarting !== null ? `${restarting} restarted the room`
-    : store.server.value !== 'connected' ? 'Connecting to server…' : 'Connecting to the desktop…'
-  const detail = store.error.value ?? (disconnected || restarting !== null ? 'Reconnecting…' : '')
+    : store.server.value !== 'connected' ? 'Connecting to server…'
+    : offline ? 'The room’s desktop is offline' : 'Connecting to the desktop…'
+  const detail = store.error.value ?? (disconnected || restarting !== null ? 'Reconnecting…'
+    : offline ? 'It reconnects by itself when it is back. Chat still works.' : '')
   const play = () => {
     if (store.paused.value) {
       store.resume()

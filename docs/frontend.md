@@ -106,8 +106,9 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
 
 ## Admin rooms
 
-The Rooms tab at `/admin/rooms` lists room sources, connection state and
-people counts. Neko addresses are never shown: Change address starts empty. Admins can register a room, change its address, rotate
+The Rooms tab at `/admin/rooms` lists room sources, connection state (Online,
+Connecting, or Offline since a time) and people counts, refreshed every 10
+seconds. Neko addresses are never shown: Change address starts empty. Admins can register a room, change its address, rotate
 its token or remove it; configured rooms are read-only and refer to
 `COZYCAST_ROOMS`. Add and New token show the secret only in the issuing modal,
 with copy buttons for the token and the container's `COZYCAST_ROOM` /
@@ -182,6 +183,9 @@ Content Security Policy on reset page loads.
 - Admins register and manage room connections in the Rooms tab; container
   creation and startup remain separate.
 - Bans and kicks arrive as a `kicked` message with a reason; show the reason.
+- When the server says the desktop is offline, the video area says so ("It
+  reconnects by itself when it is back. Chat still works.") and the store
+  stops its token retries; `online` brings an immediate token request.
   Removing a room uses `not_found`; changing a registered room's connection
   uses `room_changed`, with a message to reopen the room. Both are terminal.
 - Uploading files into the desktop is a separate permission (`rights.upload`);

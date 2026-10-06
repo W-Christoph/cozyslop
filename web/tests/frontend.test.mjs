@@ -922,6 +922,7 @@ test('the video area keeps one loading indicator through session, server and des
     neko: { screen: { width: 1280, height: 720 } }, rights: { value: { upload: false } },
     paused: { value: false }, restarting: { value: null }, error: { value: null },
     server: { value: 'connecting' }, video: { value: 'disconnected' }, audioOnly: { value: false },
+    desktopOffline: { value: false },
   }
   const render = (disconnected = false) => f.render(VideoArea, { disconnected, error: '', fullscreen: false })
   const status = (node) => nodes(node).filter((n) => n.props?.role === 'status')
@@ -939,6 +940,11 @@ test('the video area keeps one loading indicator through session, server and des
   assert.equal(desktop[0].props.class, initial[0].props.class)
   assert.equal(desktop[0].props.children[0].props.src, '/svg/loading-cozy.svg')
   assert.equal(desktop[0].props.children[1].props.children, 'Connecting to the desktop…')
+  f.store.desktopOffline.value = true
+  const offline = status(render())[0]
+  assert.equal(offline.props.children[1].props.children, 'The room’s desktop is offline')
+  assert.match(offline.props.children[2].props.children, /by itself.*Chat still works/)
+  f.store.desktopOffline.value = false
   f.store.video.value = 'connected'
   assert.equal(status(render()).length, 0)
   f.store.server.value = 'connecting'
@@ -1587,7 +1593,18 @@ test('admin reset link action generates a private link and copies it', async (t)
 const registeredRoom = { name: 'extra', source: 'registered', connected: false, userCount: 0 }
 const roomAddress = 'http://10.0.0.2:8080'
 const configuredRoom = { ...registeredRoom, name: 'default', source: 'configured', connected: true, userCount: 3 }
+const offlineRoom = { ...registeredRoom, name: 'home', offlineSince: Date.UTC(2026, 9, 6, 18, 0) }
 const roomReply = (data, status = 200) => ({ ok: status < 400, status, json: async () => data })
+// The Rooms tab refreshes itself on an interval; tests run it by hand.
+function roomRefresh(t, fetch) {
+  const intervals = new Map()
+  let id = 0
+  globals(t, { fetch, window: {
+    setInterval(fn, ms) { intervals.set(++id, [fn, ms]); return id },
+    clearInterval(timer) { intervals.delete(timer) },
+  } })
+  return intervals
+}
 const formSubmit = (node) => nodes(node).find(n => n.type === 'form').props.onSubmit({ preventDefault() {} })
 const fieldInput = (node, label) => named(nodes(node).find(n => n.type?.name === 'Field' && n.props.label === label), 'Input')
 
@@ -1609,21 +1626,26 @@ test('admin Rooms route selects the tab and keeps the admin guard', (t) => {
 
 test('rooms list shows connection, people and links; configured rows are read-only; refresh reloads', async (t) => {
   const f = fixture(t), requests = []
-  globals(t, { fetch: async (path, init) => {
+  let list = [configuredRoom, registeredRoom, offlineRoom]
+  const intervals = roomRefresh(t, async (path, init) => {
     requests.push([path, init.method])
-    return roomReply([configuredRoom, registeredRoom])
-  } })
+    return roomReply(list)
+  })
   const render = () => f.render(RoomsTab)
   assert.ok(named(render(), 'Spinner'))
   await settle()
   const table = named(render(), 'AdminTable'), rows = nodes(table).filter(n => n.type === 'tr')
   assert.deepEqual(table.props.headings, ['Room', 'Source', 'Connection', 'People', 'Actions'])
-  assert.deepEqual(rows.map(row => nodes(row).find(n => n.type === 'a').props.href), ['/room/default', '/room/extra'])
-  assert.deepEqual(nodes(rows[0]).filter(n => n.type?.name === 'Badge').map(n => n.props.children), ['Configured', 'Connected'])
+  assert.deepEqual(rows.map(row => nodes(row).find(n => n.type === 'a').props.href), ['/room/default', '/room/extra', '/room/home'])
+  const badges = (row) => nodes(row).flatMap(n => n.type?.name === 'Connection' ? nodes(n.type(n.props)) : [n]).filter(n => n.type?.name === 'Badge').map(n => n.props.children)
+  assert.deepEqual(badges(rows[0]), ['Configured', 'Online'])
   assert.equal(nodes(rows[0]).find(n => n.props?.['data-label'] === 'People').props.children, 3)
   assert.ok(nodes(rows[0]).find(n => n.type === 'code' && n.props.children === 'COZYCAST_ROOMS'))
   assert.equal(nodes(rows[0]).filter(n => n.type?.name === 'Button').length, 0)
-  assert.deepEqual(nodes(rows[1]).filter(n => n.type?.name === 'Badge').map(n => n.props.children), ['Registered', 'Not reachable'])
+  assert.deepEqual(badges(rows[1]), ['Registered', 'Connecting'])
+  assert.deepEqual(badges(rows[2]), ['Registered', 'Offline'])
+  const connection = nodes(rows[2]).find(n => n.type?.name === 'Connection')
+  assert.ok(nodes(connection.type(connection.props)).some(n => n.props?.children?.[0] === 'since '))
   for (const [text, mode] of [['Change address', 'address'], ['New token', 'token'], ['Remove', 'remove']]) {
     button(rows[1], text).props.onClick()
     const modal = named(render(), 'RoomModal')
@@ -1635,12 +1657,22 @@ test('rooms list shows connection, people and links; configured rows are read-on
   button(render().props.actions, 'Refresh').props.onClick()
   render(); await settle()
   assert.deepEqual(requests, [['/api/admin/rooms', 'GET'], ['/api/admin/rooms', 'GET']])
+  // The automatic refresh updates states without the spinner.
+  assert.deepEqual([...intervals.values()].map(([, ms]) => ms), [10_000])
+  list = [{ ...offlineRoom, connected: true, offlineSince: undefined }]
+  ;[...intervals.values()][0][0]()
+  assert.equal(named(render(), 'Spinner'), undefined)
+  await settle()
+  const refreshed = nodes(named(render(), 'AdminTable')).filter(n => n.type === 'tr')
+  assert.deepEqual(badges(refreshed[0]), ['Registered', 'Online'])
+  f.unmount()
+  assert.equal(intervals.size, 0)
 })
 
 test('rooms listing handles failure, retry and empty state', async (t) => {
   const f = fixture(t)
   let failed = true
-  globals(t, { fetch: async () => failed ? roomReply({ error: 'Rooms unavailable.' }, 503) : roomReply([]) })
+  roomRefresh(t, async () => failed ? roomReply({ error: 'Rooms unavailable.' }, 503) : roomReply([]))
   const render = () => f.render(RoomsTab)
   render(); await settle()
   assert.equal(named(render(), 'Notice').props.children, 'Rooms unavailable.')
@@ -1655,7 +1687,7 @@ test('rooms listing handles failure, retry and empty state', async (t) => {
 test('rooms listing ignores a response after leaving the tab', async (t) => {
   const f = fixture(t)
   let finish
-  globals(t, { fetch: () => new Promise(resolve => { finish = resolve }) })
+  roomRefresh(t, () => new Promise(resolve => { finish = resolve }))
   f.render(RoomsTab); f.unmount()
   finish(roomReply([registeredRoom])); await settle()
   assert.equal(named(f.render(RoomsTab), 'AdminTable'), undefined)

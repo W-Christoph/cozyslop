@@ -45,7 +45,8 @@ export function RoomModal({ action, onClose, onSaved, onRemoved }: {
           : mode === 'address' ? await adminRooms.changeAddress(name, nekoUrl)
           : await adminRooms.newToken(name)
         // Do not pass the issuance response (and its token) into table state.
-        onSaved({ name: room.name, source: room.source, connected: room.connected, userCount: room.userCount })
+        onSaved({ name: room.name, source: room.source, connected: room.connected, userCount: room.userCount,
+          ...(room.offlineSince ? { offlineSince: room.offlineSince } : {}) })
         if ('nekoToken' in room && typeof room.nekoToken === 'string') setToken(room.nekoToken)
         else onClose()
       }

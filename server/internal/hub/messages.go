@@ -92,6 +92,14 @@ func (e *userError) Error() string { return e.msg }
 func (r *Room) SendNekoToken(ctx context.Context, c *Client) { r.sendNekoToken(ctx, c) }
 
 func (r *Room) sendNekoToken(ctx context.Context, c *Client) {
+	// An offline desktop cannot issue one; the tab asks again on "online".
+	r.mu.Lock()
+	offline := r.offline
+	r.mu.Unlock()
+	if offline {
+		c.send(desktopMsg{Type: "desktop", State: "offline"})
+		return
+	}
 	token, err := r.NekoToken(ctx, c)
 	if err != nil {
 		if ctx.Err() == nil && !errors.Is(err, ErrNotPresent) {

@@ -53,6 +53,8 @@ export interface ChatMessage {
 
 export type KickReason = 'banned' | 'account' | 'verified' | 'invite' | 'kicked' | 'deleted' | 'not_found' | 'session' | 'room_changed'
 
+export type DesktopState = 'online' | 'offline'
+
 export type ServerMessage =
   | {
       type: 'welcome'
@@ -64,10 +66,13 @@ export type ServerMessage =
       history: ChatMessage[] // oldest first; replaces what we had
       remote: string | null
       restart: boolean
+      desktop: DesktopState
       windowTitle: string // of the window in front on the desktop; "" if unknown
     }
   | { type: 'neko'; token: string; path: string }
   | { type: 'neko_unavailable'; message: string }
+  // The desktop went offline (after a few seconds without it) or came back.
+  | { type: 'desktop'; state: DesktopState }
   | { type: 'user_joined' | 'user_updated'; user: User }
   | { type: 'user_left'; key: string }
   | { type: 'chat'; message: ChatMessage }

@@ -89,6 +89,7 @@ export interface AdminRoom {
   name: string
   source: 'configured' | 'registered'
   connected: boolean
+  offlineSince?: number // unix ms; set while viewers are told the desktop is offline
   userCount: number
 }
 

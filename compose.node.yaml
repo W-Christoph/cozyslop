@@ -4,6 +4,8 @@
 #   COZYCAST_HUB=cozy.example.com docker compose -f compose.node.yaml up -d --build
 #   docker compose -f compose.node.yaml logs -f agent
 #
+# or both in one: ./cozycast.sh connect cozy.example.com
+#
 # The agent's log shows a code; an admin accepts it under Admin > Rooms.
 # From then on the room reconnects by itself, across restarts of this
 # computer and of the server.

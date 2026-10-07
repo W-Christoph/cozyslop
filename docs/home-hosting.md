@@ -428,9 +428,10 @@ If the Orange Pi 5 turns out too weak:
 ## Trying it out (x86)
 
 On the VPS, in `.env`: `PUBLIC_IP` (the VPS's address), and ideally
-`DOMAIN` for HTTPS. In `compose.yaml`, uncomment `COZYCAST_TUNNEL_PORT` and
-the ports `51820/udp` and `52099` (UDP and TCP); open them in the
-VPS's firewall too. `docker compose up -d --build`.
+`DOMAIN` for HTTPS, and `COMPOSE_FILE=compose.yaml:compose.tunnel.yaml` for
+the tunnel and the relay (`./cozycast.sh setup` writes all of this). Open
+`51820/udp` and `52099` (UDP and TCP) in the VPS's firewall too.
+`docker compose up -d --build`, or `./cozycast.sh start`.
 
 On the home computer (Docker, nothing opened in the router):
 `COZYCAST_HUB=<domain or IP> docker compose -f compose.node.yaml up -d --build`,
@@ -477,6 +478,14 @@ The hub does not have to run a room itself: with
 is built and run (`COZYCAST_ROOMS=none`). Measured on the test server of 2026-10-07: the
 server used about 100 MB and 6% of a core with a paired room being watched,
 the idle default room next to it 1.2 GB.
+
+In between: `compose.room-on-demand.yaml` keeps the hub's own room stopped
+until an admin starts it under Admin > Rooms, and lets them stop it again.
+This is for the hub's own room only; a paired room runs for as long as its
+computer runs the agent. The server reaches Docker through a proxy that
+lets three kinds of request through (list containers; start one; stop or
+restart one), not through the Docker socket, which would be full control
+of the machine.
 
 Prices as of 2026-10-04, from review sites, for Europe. Check the provider's
 own page before ordering.

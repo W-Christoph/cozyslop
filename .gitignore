@@ -1,4 +1,5 @@
 .env
+.env.node
 data/
 web/node_modules/
 server/webui/dist/*

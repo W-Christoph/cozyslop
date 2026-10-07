@@ -1,0 +1,15 @@
+# Rooms on other computers (docs/home-hosting.md): the tunnel to them and
+# the media relay for their viewers. In .env:
+#
+#   COMPOSE_FILE=compose.yaml:compose.tunnel.yaml
+#
+# Open 51820/udp and 52099 (UDP and TCP) in the firewall as well.
+
+services:
+  server:
+    environment:
+      COZYCAST_TUNNEL_PORT: "51820"
+    ports:
+      - "51820:51820/udp"
+      - "52099:52099/udp"
+      - "52099:52099/tcp"

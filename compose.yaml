@@ -54,12 +54,8 @@ services:
     ports:
       - "${HTTP_PORT:-80}:8080"
       - "${HTTPS_PORT:-443}:8443"
-      # Rooms on other computers (docs/home-hosting.md): uncomment together
-      # with COZYCAST_TUNNEL_PORT below. The tunnel, and the media relay's
-      # port (COZYCAST_RELAY_PORT); host and container ports must match.
-      # - "51820:51820/udp"
-      # - "52099:52099/udp"
-      # - "52099:52099/tcp"
+      # Rooms on other computers (docs/home-hosting.md) need the tunnel's
+      # and the media relay's ports: see compose.tunnel.yaml.
     environment:
       COZYCAST_NEKO_SECRET: ${NEKO_API_TOKEN}
       COZYCAST_ROOMS: default=http://room-default:8080
@@ -72,8 +68,6 @@ services:
       COZYCAST_ACME_EMAIL: ${ACME_EMAIL:-}
       # Creates the "admin" account on first start.
       COZYCAST_INIT_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
-      # WireGuard for rooms on other computers; off unless set.
-      # COZYCAST_TUNNEL_PORT: "51820"
       # Announced to viewers of rooms on other computers.
       COZYCAST_PUBLIC_IP: ${PUBLIC_IP}
       # Opt-in room restart control from the UI. This gives the server

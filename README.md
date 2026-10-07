@@ -84,9 +84,13 @@ Moving from an existing CozyCast instance? See [Migration](docs/migration.md).
 Needs Docker with Compose.
 
 ```bash
-cp .env.example .env    # set PUBLIC_IP, NEKO_API_TOKEN and ADMIN_PASSWORD
-docker compose up -d --build
+./cozycast.sh setup     # asks a few questions and writes .env
+./cozycast.sh start
 ```
+
+Or by hand: `cp .env.example .env`, set `PUBLIC_IP`, `NEKO_API_TOKEN` and
+`ADMIN_PASSWORD`, then `docker compose up -d --build`. `./cozycast.sh` without
+arguments lists its other commands (stop, update, status, logs).
 
 Open `http://<server>/room/default` and log in as `admin`. Open ports
 `80/tcp` (web), `443/tcp` (with `DOMAIN` set, for HTTPS) and `52000/udp` +
@@ -101,6 +105,12 @@ No room on the server itself, for a small server whose rooms all run
 `COMPOSE_FILE=compose.yaml:compose.no-room.yaml` in `.env`. The room image
 is then neither built nor run; a room is what needs CPU and memory (see the
 notes in that file when a room is already running).
+
+In between: with `compose.room-on-demand.yaml` the server's room stays
+stopped until an admin starts it under Admin > Rooms, where it can be
+stopped again. The server then reaches Docker through a proxy that only
+lets it list containers and start, stop or restart one; the steps are in
+that file, and `./cozycast.sh setup` offers all three.
 
 ## Develop
 
@@ -145,8 +155,8 @@ leave an existing account's password unchanged.
 | `COZYCAST_TRUST_PROXY` | `false` | take client IP from the last entry of the last `X-Forwarded-For` header, and scheme from `X-Forwarded-Proto` |
 | `COZYCAST_IMPORT` | | old CozyCast export archive, imported into an empty database |
 | `COZYCAST_MAX_UPLOAD_MB` | `10` | maximum chat image/video size |
-| `COZYCAST_DOCKER` | `false` | opt in to room restarts from the UI |
-| `COZYCAST_DOCKER_SOCKET` | `/var/run/docker.sock` | |
+| `COZYCAST_DOCKER` | `false` | opt in to restarting rooms from the UI, and to starting and stopping them under Admin > Rooms |
+| `COZYCAST_DOCKER_SOCKET` | `/var/run/docker.sock` | Unix socket path or `tcp://host:port` for a Docker socket proxy (plain HTTP) |
 | `COZYCAST_DOCKER_PROJECT` | | compose project name, if it cannot be detected |
 | `COZYCAST_SOURCE_URL` | this repository | source code link shown to users (AGPL) |
 | `COZYCAST_WEB_DIR` | | serve the UI from this directory instead of the embedded build |
@@ -193,15 +203,17 @@ uses the default room, and a list containing no entries is rejected.
 Someone can lend a computer to run a room while the server stays the only
 thing the internet sees ([home hosting](docs/home-hosting.md)). The server
 needs `COZYCAST_TUNNEL_PORT` and `PUBLIC_IP`, with the tunnel's UDP port and
-the media relay's port (`COZYCAST_RELAY_PORT`, UDP and TCP) open: uncomment
-them in `compose.yaml`. On the other computer:
+the media relay's port (`COZYCAST_RELAY_PORT`, UDP and TCP) open:
+`compose.tunnel.yaml` does that (`./cozycast.sh setup` asks). On the other
+computer, in a checkout of this repository:
 
 ```bash
-COZYCAST_HUB=cozy.example.com docker compose -f compose.node.yaml up -d --build
-docker compose -f compose.node.yaml logs -f agent
+./cozycast.sh connect cozy.example.com
 ```
 
-The log shows a code. An admin compares it under Admin > Rooms > Requests
+That is `COZYCAST_HUB=cozy.example.com docker compose -f compose.node.yaml up -d --build`
+followed by the agent's log; afterwards `./cozycast.sh stop`, `start` and
+`status` work there too. The log shows a code. An admin compares it under Admin > Rooms > Requests
 and accepts; nothing else is copied. The computer reconnects by itself after
 restarts on either side. The room cannot reach that computer or its home
 network: it browses through the server, so websites see the server's address.

@@ -450,6 +450,17 @@ Worth checking:
 - The home upload while two or three people watch: one stream, whatever
   the number of viewers.
 
+Tried on 2026-10-07: a Hetzner cloud server (2 vCPUs, 4 GB, Ubuntu 24.04)
+and a home PC running Docker on Windows, behind an ordinary router with
+nothing opened. The room played for a phone on mobile data, with a video
+running in it; the remote and typing worked; changing the stream worked; a
+"what is my IP" site showed the server's address; the router could not be
+reached from the room. The home upload stayed at one stream with several
+tabs watching. After the agent was taken down and started again the room
+was back in 4 s without a new code; after a server restart in under 2 s.
+Not tried: the browser's WebRTC details, restarting the home PC, more than
+a few viewers, and longer than 15 minutes.
+
 ## VPS (hub)
 
 Needs: 1–2 vCPUs, a public IPv4 address, unrestricted UDP, and a large

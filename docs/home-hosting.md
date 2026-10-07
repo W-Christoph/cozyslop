@@ -383,8 +383,17 @@ pointer moved with no WebRTC connection at all).
 
 ## Hardware (node)
 
-Everything is built to run on ARM (arm64) as well as x86, but is tested on
-x86 only:
+Everything is built to run on ARM (arm64) as well as x86. Tried on
+2026-10-07 on a cloud ARM server (Hetzner, Ampere, 2 vCPUs, 4 GB) as the
+room for an x86 hub: the room and agent images built there, the room paired
+and was ready 8 s after it was accepted, and a viewer got 1280×720 at
+30 fps through the relay. The room's container used 57% of one core while
+its idle desktop was being watched (x264 `veryfast`, 720p, 30 fps), under
+1% with nobody watching, and about 910 MB. Not tried there: a video playing
+in the room. Still unknown: the Orange Pi below, whose fast cores are the
+same design at a lower clock.
+
+How it is built:
 
 - The room image builds on neko's images, which exist for arm64 (checked:
   Firefox, the x264 encoder and the paths the room image uses are all
@@ -545,9 +554,9 @@ Each step works on its own and is tested before the next.
    end in one process (UDP and TCP both ways) and in the sandbox with
    headless Chromium: connected over UDP to the hub's address and port,
    1280×720 at 30 fps, first picture after about 3 s.
-6. **ARM** (done, untested). Images built for arm64 as well; see Hardware.
-   Measured on the real computer once it runs: CPU per stream setting,
-   home upload with several viewers.
+6. **ARM** (done; run on a cloud ARM server, see Hardware). Images built
+   for arm64 as well. Measured on the real computer once it runs: CPU per
+   stream setting, home upload with several viewers.
 7. **Input over the WebSocket**, then **the relay** (done, see above). The
    home upload is one stream per watched room.
 8. **Hardware encoding**, only if step 6 shows software encoding is too

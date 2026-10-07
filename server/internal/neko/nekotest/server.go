@@ -47,6 +47,10 @@ type Server struct {
 	calls             []Call
 	files             map[string]bool // the desktop's Downloads folder
 	changed           chan struct{}
+
+	// OnMessage, if set before members connect, sees every message from a
+	// member's socket and may answer on it (a test playing neko's WebRTC).
+	OnMessage func(ctx context.Context, id string, msg []byte, reply func([]byte) error)
 }
 
 func New(t testing.TB, apiToken string) *Server {
@@ -182,7 +186,13 @@ func (s *Server) serveMember(w http.ResponseWriter, r *http.Request, id string) 
 		s.mu.Lock()
 		s.received[id] = append(s.received[id], string(data))
 		s.signalLocked()
+		onMessage := s.OnMessage
 		s.mu.Unlock()
+		if onMessage != nil {
+			onMessage(r.Context(), id, data, func(msg []byte) error {
+				return conn.Write(r.Context(), websocket.MessageText, msg)
+			})
+		}
 	}
 }
 

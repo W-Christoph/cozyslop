@@ -15,6 +15,10 @@ import (
 // member that only listens.
 const ObserverID = "cozycast-observer"
 
+// RelayID is the neko member the media relay watches with, for all of a
+// room's viewers (internal/relay).
+const RelayID = "cozycast-relay"
+
 // ResetControl takes the remote away from whoever holds it.
 func (c *Client) ResetControl(ctx context.Context) error {
 	return c.do(ctx, http.MethodPost, "/api/room/control/reset", nil, nil, true)

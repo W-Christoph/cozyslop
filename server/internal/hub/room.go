@@ -351,7 +351,7 @@ func (r *Room) checkMembers(ctx context.Context) {
 		return // neko is down or restarting; run notices and logs that
 	}
 	for _, m := range members {
-		if m.ID == neko.ObserverID {
+		if m.ID == neko.ObserverID || m.ID == neko.RelayID {
 			continue
 		}
 		r.mu.Lock()

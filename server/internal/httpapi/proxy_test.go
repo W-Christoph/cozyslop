@@ -2,9 +2,12 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -17,6 +20,7 @@ import (
 	"cozycast/internal/hub"
 	"cozycast/internal/neko"
 	"cozycast/internal/neko/nekotest"
+	"cozycast/internal/relay"
 	"cozycast/internal/store"
 )
 
@@ -32,6 +36,12 @@ type proxyTest struct {
 }
 
 func newProxyTest(t *testing.T, set store.RoomSettings) *proxyTest {
+	t.Helper()
+	return newRelayedProxyTest(t, set, nil)
+}
+
+// With a relay, the room is a paired one.
+func newRelayedProxyTest(t *testing.T, set store.RoomSettings, rl *relay.Relay) *proxyTest {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
@@ -49,12 +59,16 @@ func newProxyTest(t *testing.T, set store.RoomSettings) *proxyTest {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := hub.New(st, t.TempDir(), []hub.RoomConfig{{Name: "default", Neko: nc}})
+	rc := hub.RoomConfig{Name: "default", Neko: nc}
+	if rl != nil {
+		rc.Source = "paired"
+	}
+	h := hub.New(st, t.TempDir(), []hub.RoomConfig{rc})
 	hubCtx, stop := context.WithCancel(context.Background())
 	if err := h.Start(hubCtx); err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(New(Deps{Store: st, Auth: auth.New(st, false), Hub: h}).Handler())
+	srv := httptest.NewServer(New(Deps{Store: st, Auth: auth.New(st, false), Hub: h, Relay: rl}).Handler())
 	t.Cleanup(func() {
 		srv.Close()
 		stop()
@@ -363,6 +377,95 @@ func TestNekoSocketKeepsViewersOnTheRoomStream(t *testing.T) {
 	}
 	if got := p.status("GET", "/neko/default/api/ws?token="+token); got != 403 {
 		t.Fatal("socket with a kicked tab's token:", got)
+	}
+}
+
+func TestNekoSocketGetsPairedRoomMediaFromTheRelay(t *testing.T) {
+	l, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	l.Close()
+	rl, err := relay.New(relay.Config{Port: port, PublicIP: netip.MustParseAddr("127.0.0.1"), Loopback: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rl.Close()
+	room, next := nekotest.Streams[1], nekotest.Streams[0]
+	p := newRelayedProxyTest(t, store.RoomSettings{Stream: room}, rl)
+	_, clientID, token := p.join()
+	conn := p.socket(token)
+	read := func() (event string, payload map[string]any) {
+		t.Helper()
+		var msg struct {
+			Event   string
+			Payload map[string]any
+		}
+		if err := wsjson.Read(p.ctx, conn, &msg); err != nil {
+			t.Fatal(err)
+		}
+		return msg.Event, msg.Payload
+	}
+	if event, _ := read(); event != "system/init" {
+		t.Fatal("first message:", event)
+	}
+
+	// The tab asks for media: the relay offers it, and watches the room's
+	// stream itself, as its own neko member.
+	selector := func(id string) string { return `"selector":{"id":"` + id + `","type":"exact"}` }
+	send := func(msg string) {
+		t.Helper()
+		if err := conn.Write(p.ctx, websocket.MessageText, []byte(msg)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	send(`{"event":"signal/request","payload":{"video":{` + selector(next) + `},"audio":{}}}`)
+	event, payload := read()
+	sdp, _ := payload["sdp"].(string)
+	if event != "signal/provide" || !strings.Contains(sdp, "m=video") || !strings.Contains(sdp, fmt.Sprintf(" 127.0.0.1 %d typ host", port)) {
+		t.Fatalf("answer to signal/request: %s %v", event, payload)
+	}
+	want := `{"event":"signal/request","payload":{"audio":{},"video":{` + selector(room) + `}}}`
+	if got := p.received(neko.RelayID, 1); got[0] != want {
+		t.Fatalf("neko heard from the relay\n %s\nwant\n %s", got[0], want)
+	}
+	if n := rl.Viewers("default"); n != 1 {
+		t.Fatal("viewers:", n)
+	}
+
+	// The tab's own neko session hears nothing of media, also not when the
+	// room's stream changes; everything else still reaches it.
+	if err := p.st.SaveRoomSettings(p.ctx, store.RoomSettings{Name: "default", Access: "public", Stream: next}); err != nil {
+		t.Fatal(err)
+	}
+	p.hub.RoomSettingsChanged(p.ctx, "default")
+	if got := p.received(neko.RelayID, 2); got[1] != `{"event":"signal/video","payload":{`+selector(next)+`}}` {
+		t.Fatal("after a stream change neko heard from the relay", got[1])
+	}
+	send(`{"event":"signal/answer","payload":{"sdp":"not a description"}}`)
+	send(`{"event":"signal/candidate","payload":{"candidate":"x"}}`)
+	send(`{"event":"signal/video","payload":{` + selector(next) + `}}`)
+	send(`{"event":"control/request"}`)
+	if got := p.received(clientID, 1); !slices.Equal(got, []string{`{"event":"control/request"}`}) {
+		t.Fatal("neko heard from the tab", got)
+	}
+
+	// Asking again replaces the tab's connection; leaving ends it.
+	send(`{"event":"signal/request","payload":{"video":{"disabled":true},"audio":{}}}`)
+	if event, payload := read(); event != "signal/provide" || strings.Contains(payload["sdp"].(string), "m=video") {
+		t.Fatalf("answer to the second signal/request: %s %v", event, payload)
+	}
+	if n := rl.Viewers("default"); n != 1 {
+		t.Fatal("viewers after asking again:", n)
+	}
+	conn.Close(websocket.StatusNormalClosure, "")
+	for rl.Viewers("default") != 0 {
+		select {
+		case <-p.ctx.Done():
+			t.Fatal("the relay kept a viewer whose socket closed")
+		case <-time.After(time.Millisecond):
+		}
 	}
 }
 

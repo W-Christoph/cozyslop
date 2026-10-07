@@ -147,7 +147,8 @@ leave an existing account's password unchanged.
 | `COZYCAST_TUNNEL_PORT` | | UDP port of the WireGuard tunnel to rooms on other computers ([home hosting](docs/home-hosting.md)); off when empty |
 | `COZYCAST_TUNNEL_NET` | `10.77.0.0/24` | tunnel addresses; the server takes the first, each paired room gets one |
 | `COZYCAST_PUBLIC_IP` | | the server's address, announced to viewers of paired rooms; Compose sets it from `PUBLIC_IP` |
-| `COZYCAST_MEDIA_PORTS` | `52100-52109` | the server's media ports for paired rooms, one each, UDP and TCP |
+| `COZYCAST_RELAY_PORT` | `52099` | the media relay's port for the viewers of all paired rooms, UDP and TCP; `0` turns the relay off |
+| `COZYCAST_MEDIA_PORTS` | `52100-52109` | one media port per paired room, UDP and TCP; used inside the server only, unless the relay is off |
 
 With `COZYCAST_TRUST_PROXY=true`, use exactly one proxy in front. It must
 append the client IP to `X-Forwarded-For`, and the server must not be reachable
@@ -186,8 +187,8 @@ uses the default room, and a list containing no entries is rejected.
 Someone can lend a computer to run a room while the server stays the only
 thing the internet sees ([home hosting](docs/home-hosting.md)). The server
 needs `COZYCAST_TUNNEL_PORT` and `PUBLIC_IP`, with the tunnel's UDP port and
-the media ports (`COZYCAST_MEDIA_PORTS`, UDP and TCP) open: uncomment them in
-`compose.yaml`. On the other computer:
+the media relay's port (`COZYCAST_RELAY_PORT`, UDP and TCP) open: uncomment
+them in `compose.yaml`. On the other computer:
 
 ```bash
 COZYCAST_HUB=cozy.example.com docker compose -f compose.node.yaml up -d --build

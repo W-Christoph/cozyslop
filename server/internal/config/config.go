@@ -48,6 +48,10 @@ type Config struct {
 	// announced to viewers, and its ports for them, one per room.
 	PublicIP   netip.Addr // invalid if not set
 	MediaPorts [2]int     // first and last
+	// RelayPort is the media relay's port (UDP and TCP) for the viewers of
+	// all paired rooms; the media ports are then only used on this machine.
+	// 0 turns the relay off: viewers connect to the rooms' media ports.
+	RelayPort int
 }
 
 func FromEnv() (Config, error) {
@@ -107,6 +111,11 @@ func FromEnv() (Config, error) {
 	}
 	if !ok || err != nil || c.MediaPorts[0] < 1 || c.MediaPorts[1] > 65535 || c.MediaPorts[0] > c.MediaPorts[1] {
 		return c, errors.New("COZYCAST_MEDIA_PORTS must be a port range like 52100-52109")
+	}
+
+	c.RelayPort, err = strconv.Atoi(env("COZYCAST_RELAY_PORT", "52099"))
+	if err != nil || c.RelayPort < 0 || c.RelayPort > 65535 || (c.RelayPort >= c.MediaPorts[0] && c.RelayPort <= c.MediaPorts[1]) {
+		return c, errors.New("COZYCAST_RELAY_PORT must be a port number outside COZYCAST_MEDIA_PORTS, or 0 for no relay")
 	}
 
 	rooms, err := parseRooms(env("COZYCAST_ROOMS", "default=http://room-default:8080"))

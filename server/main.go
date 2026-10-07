@@ -26,6 +26,7 @@ import (
 	"cozycast/internal/hub"
 	"cozycast/internal/legacy"
 	"cozycast/internal/neko"
+	mediarelay "cozycast/internal/relay"
 	"cozycast/internal/store"
 	"cozycast/internal/tunnel"
 	"cozycast/webui"
@@ -138,9 +139,18 @@ func run(args []string, out io.Writer) error {
 		return err
 	}
 	var media *fwd.Ports
+	var mediaRelay *mediarelay.Relay
 	if tun != nil {
 		defer tun.Close()
 		go rememberEndpoints(ctx, db, tun)
+		if cfg.RelayPort != 0 {
+			mediaRelay, err = mediarelay.New(mediarelay.Config{Port: cfg.RelayPort, PublicIP: cfg.PublicIP})
+			if err != nil {
+				return fmt.Errorf("media relay: %w", err)
+			}
+			defer mediaRelay.Close()
+			slog.Info("media relay listening", "port", cfg.RelayPort)
+		}
 		if media, err = openMedia(ctx, db, cfg, tun); err != nil {
 			return err
 		}
@@ -178,6 +188,7 @@ func run(args []string, out io.Writer) error {
 		Store:       db,
 		Tunnel:      tun,
 		Media:       media,
+		Relay:       mediaRelay,
 		PublicIP:    cfg.PublicIP,
 		MediaPorts:  cfg.MediaPorts,
 		Auth:        auth.New(db, cfg.TrustProxy),
@@ -403,12 +414,16 @@ func openTunnel(ctx context.Context, db *store.Store, cfg config.Config) (*tunne
 }
 
 // openMedia forwards every paired room's media port into the tunnel,
-// giving rooms paired before media ports existed one.
+// giving rooms paired before media ports existed one. With the relay on,
+// the ports are for the relay only.
 func openMedia(ctx context.Context, db *store.Store, cfg config.Config, tun *tunnel.Tunnel) (*fwd.Ports, error) {
 	if !cfg.PublicIP.IsValid() {
 		slog.Warn("COZYCAST_PUBLIC_IP is not set: viewers get no picture from paired rooms")
 	}
 	media := &fwd.Ports{Dial: tun.DialContext}
+	if cfg.RelayPort != 0 {
+		media.Host = httpapi.RelayMediaHost
+	}
 	registered, err := db.RegisteredRooms(ctx)
 	if err != nil {
 		return nil, err

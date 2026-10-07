@@ -165,6 +165,13 @@ func (s *Server) nekoSocket(w http.ResponseWriter, r *http.Request, rm *hub.Room
 		defer cancel()
 		return to.Write(wctx, typ, data)
 	}
+	// A paired room's picture and sound come from the relay; neko then
+	// never hears of this tab's media.
+	var media *relayedMedia
+	if s.relay != nil && rm.Source == "paired" {
+		media = &relayedMedia{relay: s.relay, room: rm}
+		defer media.close()
+	}
 	// Each direction ends with the error that stopped it; the other side is
 	// then closed the way this one was.
 	ended := make(chan error, 2)
@@ -190,6 +197,19 @@ func (s *Server) nekoSocket(w http.ResponseWriter, r *http.Request, rm *hub.Room
 			if neko.IsFileList(data) && !rm.NekoFilesAllowed(token) {
 				continue
 			}
+			if media != nil {
+				reply, handled, err := media.signal(ctx, data)
+				if err == nil && reply != nil {
+					err = write(down, websocket.MessageText, reply)
+				}
+				if err != nil {
+					ended <- err
+					return
+				}
+				if handled {
+					continue
+				}
+			}
 			// neko reads text and binary frames alike.
 			if data, ok := neko.PinStream(data, rm.Stream()); ok {
 				if err := write(up, websocket.MessageText, data); err != nil {
@@ -202,6 +222,12 @@ func (s *Server) nekoSocket(w http.ResponseWriter, r *http.Request, rm *hub.Room
 	for {
 		select {
 		case msg := <-fromHub:
+			if media != nil {
+				// Not this tab's session: the relay's follows the room's
+				// stream.
+				s.relay.Sync(rm.Name)
+				continue
+			}
 			if err := write(up, websocket.MessageText, msg); err != nil {
 				return
 			}

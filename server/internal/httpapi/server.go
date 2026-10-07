@@ -21,6 +21,7 @@ import (
 	"cozycast/internal/hub"
 	"cozycast/internal/pairing"
 	"cozycast/internal/ratelimit"
+	"cozycast/internal/relay"
 	"cozycast/internal/rights"
 	"cozycast/internal/store"
 	"cozycast/internal/tunnel"
@@ -46,12 +47,16 @@ type Deps struct {
 	Media      *fwd.Ports
 	PublicIP   netip.Addr
 	MediaPorts [2]int
+	// Relay sends paired rooms' media to their viewers; nil when off, and
+	// viewers then connect to the forwarded ports themselves.
+	Relay *relay.Relay
 }
 
 type Server struct {
 	buildRoom      RoomBuilder
 	tunnel         *tunnel.Tunnel
 	media          *fwd.Ports
+	relay          *relay.Relay
 	publicIP       netip.Addr
 	mediaPorts     [2]int
 	pairing        *pairing.Manager // nil when the tunnel is off
@@ -102,6 +107,7 @@ func New(d Deps) *Server {
 		buildRoom:      d.BuildRoom,
 		tunnel:         d.Tunnel,
 		media:          d.Media,
+		relay:          d.Relay,
 		publicIP:       d.PublicIP,
 		mediaPorts:     d.MediaPorts,
 		store:          d.Store,

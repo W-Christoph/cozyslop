@@ -145,10 +145,13 @@ Server settings: `COZYCAST_TUNNEL_PORT` (UDP; tunnels are off without it,
 since Docker's published ports bypass host firewalls like ufw),
 `COZYCAST_TUNNEL_NET` (`10.77.0.0/24`), `COZYCAST_PUBLIC_IP` (the hub's
 address, announced to viewers; compose passes `PUBLIC_IP`),
-`COZYCAST_MEDIA_PORTS` (`52100-52109`, one per paired room, UDP and TCP,
-published with the same numbers on the host). Each paired room gets its
-port when accepted (rooms paired earlier at the next start); removing the
-room closes it.
+`COZYCAST_RELAY_PORT` (`52099`, UDP and TCP, published with the same number
+on the host: the media relay, for the viewers of all paired rooms; `0` turns
+the relay off), `COZYCAST_MEDIA_PORTS` (`52100-52109`, one per paired room,
+UDP and TCP). Each paired room gets its port when accepted (rooms paired
+earlier at the next start); removing the room closes it. With the relay the
+media ports listen on the hub's loopback address only, for the relay;
+without it they are public and have to be published like the relay's.
 
 ## The node
 
@@ -197,13 +200,15 @@ cannot even look names up through the home's resolver.
   checked. Refused (403): private, loopback, link-local (the cloud metadata
   address), carrier-grade NAT, multicast and reserved ranges, which covers
   the tunnel network and the hub's Docker networks, and port 25.
-- **Media**: until the relay exists, the hub forwards each paired room's
-  media port (UDP and TCP, public) through the tunnel to the agent, which
-  forwards it to the room's neko (`internal/fwd`: one flow per viewer for
-  UDP, ended after a minute of silence). neko announces the hub's IP
-  (`NEKO_WEBRTC_NAT1TO1`) and that port, with ICE lite, so viewers connect
-  to the hub. Each viewer's stream still crosses the home
-  upload (viewers × bitrate) until the relay. This is neko's own documented
+- **Media**: the hub forwards each paired room's media port (UDP and TCP)
+  through the tunnel to the agent, which forwards it to the room's neko
+  (`internal/fwd`: one flow per sender for UDP, ended after a minute of
+  silence). With the relay (the default, see "The media relay") the port
+  listens on the hub's loopback address and the relay is its only user.
+  Without it (`COZYCAST_RELAY_PORT=0`) the port is public: neko announces
+  the hub's IP (`NEKO_WEBRTC_NAT1TO1`) and that port, with ICE lite, so
+  viewers connect to the hub, and each viewer's stream crosses the home
+  upload (viewers × bitrate). This is neko's own documented
   setup for SSH port forwarding ([networking](https://neko.m1k1o.net/docs/v3/customization/networking)):
   `NAT1TO1` set to the address viewers use, one multiplexed port forwarded.
   Its examples also set `NEKO_WEBRTC_ICELITE=1`, which suits a room that
@@ -289,7 +294,8 @@ it can come first.
 
 ## The media relay
 
-Later: until then the hub forwards each viewer's stream from the node.
+Built (`server/internal/relay`, `server/internal/httpapi/relay.go`); on for
+every paired room unless `COZYCAST_RELAY_PORT=0`.
 
 Kurento and later LiveKit had this role in the old CozyCast: the worker sent
 one stream, the media server made the copies. The rewrite dropped it because
@@ -311,14 +317,49 @@ inside the Go server, not as another service.
   `signal/candidate` itself instead of passing them to neko. Each tab keeps
   its own neko member for rights and the remote, as today.
 - Keyframes: a new viewer needs one. The relay asks neko for a keyframe
-  (PLI) when a viewer joins; the 2-second keyframe interval is the fallback.
+  (PLI) when a viewer joins, at most twice a second. neko 3.1 does not act
+  on it, so in practice a new viewer waits for the next regular keyframe
+  (every 2 seconds).
 - Lost packets: the relay answers viewers' retransmission requests (NACK)
   from a short buffer, so one viewer's bad connection costs the home line
   nothing.
 - One media port (UDP and TCP) on the hub for all rooms, instead of one per
   room.
-- It replaces the per-room media forwarding: neko's `NEKO_WEBRTC_NAT1TO1`
-  becomes the node's tunnel address, and only the relay talks to it.
+- It is the only user of the per-room media forwarding, which no longer
+  listens publicly. The relay connects to the forwarded port on the hub's
+  loopback address, whatever address neko announces (the agent and neko's
+  settings are the same with and without the relay).
+
+As built:
+
+- The relay's neko member is `cozycast-relay`, created when it starts
+  watching and deleted when it stops, 15 seconds after the last viewer left
+  (so a reload does not restart the stream). The hub's member cleanup leaves
+  it alone.
+- neko sends its candidates before its offer; the relay keeps them until
+  the offer is there.
+- neko's RTP header extensions are removed before forwarding (their numbers
+  are agreed per connection); one viewer's failed write does not stop the
+  others.
+- The relay follows the room's stream setting itself (`signal/video` on its
+  own session); tabs' sessions are no longer moved. A tab that connects
+  while neko still sends another stream gets its offer once neko has
+  switched (3 s at most): tabs reconnect when the frames get bigger, and
+  must not get the smaller ones first.
+- When the relay's connection to neko starts again, viewers stay connected.
+  Sequence numbers and timestamps carry on from the last packet; a new
+  stream's own numbers would look like old packets to them.
+- From a tab, every `signal/*` message stops at the hub. Tabs have no data
+  channel, so input goes over the WebSocket (below).
+- Checked in the sandbox with headless Chromium: two viewers of one paired
+  room and one of another, all connected to the hub's relay port over UDP,
+  1280×720 at 30 fps, first picture after about 3 s; neko had one watching
+  session per room; a viewer kept its picture when another left, and got
+  it back each time the relay was thrown out of neko (three times in a
+  row); the pointer moved from a tab's WebSocket; the media ports were
+  closed from outside. With three viewers the server used 5% of one core
+  (Ryzen 5800X) and 47 MB. Not measured yet: the home upload on a real
+  line.
 
 ### Input
 
@@ -388,7 +429,7 @@ If the Orange Pi 5 turns out too weak:
 
 On the VPS, in `.env`: `PUBLIC_IP` (the VPS's address), and ideally
 `DOMAIN` for HTTPS. In `compose.yaml`, uncomment `COZYCAST_TUNNEL_PORT` and
-the ports `51820/udp` and `52100-52109` (UDP and TCP); open them in the
+the ports `51820/udp` and `52099` (UDP and TCP); open them in the
 VPS's firewall too. `docker compose up -d --build`.
 
 On the home computer (Docker, nothing opened in the router):
@@ -406,8 +447,8 @@ Worth checking:
   fails, and so does the router through the proxy (403).
 - Restart the home computer, the agent, then the VPS: the room comes back
   by itself each time; viewers see "offline" in between.
-- The home upload while two or three people watch (one stream each until
-  the relay).
+- The home upload while two or three people watch: one stream, whatever
+  the number of viewers.
 
 ## VPS (hub)
 
@@ -481,8 +522,8 @@ Each step works on its own and is tested before the next.
 6. **ARM** (done, untested). Images built for arm64 as well; see Hardware.
    Measured on the real computer once it runs: CPU per stream setting,
    home upload with several viewers.
-7. **Input over the WebSocket**, then **the relay** (see above). After this
-   the home upload is one stream per watched room.
+7. **Input over the WebSocket**, then **the relay** (done, see above). The
+   home upload is one stream per watched room.
 8. **Hardware encoding**, only if step 6 shows software encoding is too
    slow (see Hardware).
 9. **Several rooms per node** and room creation from the admin page: the

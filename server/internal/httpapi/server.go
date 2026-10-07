@@ -155,6 +155,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/admin/rooms", s.adminCreateRoom)
 	mux.HandleFunc("PATCH /api/admin/rooms/{room}", s.adminChangeRoom)
 	mux.HandleFunc("POST /api/admin/rooms/{room}/token", s.adminChangeRoom)
+	mux.HandleFunc("POST /api/admin/rooms/{room}/start", s.adminStartRoom)
+	mux.HandleFunc("POST /api/admin/rooms/{room}/stop", s.adminStopRoom)
 	mux.HandleFunc("DELETE /api/admin/rooms/{room}", s.adminDeleteRoom)
 
 	mux.HandleFunc("POST /api/nodes/pair", s.createPairing)

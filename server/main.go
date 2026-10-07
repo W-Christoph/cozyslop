@@ -165,11 +165,29 @@ func run(args []string, out io.Writer) error {
 		if dc != nil && room.Source == "configured" {
 			service := room.Neko.BaseURL().Hostname()
 			room.Restart = func(ctx context.Context) error {
-				id, err := dc.ServiceContainer(ctx, project, service)
+				container, err := dc.ServiceContainer(ctx, project, service)
 				if err != nil {
 					return err
 				}
-				return dc.Restart(ctx, id, 10*time.Second)
+				return dc.Restart(ctx, container.ID, 10*time.Second)
+			}
+			room.Start = func(ctx context.Context) error {
+				container, err := dc.ServiceContainer(ctx, project, service)
+				if err != nil {
+					return err
+				}
+				return dc.Start(ctx, container.ID)
+			}
+			room.Stop = func(ctx context.Context) error {
+				container, err := dc.ServiceContainer(ctx, project, service)
+				if err != nil {
+					return err
+				}
+				return dc.Stop(ctx, container.ID, 10*time.Second)
+			}
+			room.Running = func(ctx context.Context) (bool, error) {
+				container, err := dc.ServiceContainer(ctx, project, service)
+				return container.Running, err
 			}
 		}
 	}

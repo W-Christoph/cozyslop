@@ -86,6 +86,7 @@ export interface AdminUser extends Me {
 }
 
 export interface AdminRoom {
+  container?: 'running' | 'stopped'
   name: string
   source: 'configured' | 'registered' | 'paired' // paired: on another computer, through the tunnel
   connected: boolean
@@ -98,6 +99,8 @@ export interface RoomToken extends AdminRoom {
 }
 
 export const adminRooms = {
+  start: (name: string) => api.post<AdminRoom>(`/api/admin/rooms/${encodeURIComponent(name)}/start`),
+  stop: (name: string) => api.post<AdminRoom>(`/api/admin/rooms/${encodeURIComponent(name)}/stop`),
   list: () => api.get<AdminRoom[]>('/api/admin/rooms'),
   create: (name: string, nekoUrl: string) => api.post<RoomToken>('/api/admin/rooms', { name, nekoUrl }),
   changeAddress: (name: string, nekoUrl: string) => api.patch<AdminRoom>(`/api/admin/rooms/${encodeURIComponent(name)}`, { nekoUrl }),

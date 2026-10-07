@@ -8,7 +8,7 @@ import { nekoUrlError, roomNameError } from './roomValidation'
 import formStyles from '../ui/Form.module.css'
 import styles from './RoomModal.module.css'
 
-export type RoomAction = { mode: 'add' } | { mode: 'address' | 'token' | 'remove'; room: AdminRoom }
+export type RoomAction = { mode: 'add' } | { mode: 'address' | 'token' | 'remove' | 'stop'; room: AdminRoom }
 
 export function RoomModal({ action, onClose, onSaved, onRemoved }: {
   action: RoomAction
@@ -43,9 +43,11 @@ export function RoomModal({ action, onClose, onSaved, onRemoved }: {
       } else {
         const room = mode === 'add' ? await adminRooms.create(name, nekoUrl)
           : mode === 'address' ? await adminRooms.changeAddress(name, nekoUrl)
+          : mode === 'stop' ? await adminRooms.stop(name)
           : await adminRooms.newToken(name)
         // Do not pass the issuance response (and its token) into table state.
         onSaved({ name: room.name, source: room.source, connected: room.connected, userCount: room.userCount,
+          ...(room.container ? { container: room.container } : {}),
           ...(room.offlineSince ? { offlineSince: room.offlineSince } : {}) })
         if ('nekoToken' in room && typeof room.nekoToken === 'string') setToken(room.nekoToken)
         else onClose()
@@ -67,12 +69,13 @@ export function RoomModal({ action, onClose, onSaved, onRemoved }: {
     }
   }
   const title = token ? `Room token: ${name}` : mode === 'add' ? 'Add room'
-    : mode === 'address' ? `Change address: ${name}` : mode === 'token' ? `New token: ${name}` : `Remove room: ${name}`
-  const submit = mode === 'add' ? 'Add room' : mode === 'address' ? 'Save address' : mode === 'token' ? 'New token' : 'Remove'
+    : mode === 'address' ? `Change address: ${name}` : mode === 'token' ? `New token: ${name}`
+    : mode === 'stop' ? `Stop room: ${name}` : `Remove room: ${name}`
+  const submit = mode === 'add' ? 'Add room' : mode === 'address' ? 'Save address' : mode === 'token' ? 'New token' : mode === 'stop' ? 'Stop' : 'Remove'
   return (
     <Modal title={title} onClose={close} footer={<>
       <Button disabled={busy} onClick={close}>{token ? 'Done' : 'Cancel'}</Button>
-      {!token && <Button variant={mode === 'remove' ? 'danger' : 'primary'} disabled={busy}
+      {!token && <Button variant={mode === 'remove' || mode === 'stop' ? 'danger' : 'primary'} disabled={busy}
         type={editing ? 'submit' : 'button'} form={editing ? form : undefined}
         onClick={editing ? undefined : save}>{submit}</Button>}
     </>}>
@@ -101,7 +104,7 @@ export function RoomModal({ action, onClose, onSaved, onRemoved }: {
       </form> : mode === 'token' ? <>
         <p>Replace the token for {name}? The current token will stop working and people in the room are disconnected.</p>
         <p>The room’s container must be restarted with the new token.</p>
-      </> : <>
+      </> : mode === 'stop' ? <p>Stop {name}? Its desktop shuts down: what is open in it is lost, and viewers see the room as offline until it is started again.</p> : <>
         <p>Remove {name}? People in the room are disconnected.{action.room.source === 'paired' && ' Its computer is cut off and has to pair again.'}</p>
         <p>Chat history, settings and permissions are kept and return if a room with this name is added again.</p>
       </>}

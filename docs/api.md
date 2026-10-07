@@ -147,10 +147,12 @@ All endpoints use the usual admin authentication and JSON error format.
 
 | Endpoint | Body | Success | Errors |
 |---|---|---|---|
-| `GET /api/admin/rooms` | None | 200 sorted array of `{name,source,connected,offlineSince?,userCount}` for all live rooms; source is `configured`, `registered` or `paired`; connected means the authenticated neko event stream is working; `offlineSince` (unix ms) is present while viewers are told the desktop is offline; no tokens or addresses | Common admin errors |
+| `GET /api/admin/rooms` | None | 200 sorted array of `{name,source,connected,offlineSince?,userCount,container?}` for all live rooms; source is `configured`, `registered` or `paired`; connected means the authenticated neko event stream is working; `offlineSince` (unix ms) is present while viewers are told the desktop is offline; `container` is `running` or `stopped` when container control is enabled and the lookup succeeds (2 s timeout per room); no tokens or addresses | Common admin errors |
 | `POST /api/admin/rooms` | `{"name":"extra","nekoUrl":"http://room-extra:8080"}` | 201 room fields above plus `nekoToken`, returned once | 400 invalid name/URL; 409 `"That room already exists."` (including configured names) |
 | `PATCH /api/admin/rooms/{room}` | `{"nekoUrl":"https://neko.example/prefix"}` | 200 room fields, no token; replaces connection immediately | 400 invalid URL; 404 `"Unknown room."`; 409 configured room |
 | `POST /api/admin/rooms/{room}/token` | None | 200 room fields plus a fresh `nekoToken`, returned once; replaces connection immediately | 404 unknown; 409 configured room |
+| `POST /api/admin/rooms/{room}/start` | None | 200 room fields above, with container state read again; starts the configured room's container | 404 `"Unknown room."`; 409 `"This room's container is not managed by the server."`; 502 `"Docker could not start the room."` |
+| `POST /api/admin/rooms/{room}/stop` | None | 200 room fields above, with container state read again; stops the configured room's container with a 10 s grace period | 404 `"Unknown room."`; 409 `"This room's container is not managed by the server."`; 502 `"Docker could not stop the room."` |
 | `DELETE /api/admin/rooms/{room}` | None | 204; unpublishes room and disconnects viewers | 404 unknown; 409 configured room |
 
 Names contain one or more ASCII letters, digits, underscores or hyphens.

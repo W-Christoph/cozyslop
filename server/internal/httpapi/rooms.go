@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"sync"
+	"time"
 
 	"cozycast/internal/config"
 	"cozycast/internal/hub"
@@ -21,8 +23,9 @@ type adminRoom struct {
 	Connected bool   `json:"connected"`
 	// Unix ms since when viewers are told the desktop is offline; absent
 	// while it is online or only briefly gone.
-	OfflineSince int64 `json:"offlineSince,omitempty"`
-	UserCount    int   `json:"userCount"`
+	OfflineSince int64  `json:"offlineSince,omitempty"`
+	UserCount    int    `json:"userCount"`
+	Container    string `json:"container,omitempty"`
 }
 
 func toAdminRoom(r *hub.Room) adminRoom {
@@ -30,7 +33,20 @@ func toAdminRoom(r *hub.Room) adminRoom {
 	if t := r.OfflineSince(); !t.IsZero() {
 		since = t.UnixMilli()
 	}
-	return adminRoom{r.Name, r.Source, r.Neko().Connected(), since, r.UserCount()}
+	return adminRoom{Name: r.Name, Source: r.Source, Connected: r.Neko().Connected(), OfflineSince: since, UserCount: r.UserCount()}
+}
+
+func containerRoom(ctx context.Context, room *hub.Room) adminRoom {
+	result := toAdminRoom(room)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if running, err := room.ContainerRunning(ctx); err == nil {
+		result.Container = "stopped"
+		if running {
+			result.Container = "running"
+		}
+	}
+	return result
 }
 
 func newRoomToken() (string, error) {
@@ -45,11 +61,53 @@ func (s *Server) adminListRooms(w http.ResponseWriter, r *http.Request) {
 	if s.requireAdmin(w, r) == nil {
 		return
 	}
-	list := []adminRoom{}
-	for _, room := range s.hub.Rooms() {
-		list = append(list, toAdminRoom(room))
+	rooms := s.hub.Rooms()
+	list := make([]adminRoom, len(rooms))
+	var work sync.WaitGroup
+	for i, room := range rooms {
+		work.Add(1)
+		go func() {
+			defer work.Done()
+			list[i] = containerRoom(r.Context(), room)
+		}()
 	}
+	work.Wait()
 	writeJSON(w, http.StatusOK, list)
+}
+
+func (s *Server) adminStartRoom(w http.ResponseWriter, r *http.Request) {
+	s.adminControlRoom(w, r, "start")
+}
+
+func (s *Server) adminStopRoom(w http.ResponseWriter, r *http.Request) {
+	s.adminControlRoom(w, r, "stop")
+}
+
+func (s *Server) adminControlRoom(w http.ResponseWriter, r *http.Request, action string) {
+	actor := s.requireAdmin(w, r)
+	if actor == nil {
+		return
+	}
+	room := s.hub.Room(r.PathValue("room"))
+	if room == nil {
+		writeError(w, http.StatusNotFound, "Unknown room.")
+		return
+	}
+	s.log.Info("admin container "+action, "room", room.Name, "username", actor.Username)
+	control := room.StartContainer
+	if action == "stop" {
+		control = room.StopContainer
+	}
+	err := control(r.Context())
+	switch {
+	case errors.Is(err, hub.ErrNoContainerControl):
+		writeError(w, http.StatusConflict, "This room's container is not managed by the server.")
+	case err != nil:
+		s.log.Error("admin container "+action, "room", room.Name, "username", actor.Username, "err", err)
+		writeError(w, http.StatusBadGateway, "Docker could not "+action+" the room.")
+	default:
+		writeJSON(w, http.StatusOK, containerRoom(r.Context(), room))
+	}
 }
 
 func (s *Server) adminCreateRoom(w http.ResponseWriter, r *http.Request) {

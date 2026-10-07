@@ -15,6 +15,7 @@ const REFRESH_MS = 10_000
 const SOURCES = { configured: 'Configured', registered: 'Registered', paired: 'Paired' } as const
 
 function Connection({ room }: { room: AdminRoom }) {
+  if (room.container === 'stopped') return <Badge>Stopped</Badge>
   if (room.connected) return <Badge tone="success">Online</Badge>
   if (!room.offlineSince) return <Badge>Connecting</Badge>
   return <>
@@ -29,6 +30,7 @@ export function RoomsTab() {
     [message, setMessage] = useState(''),
     [loading, setLoading] = useState(true),
     [refresh, setRefresh] = useState(0),
+    [starting, setStarting] = useState<string | null>(null),
     [action, setAction] = useState<RoomAction | null>(null)
   useEffect(() => {
     let active = true
@@ -53,7 +55,22 @@ export function RoomsTab() {
   }, [])
   function saved(room: AdminRoom) {
     setRooms((list) => [...list.filter((r) => r.name !== room.name), room].sort((a, b) => a.name.localeCompare(b.name)))
-    setMessage(`${room.name} ${action?.mode === 'add' ? 'added' : 'updated'}.`)
+    setMessage(`${room.name} ${action?.mode === 'add' ? 'added' : action?.mode === 'stop' ? 'stopped' : 'updated'}.`)
+  }
+  async function start(room: AdminRoom) {
+    if (starting) return
+    setStarting(room.name)
+    setError('')
+    setMessage('')
+    try {
+      const updated = await adminRooms.start(room.name)
+      setRooms((list) => list.map((r) => r.name === updated.name ? updated : r))
+      setMessage(`${room.name} is starting. It shows as Online once its desktop is up.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.')
+    } finally {
+      setStarting(null)
+    }
   }
   return (
     <Section title="Rooms" description="Manage room connections. Computers that run a room elsewhere ask to be paired and appear under Requests."
@@ -75,13 +92,19 @@ export function RoomsTab() {
           <td data-label="Source"><Badge>{SOURCES[room.source]}</Badge></td>
           <td data-label="Connection"><Connection room={room} /></td>
           <td data-label="People">{room.userCount}</td>
-          <td>{room.source === 'configured' ? <span class={styles.note}>Defined in <code>COZYCAST_ROOMS</code>.</span> : <div class={styles.actions}>
-            {room.source === 'registered' && <>
-              <Button size="sm" variant="ghost" onClick={() => setAction({ mode: 'address', room })} aria-label={`Change address of ${room.name}`}>Change address</Button>
-              <Button size="sm" variant="ghost" onClick={() => setAction({ mode: 'token', room })} aria-label={`New token for ${room.name}`}>New token</Button>
+          <td><div class={styles.actions}>
+            {room.container === 'stopped' && <Button size="sm" variant="ghost" disabled={starting !== null}
+              onClick={() => start(room)} aria-label={`Start ${room.name}`}>Start</Button>}
+            {room.container === 'running' && <Button size="sm" variant="danger-ghost"
+              onClick={() => setAction({ mode: 'stop', room })} aria-label={`Stop ${room.name}`}>Stop</Button>}
+            {room.source === 'configured' ? <span class={styles.note}>Defined in <code>COZYCAST_ROOMS</code>.</span> : <>
+              {room.source === 'registered' && <>
+                <Button size="sm" variant="ghost" onClick={() => setAction({ mode: 'address', room })} aria-label={`Change address of ${room.name}`}>Change address</Button>
+                <Button size="sm" variant="ghost" onClick={() => setAction({ mode: 'token', room })} aria-label={`New token for ${room.name}`}>New token</Button>
+              </>}
+              <Button size="sm" variant="danger-ghost" onClick={() => setAction({ mode: 'remove', room })} aria-label={`Remove ${room.name}`}>Remove</Button>
             </>}
-            <Button size="sm" variant="danger-ghost" onClick={() => setAction({ mode: 'remove', room })} aria-label={`Remove ${room.name}`}>Remove</Button>
-          </div>}</td>
+          </div></td>
         </tr>)}
       </AdminTable>}
       {action && <RoomModal key={`${action.mode}:${action.mode === 'add' ? '' : action.room.name}`} action={action}

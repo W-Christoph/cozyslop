@@ -36,9 +36,11 @@ type RoomConfig struct {
 	Name          string
 	Neko          *neko.Client
 	DefaultScreen string
-	// Restart restarts the room's container; nil when the operator has not
-	// enabled container control.
-	Restart func(ctx context.Context) error
+	// Container hooks are nil when the operator has not enabled control.
+	// Running reports whether the room's container is running.
+	Restart     func(ctx context.Context) error
+	Start, Stop func(ctx context.Context) error
+	Running     func(ctx context.Context) (bool, error)
 	// TitleURL answers with the title of the window in front on the room's
 	// desktop (worker/window-title.py); "" if the room has no such helper.
 	TitleURL string
@@ -184,6 +186,7 @@ func (h *Hub) makeRoom(rc RoomConfig) *Room {
 		r.Source = "configured"
 	}
 	r.restart, r.defaultScreen, r.titleURL = rc.Restart, rc.DefaultScreen, rc.TitleURL
+	r.start, r.stop, r.running = rc.Start, rc.Stop, rc.Running
 	r.playURL, r.playToken = rc.PlayURL, rc.PlayToken
 	return r
 }

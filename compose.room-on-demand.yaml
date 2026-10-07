@@ -1,0 +1,57 @@
+# The server's own room is stopped until an admin starts it (Admin > Rooms),
+# for a small server that mostly shows rooms on other computers
+# (docs/home-hosting.md). In .env:
+#
+#   COMPOSE_FILE=compose.yaml:compose.room-on-demand.yaml
+#   DOCKER_GID=<group of /var/run/docker.sock: stat -c %g /var/run/docker.sock>
+#
+# With a compose.override.yaml of your own, add it to that list as well.
+# Then, and again after an update:
+#
+#   docker compose up -d --build
+#   docker compose --profile room-default create --build room-default
+#
+# The second line builds the room and creates its container without starting
+# it. A room that runs already keeps running until it is stopped.
+
+services:
+  server:
+    depends_on: !override [docker]
+    environment:
+      COZYCAST_DOCKER: "true"
+      COZYCAST_DOCKER_SOCKET: tcp://docker:2375
+      COZYCAST_DOCKER_PROJECT: ${COMPOSE_PROJECT_NAME}
+    networks:
+      - docker
+
+  # In a profile nobody turns on: "docker compose up" leaves the room alone.
+  room-default:
+    profiles: ["room-default"]
+
+  # All the server may ask of Docker: which containers there are, and to
+  # start, stop or restart one. It cannot create containers, run commands in
+  # them or read their settings, which the Docker socket itself would allow
+  # (and with that, everything on this machine).
+  docker:
+    image: wollomatic/socket-proxy:1@sha256:3935b709275e4ec35d6ed5a5c4a1f0d01ed31eec5e7234efc3357ecd47689002
+    restart: unless-stopped
+    user: "65534:${DOCKER_GID:?set DOCKER_GID in .env}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - -listenip=0.0.0.0
+      - -allowfrom=server
+      # Each has to match the whole path.
+      - -allowGET=/containers/json
+      - -allowPOST=/containers/[a-f0-9]+/(start|stop|restart)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker
+
+networks:
+  # Only the server and the proxy; no way out.
+  docker:
+    internal: true

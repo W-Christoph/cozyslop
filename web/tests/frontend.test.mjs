@@ -1720,6 +1720,93 @@ test('rooms listing ignores a response after leaving the tab', async (t) => {
   assert.equal(named(f.render(RoomsTab), 'AdminTable'), undefined)
 })
 
+test('managed rooms start immediately, update the row and confirm stopping', async (t) => {
+  const f = fixture(t), requests = []
+  const stopped = { ...configuredRoom, container: 'stopped', connected: false, offlineSince: offlineRoom.offlineSince }
+  const running = { ...stopped, container: 'running' }
+  let finish
+  roomRefresh(t, (path, init) => {
+    requests.push([path, init.method])
+    if (init.method === 'GET') return Promise.resolve(roomReply([stopped]))
+    return new Promise(resolve => { finish = resolve })
+  })
+  const render = () => f.render(RoomsTab)
+  render(); await settle()
+  const row = () => nodes(named(render(), 'AdminTable')).find(n => n.type === 'tr')
+  const connection = nodes(row()).find(n => n.type?.name === 'Connection')
+  const badge = named(connection.type(connection.props), 'Badge')
+  assert.equal(badge.props.children, 'Stopped')
+  assert.equal(badge.props.tone, undefined)
+  assert.ok(nodes(row()).some(n => n.type === 'code' && n.props.children === 'COZYCAST_ROOMS'))
+  const start = button(row(), 'Start')
+  assert.equal(start.props.size, 'sm')
+  assert.equal(start.props.variant, 'ghost')
+  assert.equal(start.props['aria-label'], 'Start default')
+  const pending = start.props.onClick()
+  assert.equal(named(render(), 'RoomModal'), undefined)
+  assert.equal(button(row(), 'Start').props.disabled, true)
+  await button(row(), 'Start').props.onClick()
+  assert.deepEqual(requests, [['/api/admin/rooms', 'GET'], ['/api/admin/rooms/default/start', 'POST']])
+  finish(roomReply(running)); await pending
+  assert.equal(named(render(), 'Notice').props.children, 'default is starting. It shows as Online once its desktop is up.')
+  assert.equal(button(row(), 'Start'), undefined)
+  const stop = button(row(), 'Stop')
+  assert.equal(stop.props.size, 'sm')
+  assert.equal(stop.props.variant, 'danger-ghost')
+  assert.equal(stop.props['aria-label'], 'Stop default')
+  stop.props.onClick()
+  const modal = named(render(), 'RoomModal')
+  assert.deepEqual(modal.props.action, { mode: 'stop', room: running })
+  assert.equal(requests.length, 2, 'opening Stop requires confirmation first')
+  modal.props.onSaved(stopped)
+  modal.props.onClose()
+  assert.equal(named(render(), 'Notice').props.children, 'default stopped.')
+  assert.ok(button(row(), 'Start'))
+})
+
+test('failed start shows the server error and leaves the stopped row ready to retry', async (t) => {
+  const f = fixture(t)
+  const stopped = { ...configuredRoom, container: 'stopped', connected: false }
+  roomRefresh(t, async (_path, init) => init.method === 'GET' ? roomReply([stopped])
+    : roomReply({ error: 'Docker could not start the room.' }, 502))
+  const render = () => f.render(RoomsTab)
+  render(); await settle()
+  await button(render(), 'Start').props.onClick()
+  assert.equal(named(render(), 'Notice').props.children, 'Docker could not start the room.')
+  assert.equal(button(render(), 'Start').props.disabled, false)
+})
+
+test('stop modal explains desktop loss, keeps failures open and saves the returned container state', async (t) => {
+  const f = fixture(t), requests = [], saved = []
+  const running = { ...configuredRoom, container: 'running' }
+  const stopped = { ...running, container: 'stopped', connected: false }
+  let failed = true, closed = 0, finish
+  globals(t, { fetch: (path, init) => {
+    requests.push([path, init.method])
+    return new Promise(resolve => { finish = () => resolve(failed ? roomReply({ error: 'Docker could not stop the room.' }, 502) : roomReply(stopped)) })
+  } })
+  const render = () => f.render(RoomModal, { action: { mode: 'stop', room: running }, onClose: () => closed++, onSaved: room => saved.push(room), onRemoved() {} })
+  const text = nodes(render()).filter(n => n.type === 'p').map(n => Array.isArray(n.props.children) ? n.props.children.join('') : n.props.children).join(' ')
+  assert.equal(text, 'Stop default? Its desktop shuts down: what is open in it is lost, and viewers see the room as offline until it is started again.')
+  assert.equal(requests.length, 0)
+  assert.equal(button(render().props.footer, 'Stop').props.variant, 'danger')
+  const pending = button(render().props.footer, 'Stop').props.onClick()
+  assert.equal(button(render().props.footer, 'Stop').props.disabled, true)
+  render().props.onClose()
+  await button(render().props.footer, 'Stop').props.onClick()
+  assert.equal(closed, 0)
+  assert.equal(requests.length, 1)
+  finish(); await pending
+  assert.equal(named(render(), 'Notice').props.children, 'Docker could not stop the room.')
+  assert.deepEqual(saved, [])
+  failed = false
+  const retry = button(render().props.footer, 'Stop').props.onClick()
+  finish(); await retry
+  assert.deepEqual(requests, [['/api/admin/rooms/default/stop', 'POST'], ['/api/admin/rooms/default/stop', 'POST']])
+  assert.deepEqual(saved, [stopped])
+  assert.equal(closed, 1)
+})
+
 test('room validation follows the server name and neko address rules', () => {
   for (const name of ['default', 'Room_2-test', '0']) assert.equal(roomNameError(name), '')
   for (const name of ['', 'two words', 'room/path', 'café', 'room\n']) assert.ok(roomNameError(name), name)

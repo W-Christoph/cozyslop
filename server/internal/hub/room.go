@@ -29,9 +29,10 @@ import (
 )
 
 var (
-	ErrNotPresent  = errors.New("hub: user is not in the room")
-	ErrNotAllowed  = errors.New("hub: not allowed")
-	ErrRateLimited = errors.New("hub: sending too fast")
+	ErrNotPresent         = errors.New("hub: user is not in the room")
+	ErrNotAllowed         = errors.New("hub: not allowed")
+	ErrRateLimited        = errors.New("hub: sending too fast")
+	ErrNoContainerControl = errors.New("hub: container control disabled")
 )
 
 // DeniedError is returned by Join when the identity may not enter.
@@ -54,11 +55,13 @@ type Room struct {
 	ready         chan struct{} // closed once neko is up and cleaned
 	defaultScreen string
 
-	inbound   *ratelimit.Limiter // per person: every message type
-	chatUser  *ratelimit.Limiter // per person: new chat messages
-	chatAnon  *ratelimit.Limiter
-	whisperID atomic.Int64
-	restart   func(ctx context.Context) error // nil = container control disabled
+	inbound     *ratelimit.Limiter // per person: every message type
+	chatUser    *ratelimit.Limiter // per person: new chat messages
+	chatAnon    *ratelimit.Limiter
+	whisperID   atomic.Int64
+	restart     func(ctx context.Context) error // nil = container control disabled
+	start, stop func(ctx context.Context) error
+	running     func(ctx context.Context) (bool, error)
 
 	mu       sync.Mutex
 	settings store.RoomSettings
@@ -143,6 +146,27 @@ func newRoom(h *Hub, name string, nc *neko.Client) *Room {
 }
 
 func (r *Room) Neko() *neko.Client { return r.neko }
+
+func (r *Room) StartContainer(ctx context.Context) error {
+	if r.start == nil {
+		return ErrNoContainerControl
+	}
+	return r.start(ctx)
+}
+
+func (r *Room) StopContainer(ctx context.Context) error {
+	if r.stop == nil {
+		return ErrNoContainerControl
+	}
+	return r.stop(ctx)
+}
+
+func (r *Room) ContainerRunning(ctx context.Context) (bool, error) {
+	if r.running == nil {
+		return false, ErrNoContainerControl
+	}
+	return r.running(ctx)
+}
 
 // UserCount is the number of people (not tabs) in the room.
 func (r *Room) UserCount() int {

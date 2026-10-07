@@ -48,10 +48,12 @@ type Init struct {
 // and calls onConnect after every successful (re)connect, which is also the
 // first sign that neko may have restarted and lost its runtime settings, and
 // onDisconnect when a connected stream ends. Retries back off to 10 s at
-// most, so a desktop that comes back is noticed soon.
+// most, so a desktop that comes back is noticed soon. An outage is logged
+// once, however long it lasts: a room may be switched off for weeks.
 func (c *Client) WatchHost(ctx context.Context, onConnect func(Init), onDisconnect func(), onHost func(hostID string)) {
 	log := slog.With("neko", c.base.Host)
 	backoff := time.Second
+	logged := false // this outage
 	for ctx.Err() == nil {
 		start := time.Now()
 		up := false
@@ -65,7 +67,10 @@ func (c *Client) WatchHost(ctx context.Context, onConnect func(Init), onDisconne
 		// Kept-alive connections may be as dead as this one (the other
 		// end of a tunnel restarted).
 		c.closeIdle()
-		log.Warn("neko event stream ended, reconnecting", "err", err)
+		if up || !logged {
+			log.Warn("neko event stream ended, reconnecting", "err", err)
+			logged = true
+		}
 		if time.Since(start) > time.Minute {
 			backoff = time.Second
 		}

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,6 +30,8 @@ func TestAdminAuthorization(t *testing.T) {
 		{"POST", "/api/admin/rooms"},
 		{"PATCH", "/api/admin/rooms/default"},
 		{"POST", "/api/admin/rooms/default/token"},
+		{"POST", "/api/admin/rooms/default/start"},
+		{"POST", "/api/admin/rooms/default/stop"},
 		{"DELETE", "/api/admin/rooms/default"},
 		{"GET", "/api/admin/users"},
 		{"PATCH", "/api/admin/users/alice"},
@@ -441,6 +444,114 @@ func TestAdminGlobalSettings(t *testing.T) {
 	a.call(admin, "PUT", "/api/admin/settings", map[string]string{"message": message + "é", "registration": "open"}, 400, nil)
 	a.call(admin, "PUT", "/api/admin/settings", map[string]string{"registration": "invalid"}, 400, nil)
 	a.call(admin, "PUT", "/api/admin/settings", map[string]string{"message": "welcome", "registration": "invite"}, 200, nil)
+}
+
+func TestAdminRoomContainers(t *testing.T) {
+	a := newAPITest(t)
+	a.user("root", true)
+	admin := a.login("root")
+	var running atomic.Bool
+	var lookups, starts, stops atomic.Int32
+	rc := hub.RoomConfig{
+		Name: "managed", Neko: a.h.Room("default").Neko(),
+		Start: func(ctx context.Context) error {
+			starts.Add(1)
+			running.Store(true)
+			return nil
+		},
+		Stop: func(ctx context.Context) error {
+			stops.Add(1)
+			running.Store(false)
+			return nil
+		},
+		Running: func(ctx context.Context) (bool, error) {
+			lookups.Add(1)
+			deadline, ok := ctx.Deadline()
+			if !ok || time.Until(deadline) > 2*time.Second {
+				t.Error("container lookup must have a 2 s deadline")
+			}
+			return running.Load(), nil
+		},
+	}
+	if err := a.h.Add(context.Background(), rc); err != nil {
+		t.Fatal(err)
+	}
+	var list []map[string]any
+	data := a.call(admin, "GET", "/api/admin/rooms", nil, 200, &list)
+	if len(list) != 2 || list[0]["name"] != "default" || list[0]["container"] != nil || list[1]["container"] != "stopped" || lookups.Load() != 1 {
+		t.Fatalf("container list: %s, lookups %d", data, lookups.Load())
+	}
+	for _, action := range []string{"start", "stop"} {
+		a.error(admin, "POST", "/api/admin/rooms/missing/"+action, nil, 404, "Unknown room.")
+		a.error(admin, "POST", "/api/admin/rooms/default/"+action, nil, 409, "This room's container is not managed by the server.")
+		for range 2 {
+			var room map[string]any
+			data := a.call(admin, "POST", "/api/admin/rooms/managed/"+action, nil, 200, &room)
+			want := "stopped"
+			if action == "start" {
+				want = "running"
+			}
+			if room["name"] != "managed" || room["source"] != "configured" || room["container"] != want || room["connected"] != false || room["userCount"] != float64(0) {
+				t.Fatalf("%s response: %s", action, data)
+			}
+		}
+	}
+	if starts.Load() != 2 || stops.Load() != 2 || lookups.Load() != 5 {
+		t.Fatalf("hook calls: start %d, stop %d, lookup %d", starts.Load(), stops.Load(), lookups.Load())
+	}
+	fail := func(context.Context) error { return errors.New("daemon unavailable") }
+	rc.Name, rc.Start, rc.Stop = "failed", fail, fail
+	rc.Running = func(context.Context) (bool, error) { return false, fail(context.Background()) }
+	if err := a.h.Add(context.Background(), rc); err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range []string{"start", "stop"} {
+		a.error(admin, "POST", "/api/admin/rooms/failed/"+action, nil, 502, "Docker could not "+action+" the room.")
+	}
+	list = nil
+	a.call(admin, "GET", "/api/admin/rooms", nil, 200, &list)
+	if list[1]["name"] != "failed" || list[1]["container"] != nil {
+		t.Fatalf("failed lookup must omit container: %v", list)
+	}
+}
+
+func TestAdminRoomContainerTimeout(t *testing.T) {
+	a := newAPITest(t)
+	a.user("root", true)
+	admin := a.login("root")
+	var calls atomic.Int32
+	for _, name := range []string{"hang-1", "hang-2"} {
+		if err := a.h.Add(context.Background(), hub.RoomConfig{
+			Name: name, Neko: a.h.Room("default").Neko(),
+			Start: func(context.Context) error { return nil },
+			Running: func(ctx context.Context) (bool, error) {
+				calls.Add(1)
+				<-ctx.Done()
+				return false, ctx.Err()
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	start := time.Now()
+	var list []map[string]any
+	a.call(admin, "GET", "/api/admin/rooms", nil, 200, &list)
+	if elapsed := time.Since(start); elapsed > 3500*time.Millisecond {
+		t.Fatalf("lookups took %v; must time out concurrently", elapsed)
+	}
+	if calls.Load() != 2 || len(list) != 3 {
+		t.Fatalf("list %v, lookups %d", list, calls.Load())
+	}
+	for _, room := range list {
+		if room["container"] != nil {
+			t.Fatalf("timed out lookup included container: %v", room)
+		}
+	}
+	var room map[string]any
+	a.call(admin, "POST", "/api/admin/rooms/hang-1/start", nil, 200, &room)
+	if room["name"] != "hang-1" || room["container"] != nil || calls.Load() != 3 {
+		t.Fatalf("successful start with failed status lookup: %v, lookups %d", room, calls.Load())
+	}
 }
 
 func TestAdminRoomRegistrations(t *testing.T) {

@@ -113,9 +113,10 @@ start() {
   fi
   docker compose up -d --build
   if on_demand; then
-    # Built and created, not started: that is the admin's button.
+    # Built and created, not started: that is the admin's button. A room
+    # that runs is left running.
     docker compose --profile room-default create --build room-default
-    echo "The server's room is stopped; start it under Admin > Rooms."
+    echo "The server's own room is started and stopped under Admin > Rooms."
   fi
 }
 

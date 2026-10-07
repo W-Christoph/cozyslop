@@ -379,6 +379,50 @@ func TestRelayWatchesOnceForAllViewers(t *testing.T) {
 	}
 }
 
+// The relay's port is reached on any of the machine's addresses, like a
+// published port of a container that is on several networks.
+func TestRelayAnswersOnEveryAddress(t *testing.T) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var local []netip.Addr
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok && n.IP.To4() != nil && !n.IP.IsLoopback() {
+			ip, _ := netip.AddrFromSlice(n.IP.To4())
+			local = append(local, ip)
+		}
+	}
+	if len(local) == 0 {
+		t.Skip("this machine has no address besides loopback")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	fake := nekotest.New(t, "secret")
+	newFakeMedia(t, fake)
+	nc, err := neko.NewClient(fake.URL(), "secret", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := Source{Neko: nc, MediaHost: "127.0.0.1", Stream: func() string { return "" }}
+	// Loopback too, so that the machine has two addresses at least.
+	for _, public := range append(local, netip.MustParseAddr("127.0.0.1")) {
+		r, err := New(Config{Port: freePort(t), PublicIP: public, Loopback: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		v, tab, offer := watch(t, ctx, r, src, Request{})
+		if n := strings.Count(offer, " "+public.String()+" "); n == 0 || n != strings.Count(offer, "a=candidate:") {
+			t.Fatalf("offer for %s announces other addresses:\n%s", public, offer)
+		}
+		if got := tab.receive(t, ctx, 2); !got["video picture"] {
+			t.Fatalf("viewer reaching the relay at %s got %v", public, got)
+		}
+		v.Close()
+		r.Close()
+	}
+}
+
 func TestContinuityAcrossStreams(t *testing.T) {
 	var c continuity
 	send := func(stream int, seq uint16, timestamp uint32) (uint16, uint32, bool) {

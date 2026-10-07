@@ -56,6 +56,7 @@ type Config struct {
 type Relay struct {
 	viewers  *webrtc.API // to browsers: ICE lite on the shared port
 	upstream *webrtc.API // to neko
+	public   string      // the address announced to viewers; "" for the machine's own
 	udp      ice.UDPMux
 	tcp      net.Listener
 	log      *slog.Logger
@@ -67,7 +68,11 @@ type Relay struct {
 // New opens the relay's port.
 func New(cfg Config) (*Relay, error) {
 	// One socket per address of this machine, as neko does: answers then
-	// leave from the address the viewer wrote to.
+	// leave from the address the viewer wrote to. Every address stays a
+	// candidate of its own, and the public address is written into the
+	// offer instead (Join). Telling pion to announce it would make the
+	// candidates equal, and pion then serves only the first address: in a
+	// container on two networks, not the one viewers arrive on.
 	opts := []ice.UDPMuxFromPortOption{ice.UDPMuxFromPortWithNetworks(ice.NetworkTypeUDP4)}
 	if cfg.Loopback {
 		opts = append(opts, ice.UDPMuxFromPortWithLoopback())
@@ -86,14 +91,15 @@ func New(cfg Config) (*Relay, error) {
 	viewers.SetICEUDPMux(udp)
 	viewers.SetICETCPMux(webrtc.NewICETCPMux(nil, tcp, 8))
 	viewers.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeTCP4})
-	if cfg.PublicIP.IsValid() {
-		viewers.SetNAT1To1IPs([]string{cfg.PublicIP.String()}, webrtc.ICECandidateTypeHost)
-	}
+	viewers.SetIncludeLoopbackCandidate(cfg.Loopback)
 	var upstream webrtc.SettingEngine
 	// neko's media is reached on this machine (see Source.MediaHost).
 	upstream.SetIncludeLoopbackCandidate(true)
 	upstream.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeTCP4})
 	r := &Relay{udp: udp, tcp: tcp, log: slog.With("component", "relay"), rooms: map[string]*room{}}
+	if cfg.PublicIP.IsValid() {
+		r.public = cfg.PublicIP.String()
+	}
 	if r.viewers, err = newAPI(viewers); err == nil {
 		r.upstream, err = newAPI(upstream)
 	}
@@ -199,7 +205,7 @@ func (r *Relay) Join(ctx context.Context, name string, src Source, req Request) 
 		return nil, "", err
 	}
 	rm.add(v)
-	return v, pc.LocalDescription().SDP, nil
+	return v, RewriteSDP(pc.LocalDescription().SDP, r.public), nil
 }
 
 // Answer completes the connection with the tab's answer.
@@ -777,7 +783,9 @@ func (c *continuity) renumber(stream int, p *rtp.Packet, clockRate uint32) (ok b
 	return true
 }
 
-// RewriteSDP points the candidates in an SDP at host (see Source.MediaHost).
+// RewriteSDP points the candidates in an SDP at host: neko's at where the
+// relay reaches it (Source.MediaHost), the relay's own at its public
+// address.
 func RewriteSDP(sdp, host string) string {
 	if host == "" {
 		return sdp

@@ -389,8 +389,13 @@ room for an x86 hub: the room and agent images built there, the room paired
 and was ready 8 s after it was accepted, and a viewer got 1280×720 at
 30 fps through the relay. The room's container used 57% of one core while
 its idle desktop was being watched (x264 `veryfast`, 720p, 30 fps), under
-1% with nobody watching, and about 910 MB. Not tried there: a video playing
-in the room. Still unknown: the Orange Pi below, whose fast cores are the
+1% with nobody watching, and about 910 MB. With a video playing in the room
+the two cores were not enough: the picture stuttered, the load average was
+near 7, and the container used 170% of 200%. Of that, Firefox playing the
+video (decoding, and drawing without a graphics card) took about 105%,
+neko's capture and x264 about 58%, the X server 9%. So the encoder is the
+smaller part, and hardware encoding alone would not fix it. Not tried: four
+cores. Still unknown: the Orange Pi below, whose four fast cores are the
 same design at a lower clock.
 
 How it is built:

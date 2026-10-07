@@ -96,6 +96,12 @@ clipboard needs HTTPS: browsers only allow it on secure pages.
 Second room: uncomment `room-second` in `compose.yaml` and add it to
 `COZYCAST_ROOMS`, the server's `networks` and the `networks` at the bottom.
 
+No room on the server itself, for a small server whose rooms all run
+[on other computers](#a-room-on-someone-elses-computer): put
+`COMPOSE_FILE=compose.yaml:compose.no-room.yaml` in `.env`. The room image
+is then neither built nor run; a room is what needs CPU and memory (see the
+notes in that file when a room is already running).
+
 ## Develop
 
 ```bash
@@ -127,7 +133,7 @@ leave an existing account's password unchanged.
 |---|---|---|
 | `COZYCAST_NEKO_SECRET` | required | configured rooms derive their neko admin token from it and their name; configured room containers use the same secret and `COZYCAST_ROOM`; registered room containers receive only their own token |
 | `COZYCAST_NEKO_API_TOKEN` | | instead of the secret: one token used as-is for every room, for a neko you run yourself with `NEKO_SESSION_API_TOKEN` |
-| `COZYCAST_ROOMS` | `default=http://room-default:8080` | `name=url,name2=url2`; configured rooms alongside database registrations; the configured list must still contain at least one room (empty uses the default) |
+| `COZYCAST_ROOMS` | `default=http://room-default:8080` | `name=url,name2=url2`; configured rooms alongside database registrations; `none` for no configured room (empty uses the default) |
 | `COZYCAST_NEKO_TOKEN` | | worker only: ready neko admin token for a registered room; takes precedence over `COZYCAST_NEKO_SECRET`; both variables are removed before starting desktop processes |
 | `COZYCAST_DEFAULT_SCREEN` | | container default screen for all rooms (`1280x720@30`); Compose sets it from `SCREEN`; empty leaves the desktop size alone when clearing the room setting |
 | `COZYCAST_DATA_DIR` | `data` | database, uploaded chat media and the tunnel's key (`wireguard.key`) |

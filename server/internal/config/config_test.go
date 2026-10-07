@@ -103,6 +103,12 @@ func TestRegisteredRoomValidation(t *testing.T) {
 	if _, err := parseRooms(""); err == nil {
 		t.Fatal("empty configured room list accepted")
 	}
+	// A server whose rooms are all added at runtime says so.
+	t.Setenv("COZYCAST_NEKO_API_TOKEN", "test-secret")
+	t.Setenv("COZYCAST_ROOMS", " none ")
+	if cfg, err := FromEnv(); err != nil || len(cfg.Rooms) != 0 {
+		t.Fatalf("COZYCAST_ROOMS=none: %+v %v", cfg.Rooms, err)
+	}
 }
 
 func TestTunnelConfig(t *testing.T) {

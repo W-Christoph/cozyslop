@@ -230,8 +230,8 @@ cancels and waits for its background work. URL/token changes replace the runtime
 and send `room_changed`, telling viewers to reopen the room. Neither operation
 removes settings, permissions or chat history; normal chat retention still runs.
 Registered rooms have no Docker restart hook. Container creation, owning nodes
-and tunnels remain future work. `COZYCAST_ROOMS` keeps its existing nonempty
-configuration requirement.
+and tunnels remain future work. `COZYCAST_ROOMS` must name at least one room or be
+`none`.
 
 ## Room WebSocket
 

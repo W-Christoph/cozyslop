@@ -138,8 +138,12 @@ func (c Config) NekoToken(room string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// parseRooms reads "name=url,name2=url2".
+// parseRooms reads "name=url,name2=url2", or "none" for a server whose
+// rooms are all added at runtime.
 func parseRooms(s string) ([]Room, error) {
+	if strings.TrimSpace(s) == "none" {
+		return nil, nil
+	}
 	var rooms []Room
 	seen := map[string]bool{}
 	for _, part := range strings.Split(s, ",") {

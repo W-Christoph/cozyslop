@@ -1,0 +1,19 @@
+# No room on the server itself, for a small server whose rooms all run on
+# other computers (docs/home-hosting.md). In .env:
+#
+#   COMPOSE_FILE=compose.yaml:compose.no-room.yaml
+#
+# With a compose.override.yaml of your own, add it to that list as well.
+# A room that is running already keeps running; remove it once (its home
+# folder's volume stays):
+#
+#   docker compose --profile room-default rm -sf room-default
+
+services:
+  server:
+    environment:
+      COZYCAST_ROOMS: none
+    depends_on: !reset []
+  # In a profile nobody turns on: not started, and its image is not built.
+  room-default:
+    profiles: ["room-default"]

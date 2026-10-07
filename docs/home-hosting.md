@@ -472,6 +472,12 @@ month, counting both directions. Pick the datacenter
 closest to the node: everything goes node → hub → viewer, and the remote
 holder feels the detour.
 
+The hub does not have to run a room itself: with
+`COMPOSE_FILE=compose.yaml:compose.no-room.yaml` in `.env` only the server
+is built and run (`COZYCAST_ROOMS=none`). Measured on the test server of 2026-10-07: the
+server used about 100 MB and 6% of a core with a paired room being watched,
+the idle default room next to it 1.2 GB.
+
 Prices as of 2026-10-04, from review sites, for Europe. Check the provider's
 own page before ordering.
 

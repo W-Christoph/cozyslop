@@ -84,6 +84,9 @@ type Room struct {
 	offline      bool
 	offlineSince time.Time
 	offlineGen   int
+	// Not nil while neko is gone and the tabs have not been told; closed
+	// when it is back or they are told. Token requests wait for it.
+	lost chan struct{}
 }
 
 // member is one person in the room, with all their tabs.
@@ -116,6 +119,7 @@ type Client struct {
 	typing time.Time // last typing broadcast, for throttling
 
 	nekoToken string                 // the tab's current neko session token
+	tokenBusy bool                   // a request for a new one is being answered
 	nekoConns map[*NekoConn]struct{} // its proxied connections to neko
 
 	nekoMu       sync.Mutex // serializes neko member creation, updates and deletion
@@ -227,6 +231,9 @@ func (r *Room) desktopLost() {
 	defer r.mu.Unlock()
 	if !r.offline {
 		r.offlineSince = time.Now()
+		if r.lost == nil {
+			r.lost = make(chan struct{})
+		}
 	}
 	r.offlineGen++
 	gen := r.offlineGen
@@ -237,6 +244,7 @@ func (r *Room) desktopLost() {
 			return
 		}
 		r.offline = true
+		r.settledLocked()
 		r.log.Warn("desktop offline")
 		r.broadcastLocked(desktopMsg{Type: "desktop", State: "offline"}, nil)
 	})
@@ -247,12 +255,22 @@ func (r *Room) desktopFound() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.offlineGen++
+	r.settledLocked()
 	if !r.offline {
 		return
 	}
 	r.offline = false
 	r.log.Info("desktop online")
 	r.broadcastLocked(desktopMsg{Type: "desktop", State: "online"}, nil)
+}
+
+// settledLocked lets the token requests go on that waited to hear whether
+// neko is back or offline.
+func (r *Room) settledLocked() {
+	if r.lost != nil {
+		close(r.lost)
+		r.lost = nil
+	}
 }
 
 // OfflineSince is when the desktop went away, if tabs were told it is

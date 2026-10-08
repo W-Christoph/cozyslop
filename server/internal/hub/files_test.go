@@ -67,10 +67,10 @@ func TestFileActions(t *testing.T) {
 	requireEqual(t, g.count("file_result"), 1)
 
 	// Names that are not a file of the folder never reach the desktop.
-	for _, name := range []string{"", "../etc/passwd", "a/b"} {
+	for i, name := range []string{"", "../etc/passwd", "a/b"} {
 		f.r.Handle(f.ctx, up, ClientMsg{Type: "file_delete", Name: name})
+		requireEqual(t, result(u, 3+i).Error, "That file is not in Downloads.")
 	}
-	requireEqual(t, result(u, 5).Error, "That file is not in Downloads.")
 	f.r.Handle(f.ctx, up, ClientMsg{Type: "file_delete", Name: "gone.mp4"})
 	requireEqual(t, result(u, 6).Error, "That file is not in Downloads any more.")
 	requireEqual(t, len(calls()), 1)

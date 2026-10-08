@@ -294,7 +294,12 @@ unreachable for 5 seconds the server broadcasts
 `{"type":"desktop","state":"offline"}`, and `{"type":"desktop","state":"online"}`
 as soon as it is back. While offline, token requests get the `offline` message
 again instead of `neko_unavailable`; clients wait for `online` and then ask
-for a token. Chat and everything else keep working.
+for a token. During those 5 seconds a token request is not passed to neko: it
+is answered when neko is back (`neko`) or declared offline. Chat and
+everything else keep working: what asks the desktop (token requests, file
+actions, `remote_reset`) is answered when the desktop answers, and later
+messages of the tab do not wait for it. A tab has one token request at a
+time; another one sent meanwhile is dropped, the pending answer covers it.
 
 See [the protocol definitions](../server/internal/hub/protocol.go) for message
 fields and types. Admission and effective rights are described in

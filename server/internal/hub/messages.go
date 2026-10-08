@@ -49,24 +49,32 @@ func (r *Room) Handle(ctx context.Context, c *Client, msg ClientMsg) {
 		r.setPresence(c, func() { c.muted = msg.Muted })
 	case "whisper":
 		err = r.whisper(c, msg.To, msg.Body)
+	// What asks the desktop runs on its own: the desktop may be slow to
+	// answer or gone, and the tab's next messages (chat) must not wait.
 	case "remote_reset":
-		if r.isAdmin(c) {
-			err = r.ResetRemote(ctx)
-		} else {
+		if !r.isAdmin(c) {
 			err = ErrNotAllowed
+			break
 		}
+		go func() { r.report(c, msg.Type, r.ResetRemote(ctx)) }()
+		return
 	case "neko_token":
-		r.sendNekoToken(ctx, c)
+		go r.sendNekoToken(ctx, c)
+		return
 	case "restart":
 		err = r.Restart(c)
 	case "file_delete", "file_play":
-		r.fileAction(ctx, c, strings.TrimPrefix(msg.Type, "file_"), msg.Name)
+		go r.fileAction(ctx, c, strings.TrimPrefix(msg.Type, "file_"), msg.Name)
 		return
 	default:
 		c.send(errorMsg{Type: "error", Message: "Unknown message type."})
 		return
 	}
+	r.report(c, msg.Type, err)
+}
 
+// report tells the tab why its message of type typ failed, if it did.
+func (r *Room) report(c *Client, typ string, err error) {
 	var userErr *userError
 	switch {
 	case err == nil:
@@ -77,7 +85,7 @@ func (r *Room) Handle(ctx context.Context, c *Client, msg ClientMsg) {
 	case errors.Is(err, ErrNotAllowed):
 		c.send(errorMsg{Type: "error", Message: "You are not allowed to do that."})
 	default:
-		r.log.Error("handle message", "type", msg.Type, "client", c.ID, "err", err)
+		r.log.Error("handle message", "type", typ, "client", c.ID, "err", err)
 		c.send(errorMsg{Type: "error", Message: "Something went wrong."})
 	}
 }
@@ -92,23 +100,56 @@ func (e *userError) Error() string { return e.msg }
 func (r *Room) SendNekoToken(ctx context.Context, c *Client) { r.sendNekoToken(ctx, c) }
 
 func (r *Room) sendNekoToken(ctx context.Context, c *Client) {
+	// One request per tab at a time: its answer is also the answer to the
+	// ones that arrive while it waits for the desktop.
+	r.mu.Lock()
+	if c.tokenBusy {
+		r.mu.Unlock()
+		return
+	}
+	c.tokenBusy = true
+	lost := r.lost
+	r.mu.Unlock()
+	msg := r.nekoTokenAnswer(ctx, c, lost)
+	r.mu.Lock()
+	c.tokenBusy = false
+	r.mu.Unlock()
+	if msg != nil {
+		c.send(msg)
+	}
+}
+
+// nekoTokenAnswer is what a tab that asked for a neko token is sent; nil
+// if nothing (it left, or the room was removed).
+func (r *Room) nekoTokenAnswer(ctx context.Context, c *Client, lost <-chan struct{}) any {
+	// A desktop that just went away is not asked: it would answer after
+	// its timeouts at best. The request waits until it is back or the tabs
+	// were told it is offline.
+	if lost != nil {
+		select {
+		case <-lost:
+		case <-r.removed.Done():
+			return nil
+		case <-ctx.Done():
+			return nil
+		}
+	}
 	// An offline desktop cannot issue one; the tab asks again on "online".
 	r.mu.Lock()
 	offline := r.offline
 	r.mu.Unlock()
 	if offline {
-		c.send(desktopMsg{Type: "desktop", State: "offline"})
-		return
+		return desktopMsg{Type: "desktop", State: "offline"}
 	}
 	token, err := r.NekoToken(ctx, c)
 	if err != nil {
 		if ctx.Err() == nil && !errors.Is(err, ErrNotPresent) {
 			r.log.Error("issue neko token", "client", c.ID, "err", err)
-			c.send(nekoUnavailableMsg{Type: "neko_unavailable", Message: "The room's desktop is not reachable right now."})
+			return nekoUnavailableMsg{Type: "neko_unavailable", Message: "The room's desktop is not reachable right now."}
 		}
-		return
+		return nil
 	}
-	c.send(nekoMsg{Type: "neko", Token: token, Path: r.NekoPath})
+	return nekoMsg{Type: "neko", Token: token, Path: r.NekoPath}
 }
 
 // ---- chat -----------------------------------------------------------------

@@ -1,12 +1,13 @@
 # cozyslop
 
-Watch things together in a shared remote browser. A from-scratch rewrite of
-[CozyCast](https://github.com/Vorlent/cozycast) that keeps its UX and throws
-away its backend, built to run cheaply on servers without a GPU.
+Watch things together in a shared remote browser. A room is one Linux
+desktop with Firefox and VLC, streamed to everyone in it, with chat next to
+it and a remote that is passed around. Built to run cheaply on servers
+without a GPU.
 
-**Status: feature complete, not yet run in production.** Everything below
-works end to end in tests; real-world numbers on cheap hosting are still to
-come. The app still calls itself CozyCast.
+**Status: feature complete, tried on small cloud servers, not yet used by a
+community over a long time.** The numbers so far are under
+[Measurements](#measurements). The app calls itself CozyCast.
 
 ## Features
 
@@ -31,32 +32,30 @@ come. The app still calls itself CozyCast.
 - **A room desktop that stays**: files, folders and the Firefox profile
   (open tabs, logins, extensions) live in a Docker volume and survive
   restarts and image updates.
+- **Rooms on other computers**: someone lends a computer at home to run a
+  room, without opening ports or showing their address; the server stays
+  the only thing the internet sees (see
+  [A room on someone else's computer](#a-room-on-someone-elses-computer)).
+  Chat and the user list live on the server and keep working while a
+  room's desktop is offline.
 - **Automatic HTTPS** with Let's Encrypt when a domain is set.
-- **Migration** of accounts, logins, avatars, permissions, invites and the
-  room desktop from an existing CozyCast instance ([guide](docs/migration.md)).
+- **Import** of accounts, logins, avatars, permissions, invites and the
+  room desktop from a [CozyCast](https://github.com/Vorlent/cozycast)
+  instance ([guide](docs/migration.md)).
 
-## Why a rewrite
+## Built on neko
 
-The old stack had grown to nine containers for what is, at its core, "encode
-one desktop, send it to a few dozen browsers":
+Each room is a [neko](https://github.com/m1k1o/neko) container: it captures
+the desktop, encodes it once and takes mouse and keyboard input (keysyms,
+keyboard layouts, clipboard, uploads). cozyslop runs it **unmodified** and
+controls it from outside through its API, so upgrading neko means changing
+a tag. neko is maintained, has years of edge cases fixed and ships prebuilt
+images, for ARM too.
 
-| Old | Problem | Now |
-|---|---|---|
-| GStreamer → Rust `whipclientsink` → LiveKit Ingress → Redis → LiveKit Server | Five hops for one already-encoded stream. Transcoding was off, so LiveKit only forwarded packets. The Rust plugin made worker builds long and fragile. A 10,000-port UDP range to open. | [neko](https://github.com/m1k1o/neko) captures, encodes once and sends WebRTC to every viewer itself. One UDP+TCP port per room. |
-| Lua worker with vendored FFI, luarocks, xdotool | Hand-rolled capture supervision and input mapping. | neko does input (keysyms, keyboard layouts, clipboard, uploads). |
-| Micronaut + Groovy + GORM on the JVM, Postgres, Liquibase | Heavy for a small app, slow to build, outdated dependencies. | One Go binary with the UI embedded, and SQLite. |
-| nginx, certbot, keystore scripts | Complicated SSL setup. | Automatic HTTPS (Let's Encrypt) in the server. |
-| One 2,763-line `styles.css` | Hard to change anything safely. | Design tokens plus one CSS module per component. |
-
-Why neko and not our own worker: it is exactly the worker we would have
-written (Go, Pion WebRTC, GStreamer, XTest), but already maintained, with
-years of edge cases fixed, prebuilt images (ARM too) and a documented API.
-cozyslop runs it **unmodified** and controls it from outside through that
-API, so upgrading neko means changing a tag.
-
-Why not neko's own UI: CozyCast's UX (chat, accounts, room permissions,
-invites) is the point. neko has no drop-in client library yet, so `web/`
-contains a small dependency-free client for its protocol.
+Everything around the desktop is cozyslop's own: accounts, chat, room
+permissions and invites in one Go binary with the UI embedded and SQLite
+for storage. neko has no drop-in client library yet, so `web/` contains a
+small dependency-free client for its protocol.
 
 ## How it fits together
 
@@ -76,17 +75,42 @@ browser ──HTTP/WebSocket──▶ server (Go) ──REST API──▶ room-d
   reach only an allowlist of neko endpoints through the server.
 - **web/**: Preact + TypeScript + Vite. `src/neko/` speaks the neko v3
   protocol (signalling, WebRTC, binary input over a data channel).
+- **node/**: the agent for a room on another computer. It dials out to the
+  server over WireGuard; the server then relays that room's media to its
+  viewers, so the picture above gains one hop
+  ([home hosting](docs/home-hosting.md)).
 
 ## Run it
 
-Moving from an existing CozyCast instance? See [Migration](docs/migration.md).
-
-Needs Docker with Compose.
+Needs Docker with Compose and git. On a fresh server:
 
 ```bash
+curl -fsSL https://get.docker.com | sh
+git clone https://github.com/W-Christoph/cozyslop.git cozycast && cd cozycast
 ./cozycast.sh setup     # asks a few questions and writes .env
 ./cozycast.sh start
 ```
+
+`setup` asks for the server's public IP address, a domain name, whether
+rooms run on other computers and whether the server has a room of its own.
+It makes the secrets and prints the admin password and the ports to open.
+It only writes a new `.env`; later changes are edits to that file followed
+by `./cozycast.sh start`.
+
+Without a domain of your own, a name from [sslip.io](https://sslip.io) works
+for HTTPS: for the address 203.0.113.10, answer the domain question with
+`203-0-113-10.sslip.io` (or set `DOMAIN` to it in `.env`). The certificate
+is fetched on the first HTTPS request.
+
+A server with 1 GB of memory needs swap for the build:
+
+```bash
+fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo "/swapfile none swap sw 0 0" >> /etc/fstab
+```
+
+Importing from a CozyCast instance happens on the first start, into the
+empty database: see [Migration](docs/migration.md) before starting.
 
 Or by hand: `cp .env.example .env`, set `PUBLIC_IP`, `NEKO_API_TOKEN` and
 `ADMIN_PASSWORD`, then `docker compose up -d --build`. `./cozycast.sh` without
@@ -94,8 +118,10 @@ arguments lists its other commands (stop, update, status, logs).
 
 Open `http://<server>/room/default` and log in as `admin`. Open ports
 `80/tcp` (web), `443/tcp` (with `DOMAIN` set, for HTTPS) and `52000/udp` +
-`52000/tcp` (media; one port per room). Copying out of the room into your
-clipboard needs HTTPS: browsers only allow it on secure pages.
+`52000/tcp` (media; one port per room). With rooms on other computers, also
+`51820/udp` (the tunnel) and `52099/udp` + `52099/tcp` (their media).
+Copying out of the room into your clipboard needs HTTPS: browsers only
+allow it on secure pages.
 
 Second room: uncomment `room-second` in `compose.yaml` and add it to
 `COZYCAST_ROOMS`, the server's `networks` and the `networks` at the bottom.
@@ -153,7 +179,7 @@ leave an existing account's password unchanged.
 | `COZYCAST_DOMAIN` | | host names for automatic HTTPS, comma separated |
 | `COZYCAST_ACME_EMAIL` | | optional contact address for Let's Encrypt |
 | `COZYCAST_TRUST_PROXY` | `false` | take client IP from the last entry of the last `X-Forwarded-For` header, and scheme from `X-Forwarded-Proto` |
-| `COZYCAST_IMPORT` | | old CozyCast export archive, imported into an empty database |
+| `COZYCAST_IMPORT` | | CozyCast export archive, imported into an empty database |
 | `COZYCAST_MAX_UPLOAD_MB` | `10` | maximum chat image/video size |
 | `COZYCAST_DOCKER` | `false` | opt in to restarting rooms from the UI, and to starting and stopping them under Admin > Rooms |
 | `COZYCAST_DOCKER_SOCKET` | `/var/run/docker.sock` | Unix socket path or `tcp://host:port` for a Docker socket proxy (plain HTTP) |
@@ -241,8 +267,8 @@ room, but no rebuild. The room desktop's files survive that.
 
 ## Measurements
 
-From the prototype, tested end to end with headless Chromium against the
-compose stack (AMD Ryzen 7 5800X, no GPU):
+A room, tested end to end with headless Chromium against the compose stack
+(AMD Ryzen 7 5800X, no GPU):
 
 - 1280×720 at a steady 30 fps, no dropped frames, audio negotiated.
 - YouTube (Big Buck Bunny) playing in the room's Firefox, normal player size:
@@ -251,11 +277,23 @@ compose stack (AMD Ryzen 7 5800X, no GPU):
 - Encoder presets, same video at 2.5 Mbit/s, neko's share of one core:
   ultrafast ~21%, superfast ~25%, veryfast ~30%.
 - First picture ~1 s after connecting.
-- Server image 16.5 MB (builds in ~16 s); worker image builds in ~50 s with
-  no compiling. The web bundle is now 212 KB JS (75 KB gzipped).
 
-Still to measure on real hosting: fullscreen playback, several viewers over
-the internet, and the old stack on the same machine for comparison.
+The server without a room of its own, on the smallest cloud server tried
+(1 vCPU, 1 GB, with 2 GB of swap):
+
+- Built in 1 min 50 s the first time and about 10 s after a change to the
+  Go code. The image is 37 MB; the web bundle is 296 KB of JavaScript
+  (102 KB gzipped).
+- 5 MB of memory with no room, 20 MB with one paired room.
+- On a 2 vCPU server: about 100 MB and 6% of a core while a paired room was
+  being watched.
+
+A room on a 2 vCPU ARM cloud server took 57% of one core while its idle
+desktop was watched, and stuttered with a video playing in it; the details
+are in [home hosting](docs/home-hosting.md#hardware-node).
+
+Still to measure: fullscreen playback, many viewers over the internet, and
+a room on a real home computer over a long evening.
 
 ## neko gotchas
 
@@ -274,10 +312,11 @@ the internet, and the old stack on the same machine for comparison.
 ## Ideas
 
 Unused neko features (per-viewer quality, RTMP broadcast, hardware
-encoding, ...) and deferred networking work (TURN relay,
-hosting at home, LAN isolation) are collected in [docs/ideas.md](docs/ideas.md).
-The planned home-hosting setup (a home box behind a VPS that relays the
-media) has its own document: [docs/home-hosting.md](docs/home-hosting.md).
+encoding, ...) and deferred networking work (TURN relay, LAN isolation
+for rooms on the server itself) are collected in
+[docs/ideas.md](docs/ideas.md). How a room on a home computer behind the
+server works, what it needs and what is still open is in
+[docs/home-hosting.md](docs/home-hosting.md).
 
 ## License
 

@@ -73,8 +73,10 @@ export function HomePage() {
                   {badge && <Badge icon={badge.icon}>{badge.label}</Badge>}
                 </div>
                 <div class={styles.count}>
-                  <span class={`${styles.dot} ${room.userCount > 0 ? styles.live : ''}`} />
-                  {room.userCount === 0 ? 'Nobody watching' : `${room.userCount} watching`}
+                  <span class={`${styles.dot} ${room.online ? styles.live : ''}`} title={room.online ? 'Desktop online' : 'Desktop offline'} />
+                  {room.online
+                    ? room.userCount === 0 ? 'Nobody watching' : `${room.userCount} watching`
+                    : room.userCount === 0 ? 'Offline' : `Offline · ${room.userCount} in the room`}
                 </div>
               </div>
               <div class={styles.actions}>

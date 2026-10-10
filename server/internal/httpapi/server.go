@@ -254,7 +254,8 @@ func (s *Server) listRooms(w http.ResponseWriter, r *http.Request) {
 		Name      string `json:"name"`
 		Access    string `json:"access"`
 		UserCount int    `json:"userCount"`
-		Open      bool   `json:"open"` // the requester may join
+		Open      bool   `json:"open"`   // the requester may join
+		Online    bool   `json:"online"` // the room's desktop is connected
 	}
 	list := []roomInfo{}
 	now := time.Now().Unix()
@@ -275,7 +276,7 @@ func (s *Server) listRooms(w http.ResponseWriter, r *http.Request) {
 		if in.Room.Hidden && !open {
 			continue
 		}
-		list = append(list, roomInfo{Name: rm.Name, Access: in.Room.Access, UserCount: rm.UserCount(), Open: open})
+		list = append(list, roomInfo{Name: rm.Name, Access: in.Room.Access, UserCount: rm.UserCount(), Open: open, Online: rm.Neko().Connected()})
 	}
 	writeJSON(w, http.StatusOK, list)
 }

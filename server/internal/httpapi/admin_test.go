@@ -633,6 +633,15 @@ func TestAdminRoomRegistrations(t *testing.T) {
 	if len(list) != 2 || list[1].Name != "extra" || !list[1].Connected {
 		t.Fatalf("status: %+v", list)
 	}
+	// The room list everyone sees says so too.
+	var public []struct {
+		Name   string
+		Online bool
+	}
+	a.call(admin, "GET", "/api/rooms", nil, 200, &public)
+	if len(public) != 2 || public[1].Name != "extra" || !public[1].Online {
+		t.Fatalf("public status: %+v", public)
+	}
 	conn, _, err := websocket.Dial(ctx, a.srv.URL+"/api/rooms/extra/ws", &websocket.DialOptions{HTTPClient: admin})
 	if err != nil {
 		t.Fatal(err)

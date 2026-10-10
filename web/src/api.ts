@@ -78,6 +78,7 @@ export interface RoomInfo {
   access: 'public' | 'account' | 'verified' | 'invite'
   userCount: number
   open: boolean
+  online: boolean // the room's desktop is connected
 }
 
 export interface AdminUser extends Me {

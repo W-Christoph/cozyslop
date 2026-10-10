@@ -63,5 +63,7 @@ COPY --chmod=0755 entrypoint.sh /usr/local/bin/cozycast-entrypoint
 COPY --chmod=0755 window-title.py /usr/local/bin/cozycast-window-title
 # Plays a file of the Downloads folder in VLC when the CozyCast server asks.
 COPY --chmod=0755 play.py /usr/local/bin/cozycast-play
+# Pauses the desktop's programs while nobody is in the room.
+COPY --chmod=0755 hibernate.py /usr/local/bin/cozycast-hibernate
 ENTRYPOINT ["/usr/local/bin/cozycast-entrypoint"]
 CMD ["/usr/bin/supervisord", "-c", "/etc/neko/supervisord.conf"]

@@ -21,7 +21,7 @@ func env(key, fallback string) string {
 }
 
 func main() {
-	forward, err := node.PortsFromEnv(env("COZYCAST_FORWARD", "8080=room:8080,8081=room:8081,8082=room:8082"))
+	forward, err := node.PortsFromEnv(env("COZYCAST_FORWARD", "8080=room:8080,8081=room:8081,8082=room:8082,8083=room:8083"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)

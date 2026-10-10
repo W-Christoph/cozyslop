@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestDockerConfig(t *testing.T) {
 	t.Setenv("COZYCAST_NEKO_API_TOKEN", "test-secret")
@@ -163,6 +166,17 @@ func TestMediaConfig(t *testing.T) {
 		t.Setenv("COZYCAST_"+bad[0], bad[1])
 		if _, err := FromEnv(); err == nil {
 			t.Errorf("accepted %s=%s", bad[0], bad[1])
+		}
+	}
+}
+
+func TestHibernateAfterConfig(t *testing.T) {
+	t.Setenv("COZYCAST_NEKO_API_TOKEN", "test-secret")
+	for value, want := range map[string]time.Duration{"": time.Minute, "0": 0, "300": 5 * time.Minute, "-1": -1, "soon": -1} {
+		t.Setenv("COZYCAST_HIBERNATE_AFTER", value)
+		cfg, err := FromEnv()
+		if (err == nil) != (want >= 0) || (err == nil && cfg.HibernateAfter != want) {
+			t.Fatalf("hibernate after %q: %v, %v", value, cfg.HibernateAfter, err)
 		}
 	}
 }

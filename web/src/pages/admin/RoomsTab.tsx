@@ -16,6 +16,7 @@ const SOURCES = { configured: 'Configured', registered: 'Registered', paired: 'P
 
 function Connection({ room }: { room: AdminRoom }) {
   if (room.container === 'stopped') return <Badge>Stopped</Badge>
+  if (room.connected && room.hibernating) return <Badge title="Nobody is in the room: the programs on its desktop are paused until someone joins.">Hibernating</Badge>
   if (room.connected) return <Badge tone="success">Online</Badge>
   if (!room.offlineSince) return <Badge>Connecting</Badge>
   return <>

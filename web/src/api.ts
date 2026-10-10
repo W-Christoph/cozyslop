@@ -91,6 +91,7 @@ export interface AdminRoom {
   source: 'configured' | 'registered' | 'paired' // paired: on another computer, through the tunnel
   connected: boolean
   offlineSince?: number // unix ms; set while viewers are told the desktop is offline
+  hibernating?: boolean // the desktop's programs are paused: nobody has been in the room for a while
   userCount: number
 }
 

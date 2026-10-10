@@ -78,6 +78,14 @@ type Room struct {
 
 	playURL, playToken string // the desktop's helper that plays files; set before run
 
+	// The desktop's helper that pauses its programs (hibernate.go); set
+	// before run. sleep is one of the sleep constants; idleGen cancels a
+	// pending hibernation when the room empties again.
+	hibernateURL string
+	sleep        int
+	idleGen      int
+	sleepMu      sync.Mutex // serializes pausing and continuing; not held with mu
+
 	// The desktop as tabs were told: offline once neko has been gone for
 	// offlineGrace. offlineSince is when it was lost (or the room started);
 	// offlineGen cancels a pending announcement.
@@ -217,6 +225,7 @@ func (r *Room) run(ctx context.Context) {
 		r.mu.Unlock()
 		r.desktopFound()
 		r.reapplyNekoSettings(ctx)
+		r.settleSleep()
 	}, r.desktopLost, r.setHost)
 }
 
@@ -591,8 +600,12 @@ func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
 	} else if changed {
 		resync = r.pushRightsLocked(m)
 	}
+	wake := r.wakeNeededLocked()
 	r.mu.Unlock()
 
+	if wake {
+		go r.wake()
+	}
 	r.syncNeko(ctx, resync)
 	r.log.Info("client joined", "client", c.ID, "identity", key)
 	return c, nil
@@ -632,6 +645,7 @@ func (r *Room) removeClientLocked(c *Client) {
 	if len(m.clients) == 0 {
 		delete(r.members, m.key)
 		r.broadcastLocked(userLeftMsg{Type: "user_left", Key: m.key}, nil)
+		r.idleLocked()
 		return
 	}
 	if after := r.userLocked(m); after != before {

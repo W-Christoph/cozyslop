@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"cozycast/internal/neko"
 )
@@ -37,9 +38,12 @@ type Config struct {
 	NekoAPIToken  string   // instead of NekoSecret: one token for every neko, as given
 	DefaultScreen string   // container default desktop size for the server's rooms; empty leaves it alone
 	Rooms         []Room
-	WebDir        string // serve the UI from disk instead of the embedded build (dev)
-	SourceURL     string // where users can get this server's source code (AGPL)
-	MaxUploadMB   int64  // maximum chat media file size in MiB
+	// How long a room stays empty before the programs on its desktop are
+	// paused; 0 = never.
+	HibernateAfter time.Duration
+	WebDir         string // serve the UI from disk instead of the embedded build (dev)
+	SourceURL      string // where users can get this server's source code (AGPL)
+	MaxUploadMB    int64  // maximum chat media file size in MiB
 	// Tunnels to rooms on other machines (docs/home-hosting.md); off when
 	// TunnelPort is 0. The server takes TunnelNet's first address.
 	TunnelPort int
@@ -81,6 +85,11 @@ func FromEnv() (Config, error) {
 		return c, errors.New("COZYCAST_MAX_UPLOAD_MB must be a positive integer size in MiB")
 	}
 	c.MaxUploadMB = maxUploadMB
+	seconds, err := strconv.Atoi(env("COZYCAST_HIBERNATE_AFTER", "60"))
+	if err != nil || seconds < 0 || seconds > 7*24*3600 {
+		return c, errors.New("COZYCAST_HIBERNATE_AFTER must be a number of seconds, or 0 to never hibernate")
+	}
+	c.HibernateAfter = time.Duration(seconds) * time.Second
 	if c.DefaultScreen != "" {
 		size, err := neko.ParseScreen(c.DefaultScreen)
 		if err != nil || size.Width <= 0 || size.Height <= 0 || size.Rate <= 0 {

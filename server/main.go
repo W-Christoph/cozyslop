@@ -192,6 +192,7 @@ func run(args []string, out io.Writer) error {
 		}
 	}
 	h := hub.New(db, filepath.Join(mediaDir, "chat"), rooms)
+	h.HibernateAfter = cfg.HibernateAfter
 	if err := h.Start(ctx); err != nil {
 		return err
 	}

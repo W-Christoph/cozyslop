@@ -65,6 +65,12 @@ Housekeeping
 - [x] The export script for the old CozyCast is gone. The server still
       imports an archive it made (`COZYCAST_IMPORT`,
       `worker/import-home.sh`; `docs/migration.md` is cut down to that).
+- [x] A room nobody has been in for a minute hibernates: the programs on
+      its desktop are paused and continued for the next person to join
+      (`worker/hibernate.py`, `hub/hibernate.go`, `HIBERNATE_AFTER`).
+      Tried in the sandbox with a real room and server, a server restart
+      and a room restart in between; not through the tunnel to a room on
+      another computer, and not with a video playing.
 
 ## 4. Done on 2026-10-05
 

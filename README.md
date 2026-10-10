@@ -33,6 +33,10 @@ community over a long time.** The numbers so far are under
   (open tabs, logins, extensions) live in a Docker volume and survive
   restarts and image updates. It can move to another computer (see
   [Moving a room's desktop](#moving-a-rooms-desktop)).
+- **Empty rooms rest**: a minute after the last person left, the programs
+  on the room's desktop are paused, so a video left playing does not keep
+  the machine busy. Windows and tabs stay as they were, and the next person
+  to join finds them running again (see [Hibernation](#hibernation)).
 - **Rooms on other computers**: someone lends a computer at home to run a
   room, without opening ports or showing their address; the server stays
   the only thing the internet sees (see
@@ -171,6 +175,7 @@ leave an existing account's password unchanged.
 | `COZYCAST_ROOMS` | `default=http://room-default:8080` | `name=url,name2=url2`; configured rooms alongside database registrations; `none` for no configured room (empty uses the default) |
 | `COZYCAST_NEKO_TOKEN` | | worker only: ready neko admin token for a registered room; takes precedence over `COZYCAST_NEKO_SECRET`; both variables are removed before starting desktop processes |
 | `COZYCAST_DEFAULT_SCREEN` | | container default screen for the rooms on the server (`1280x720@30`); Compose sets it from `SCREEN`; empty leaves the desktop size alone when clearing the room setting, as it is for rooms on other computers |
+| `COZYCAST_HIBERNATE_AFTER` | `60` | seconds a room stays empty before the programs on its desktop are paused ([hibernation](#hibernation)); `0` = never; Compose sets it from `HIBERNATE_AFTER` |
 | `COZYCAST_DATA_DIR` | `data` | database, uploaded chat media and the tunnel's key (`wireguard.key`) |
 | `COZYCAST_INIT_ADMIN_PASSWORD` | | creates the `admin` account on first start; sets its password with `reset-admin` |
 | `COZYCAST_LISTEN` | `:8080` | HTTP; with a domain set it only redirects and answers Let's Encrypt |
@@ -299,6 +304,32 @@ matter how many people watch. The choices offered come from the room
 container's environment (`STREAM_BITRATES`, `STREAM_SCALES`, `X264_PRESETS`
 in `.env`); changing those lists needs `docker compose up -d` to recreate the
 room, but no rebuild. The room desktop's files survive that.
+
+## Hibernation
+
+A room nobody is in still runs whatever was left on its desktop; a playing
+video alone can take a whole core. So once a room has been empty for a
+minute (`HIBERNATE_AFTER` in `.env`, in seconds; `0` turns it off), the
+server has the programs on its desktop paused: Firefox, VLC, the desktop
+itself. They are stopped where they are, not closed: every window, tab and
+video position is kept in memory. neko, the X server and sound keep running,
+so the room stays reachable.
+
+"Empty" means that no browser has the room's page open; a forgotten tab
+keeps it awake. The first person to open the room wakes it: the server has
+the programs continued while it lets them in, which takes a moment, and
+they get their picture as in any room. Admin > Rooms shows a hibernating
+room as such.
+
+What a pause cannot keep is the outside world: a video may have to buffer
+again, a download waits and can fail if the site gave up on it, a site may
+have logged the room's browser out. Memory is not freed. A room on another
+computer hibernates the same way, once its image and agent are from this
+version (`./cozycast.sh update` there); an older one just keeps running.
+
+Measured in the sandbox, with a program on the desktop using a full core:
+100% of a core before, 0.04% hibernating, and running again within the
+second someone joined.
 
 ## Measurements
 

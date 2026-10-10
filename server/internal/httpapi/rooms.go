@@ -23,9 +23,12 @@ type adminRoom struct {
 	Connected bool   `json:"connected"`
 	// Unix ms since when viewers are told the desktop is offline; absent
 	// while it is online or only briefly gone.
-	OfflineSince int64  `json:"offlineSince,omitempty"`
-	UserCount    int    `json:"userCount"`
-	Container    string `json:"container,omitempty"`
+	OfflineSince int64 `json:"offlineSince,omitempty"`
+	// The programs on the desktop are paused: nobody has been in the room
+	// for a while.
+	Hibernating bool   `json:"hibernating,omitempty"`
+	UserCount   int    `json:"userCount"`
+	Container   string `json:"container,omitempty"`
 }
 
 func toAdminRoom(r *hub.Room) adminRoom {
@@ -33,7 +36,8 @@ func toAdminRoom(r *hub.Room) adminRoom {
 	if t := r.OfflineSince(); !t.IsZero() {
 		since = t.UnixMilli()
 	}
-	return adminRoom{Name: r.Name, Source: r.Source, Connected: r.Neko().Connected(), OfflineSince: since, UserCount: r.UserCount()}
+	return adminRoom{Name: r.Name, Source: r.Source, Connected: r.Neko().Connected(), OfflineSince: since,
+		Hibernating: r.Hibernating(), UserCount: r.UserCount()}
 }
 
 func containerRoom(ctx context.Context, room *hub.Room) adminRoom {

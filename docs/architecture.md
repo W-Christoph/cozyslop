@@ -303,6 +303,20 @@ answered with `file_result`), so that the server decides who may:
   answers `POST /play?name=<file>` by opening the file in VLC, fullscreen,
   and closing the VLC it started before.
 
+A third helper pauses the desktop's programs while nobody is in the room
+(`worker/hibernate.py`, port 8083; `server/internal/hub/hibernate.go`).
+When the last person leaves, the room waits `COZYCAST_HIBERNATE_AFTER`
+(a minute) and, if still empty, sends `POST /freeze`: the helper stops
+(SIGSTOP) every process of the desktop's user except neko, the X server and
+PulseAudio. A join sends `POST /thaw` (SIGCONT) unless the server knows the
+programs to be running; it does not know after its own start, so the first
+join after one always does. A desktop that connects (again) is treated the
+same: continued for the people in the room, or the wait starts. Requests
+are serialized per room, and a join during a freeze is continued after it.
+neko is never paused, so nothing in the join itself waits for this. The
+helper runs as the desktop's user (that is enough to signal its programs)
+and takes the same token as the play helper.
+
 The play helper runs as the desktop's user, because VLC opens on their
 desktop; whoever holds the remote can start VLC by hand anyway. Its port is
 not published either, but pages open in the room's browser reach it, so

@@ -23,6 +23,10 @@ import (
 const chatSweepInterval = time.Minute
 
 type Hub struct {
+	// HibernateAfter is how long a room stays empty before the programs on
+	// its desktop are paused; 0 = never. Set before Start.
+	HibernateAfter time.Duration
+
 	store    *store.Store
 	mediaDir string       // chat images and videos
 	mu       sync.RWMutex // room map and lifetimes
@@ -49,6 +53,10 @@ type RoomConfig struct {
 	// the room has no such helper.
 	PlayURL   string
 	PlayToken string
+	// HibernateURL pauses and continues the programs on the room's desktop
+	// (worker/hibernate.py), for requests that carry PlayToken; "" if the
+	// room has no such helper.
+	HibernateURL string
 }
 
 func New(s *store.Store, mediaDir string, rooms []RoomConfig) *Hub {
@@ -188,6 +196,7 @@ func (h *Hub) makeRoom(rc RoomConfig) *Room {
 	r.restart, r.defaultScreen, r.titleURL = rc.Restart, rc.DefaultScreen, rc.TitleURL
 	r.start, r.stop, r.running = rc.Start, rc.Stop, rc.Running
 	r.playURL, r.playToken = rc.PlayURL, rc.PlayToken
+	r.hibernateURL = rc.HibernateURL
 	return r
 }
 

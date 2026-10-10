@@ -48,7 +48,8 @@ export function RoomModal({ action, onClose, onSaved, onRemoved }: {
         // Do not pass the issuance response (and its token) into table state.
         onSaved({ name: room.name, source: room.source, connected: room.connected, userCount: room.userCount,
           ...(room.container ? { container: room.container } : {}),
-          ...(room.offlineSince ? { offlineSince: room.offlineSince } : {}) })
+          ...(room.offlineSince ? { offlineSince: room.offlineSince } : {}),
+          ...(room.hibernating ? { hibernating: true } : {}) })
         if ('nekoToken' in room && typeof room.nekoToken === 'string') setToken(room.nekoToken)
         else onClose()
       }

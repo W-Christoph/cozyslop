@@ -182,8 +182,8 @@ not to the internet, the computer it runs on or the home network, and no
 DNS for outside names. The only thing it can reach is the agent, which is
 also on the computer's normal network to reach the hub.
 
-- **In**: the agent forwards ports 8080 to 8082 (neko, the title and play
-  helpers) of its tunnel address to the room. Nothing else from the tunnel
+- **In**: the agent forwards ports 8080 to 8083 (neko, the title, play and
+  hibernate helpers) of its tunnel address to the room. Nothing else from the tunnel
   reaches the room or the home network.
 - **Out**: the room's programs use an HTTP proxy, `agent:3128` (the
   `http_proxy` variables; Firefox follows them, as do curl, VLC and most
@@ -230,7 +230,7 @@ cannot even look names up through the home's resolver.
 `compose.node.yaml` runs the agent (`node/Dockerfile`, `server/cmd/node`)
 and the room. The agent keeps its key and pairing in its volume, writes
 `COZYCAST_ROOM` and `COZYCAST_NEKO_TOKEN` to a file the room's entrypoint
-waits for (`COZYCAST_ENV_FILE`), and forwards ports 8080 to 8082 of its
+waits for (`COZYCAST_ENV_FILE`), and forwards ports 8080 to 8083 of its
 tunnel address to the room. It checks in every 15 s; the check also keeps
 WireGuard's session alive. Each start sends a new boot ID with the check, so
 the server drops connections through the old tunnel at once (including

@@ -37,7 +37,7 @@ type Config struct {
 	StateDir string // keys and pairing, kept across restarts
 	EnvFile  string // the room's settings, for its container
 	// Forward maps ports on this computer's tunnel address to where the
-	// room listens (neko 8080, title 8081, play 8082).
+	// room listens (neko 8080, title 8081, play 8082, hibernate 8083).
 	Forward map[int]string
 	// ProxyListen is where the room's apps find their HTTP proxy, e.g.
 	// ":3128"; it is carried to the server's, the room's only way out.

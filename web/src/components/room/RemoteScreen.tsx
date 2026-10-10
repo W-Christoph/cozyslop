@@ -53,7 +53,9 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
     if (paused) el.pause()
     else if (stream) {
       void el.play().catch(() => {
-        if (!cancelled) onPlaybackBlocked(true)
+        // A refused or interrupted play() says nothing final: autoplay may
+        // already have started the video, or start it later (onPlaying).
+        if (!cancelled && el.paused) onPlaybackBlocked(true)
       })
     }
     return () => { cancelled = true }
@@ -240,7 +242,7 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
 
   return (
     <div class={styles.screen}>
-      <video ref={video} class={styles.video} autoplay playsInline />
+      <video ref={video} class={styles.video} autoplay playsInline onPlaying={() => onPlaybackBlocked(false)} />
       <div ref={overlay} class={styles.overlay} data-host={isHost} tabIndex={0} aria-label="Remote desktop"
         onPaste={(e) => {
           e.preventDefault()

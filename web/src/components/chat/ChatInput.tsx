@@ -47,7 +47,9 @@ export function ChatInput({ inputRef, onEdit }: { inputRef: RefObject<HTMLTextAr
   }
   return <div class={styles.chatbox}>
     <div data-chat-input data-has-text={!!text} class={styles.uploader}>
-      <div data-chat-input-wrapper class={styles.wrapper}>
+      {/* The padding around the textarea belongs to the input: a click there writes too. */}
+      <div data-chat-input-wrapper class={styles.wrapper}
+        onMouseDown={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); inputRef.current?.focus() } }}>
         {/* maxlength as an attribute: Preact clears the maxLength property to 0, which
             blocks typing once a visitor turns out to be logged in. */}
         <textarea {...mentions.inputProps} aria-label="Chat message" placeholder={connected ? undefined : 'Reconnecting…'} ref={inputRef} value={text} rows={1} maxlength={anonymous ? 250 : undefined}

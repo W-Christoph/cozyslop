@@ -2,6 +2,8 @@
 .chat[hidden] { display: none; }
 .transparent { color: var(--color-crop-white); }
 .transparent * { text-shadow: 0.07em 0 var(--color-border), 0 0.07em var(--color-border), -0.07em 0 var(--color-border), 0 -0.07em var(--color-border); }
+/* A ping to oneself has its own background: no outline around its letters. */
+.transparent [data-chat-ping], .transparent [data-chat-ping] * { text-shadow: none; }
 .transparent [data-chat-bubble], .transparent [data-chat-input-wrapper] { border: 1px solid var(--color-chat-overlay-border); background: var(--color-chat-overlay-bg); box-shadow: 0 0 2px var(--color-border) inset; }
 /* Over the stream a message shows for ten seconds and then fades, as in the
    old CozyCast: the animation holds it visible whatever else hides it.

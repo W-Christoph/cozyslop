@@ -11,6 +11,6 @@ export function MessageText({ body }: { body: string }) {
     const className = part.type === 'ping'
       ? part.target === ownName ? styles.ping : names.has(part.target) ? styles.otherPing : ''
       : ''
-    return <span key={i} class={className}>{part.text.split('\n').map((line, j) => <span key={j}>{j > 0 && <br />}{line}</span>)}</span>
+    return <span key={i} class={className} data-chat-ping={className === styles.ping || undefined}>{part.text.split('\n').map((line, j) => <span key={j}>{j > 0 && <br />}{line}</span>)}</span>
   })}</span>
 }

@@ -1,6 +1,8 @@
 .controls { height: 38px; position: absolute; top: 0; right: 8px; display: flex; justify-content: center; align-items: center; }
+/* Only the buttons take clicks; around them the input below does. */
+.controls { pointer-events: none; }
 .controls[hidden], .file { display: none; }
-.controls button { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 32px; padding: 0; background: transparent; }
+.controls button { pointer-events: auto; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 32px; padding: 0; background: transparent; }
 .controls img { filter: var(--icon-filter); width: 24px; height: 24px; }
 .controls button:hover { background: var(--color-border); border-radius: 5px; }
 .error { font-size: 0.8em; margin-top: var(--space-2); color: var(--color-orange); }

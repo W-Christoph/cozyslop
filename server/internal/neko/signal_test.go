@@ -93,3 +93,20 @@ func TestAdminTokenRedactedFromErrors(t *testing.T) {
 		t.Fatalf("token leaked: %v", err)
 	}
 }
+
+func TestControlOf(t *testing.T) {
+	for msg, want := range map[string]Control{
+		`{"event":"control/request"}`:                                 ControlRequest,
+		`{"event":"control/release"}`:                                 ControlRelease,
+		`{"event":"control/move","payload":{"x":1,"y":2}}`:            ControlInput,
+		`{"event":"control\/keydown","payload":{"keysym":97}}`:        ControlInput,
+		`{"event":"control/paste","payload":{"text":"x"}}`:            ControlInput,
+		`{"event":"signal/request"}`:                                  ControlNone,
+		`{"event":"clipboard/set","payload":{"text":"control/move"}}`: ControlNone,
+		`not json`: ControlNone,
+	} {
+		if got := ControlOf([]byte(msg)); got != want {
+			t.Errorf("%s: got %d, want %d", msg, got, want)
+		}
+	}
+}

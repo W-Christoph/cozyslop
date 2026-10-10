@@ -69,6 +69,11 @@ type Room struct {
 	clients  map[string]*Client // by client id
 	tokens   map[string]*Client // by the neko session token issued to the tab
 	hostID   string             // neko session id (= client id) holding the remote
+	// Who holds the remote once neko has handled the request or release
+	// last passed on to it ("" = nobody); counts until neko reports that,
+	// or claimUntil. See NekoControl.
+	claim      string
+	claimUntil time.Time
 
 	lastRestart time.Time // for the trusted-user cooldown
 	streams     []string  // capture pipelines neko offers, the default first
@@ -985,6 +990,8 @@ func (r *Room) issueToken(c *Client, token string) (string, error) {
 type NekoConn struct {
 	Send  func(msg []byte)
 	Close func()
+
+	c *Client // the tab; set by AttachNeko
 }
 
 // NekoTokenIssued reports whether the hub issued token to a tab that is
@@ -1007,6 +1014,46 @@ func (r *Room) NekoFilesAllowed(token string) bool {
 	return c != nil && c.m.rights.Upload
 }
 
+// remoteSettle is how long the hub goes by a request or release it passed
+// on while neko has not reported it. A variable for tests.
+var remoteSettle = 2 * time.Second
+
+// NekoControl reports whether a message about the remote, sent by a tab on
+// an attached connection, is passed on to neko. Input only is from the tab
+// that holds the remote: neko
+// takes input from any other tab as a request for it. A tab that had lost
+// the remote and not heard of it yet would take it back with its next mouse
+// move or key, and one that had dropped it would pick it up again.
+//
+// neko reports who holds the remote a moment after that changes; until then
+// the hub goes by the request or release it passed on.
+func (r *Room) NekoControl(conn *NekoConn, kind neko.Control) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c := conn.c
+	if c == nil {
+		return false
+	}
+	holder := r.hostID
+	if time.Now().Before(r.claimUntil) {
+		holder = r.claim
+	}
+	switch kind {
+	case neko.ControlRequest:
+		// neko grants it if nobody holds the remote, or if it may be taken.
+		if c.m.rights.Remote && holder != c.ID && (holder == "" || !r.settings.RemoteOwnership) {
+			r.claim, r.claimUntil = c.ID, time.Now().Add(remoteSettle)
+		}
+	case neko.ControlRelease:
+		if holder == c.ID {
+			r.claim, r.claimUntil = "", time.Now().Add(remoteSettle)
+		}
+	case neko.ControlInput:
+		return holder == c.ID
+	}
+	return true
+}
+
 // AttachNeko registers a proxied neko connection opened with token, so the
 // hub can keep it on the room's stream and close it when the tab leaves.
 // ok is false if NekoTokenIssued is.
@@ -1021,6 +1068,7 @@ func (r *Room) AttachNeko(token string, conn *NekoConn) (detach func(), ok bool)
 		c.nekoConns = make(map[*NekoConn]struct{})
 	}
 	c.nekoConns[conn] = struct{}{}
+	conn.c = c
 	return func() {
 		r.mu.Lock()
 		delete(c.nekoConns, conn)
@@ -1097,6 +1145,9 @@ func (r *Room) nekoProfile(c *Client) neko.Profile {
 func (r *Room) setHost(hostID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if hostID == r.claim {
+		r.claimUntil = time.Time{} // neko has caught up
+	}
 	if hostID == r.hostID {
 		return
 	}

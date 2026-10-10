@@ -281,11 +281,16 @@ func TestNekoSocketForwardsPaste(t *testing.T) {
 	p := newProxyTest(t, store.RoomSettings{DefaultRemote: true})
 	_, clientID, token := p.join()
 	conn := p.socket(token)
+	const request = `{"event":"control/request"}`
 	const paste = `{"event":"control/paste","payload":{"text":"  local clipboard\n\tsecond line 😀"}}`
-	if err := conn.Write(p.ctx, websocket.MessageText, []byte(paste)); err != nil {
-		t.Fatal(err)
+	// Without the remote the paste is not passed on: neko would take it as
+	// a request for the remote.
+	for _, msg := range []string{paste, request, paste} {
+		if err := conn.Write(p.ctx, websocket.MessageText, []byte(msg)); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if got := p.received(clientID, 1); !slices.Equal(got, []string{paste}) {
+	if got := p.received(clientID, 2); !slices.Equal(got, []string{request, paste}) {
 		t.Fatalf("neko received %q, want %s", got, paste)
 	}
 	profile, ok := p.fake.Member(clientID)

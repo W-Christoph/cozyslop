@@ -129,7 +129,7 @@ func (s *Server) nekoSocket(w http.ResponseWriter, r *http.Request, rm *hub.Room
 	defer cancel()
 	token := r.URL.Query().Get("token")
 	fromHub := make(chan []byte, 8)
-	detach, ok := rm.AttachNeko(token, &hub.NekoConn{
+	conn := &hub.NekoConn{
 		Send: func(msg []byte) {
 			select {
 			case fromHub <- msg:
@@ -137,7 +137,8 @@ func (s *Server) nekoSocket(w http.ResponseWriter, r *http.Request, rm *hub.Room
 			}
 		},
 		Close: cancel,
-	})
+	}
+	detach, ok := rm.AttachNeko(token, conn)
 	if !ok {
 		writeError(w, http.StatusForbidden, "Your connection to the room's desktop has expired.")
 		return
@@ -195,6 +196,10 @@ func (s *Server) nekoSocket(w http.ResponseWriter, r *http.Request, rm *hub.Room
 				return
 			}
 			if neko.IsFileList(data) && !rm.NekoFilesAllowed(token) {
+				continue
+			}
+			// Input from a tab that does not hold the remote would take it.
+			if kind := neko.ControlOf(data); kind != neko.ControlNone && !rm.NekoControl(conn, kind) {
 				continue
 			}
 			if media != nil {

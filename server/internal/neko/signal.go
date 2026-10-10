@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/url"
+	"strings"
 )
 
 // neko runs a capture pipeline (an encoder) for as long as someone watches
@@ -96,6 +97,34 @@ func IsFileList(data []byte) bool {
 	}
 	var msg socketMessage
 	return json.Unmarshal(data, &msg) == nil && msg.Event == "filetransfer/update"
+}
+
+// Control is what a browser's WebSocket message does to the remote.
+type Control int
+
+const (
+	ControlNone    Control = iota // nothing
+	ControlRequest                // asks for the remote
+	ControlRelease                // gives it up
+	ControlInput                  // mouse, keys, clipboard keys: what its holder does
+)
+
+// ControlOf says what a browser's WebSocket message does to the remote.
+// neko takes every input message as a request for the remote too: a session
+// that sends one gets the remote if nobody holds it, and from whoever holds
+// it where taking it is allowed (see Client.SetImplicitHosting).
+func ControlOf(data []byte) Control {
+	var msg socketMessage
+	if json.Unmarshal(data, &msg) != nil || !strings.HasPrefix(msg.Event, "control/") {
+		return ControlNone
+	}
+	switch msg.Event {
+	case "control/request":
+		return ControlRequest
+	case "control/release":
+		return ControlRelease
+	}
+	return ControlInput
 }
 
 // SelectStream is the message that moves a session to another capture

@@ -1,8 +1,7 @@
 # TODO
 
 From the full-codebase review on 2026-10-03 (three Codex runs, every file
-read; findings checked against the code). State as of the end of
-2026-10-05.
+read; findings checked against the code). State as of 2026-10-10.
 
 ## 1. Open: when deploying
 
@@ -15,8 +14,6 @@ checks on the real server.
       changed (`entrypoint.sh` derives the room's neko token,
       `import-home.sh`), and the room now needs `COZYCAST_ROOM` and its own
       network, as in `compose.yaml`.
-- [ ] Migration: `sudo chown 65532:65532 import/cozycast-export.tar.gz`
-      before the first start (`docs/migration.md`).
 - [ ] Restart a room while people watch (`docker compose restart
       room-default`): the desktop comes back by itself, and in a room without
       remote ownership the remote can be taken over again.
@@ -52,7 +49,24 @@ Housekeeping
       are never reconciled.
 - [ ] Legacy avatar import cannot resume after a crash.
 
-## 3. Done on 2026-10-05
+## 3. Done on 2026-10-10
+
+- [x] `./cozycast.sh setup` writes `.env` as a copy of `.env.example` and
+      asks what a room starts with (desktop size, bitrate, stream size,
+      encoder speed; new: `STREAM_BITRATE`, `STREAM_SCALE`).
+- [x] The first `./cozycast.sh connect` asks the same for the room on that
+      computer and writes `.env.node` from `.env.node.example`. The server
+      no longer applies its own `SCREEN` to a paired room.
+- [x] `./cozycast.sh export-room` / `import-room` move a room's home folder
+      between checkouts, the server's own room and rooms at home alike.
+      Tried in the sandbox on Linux, not in Git Bash on Windows.
+- [x] `connect` to another server and `forget` ask about the pairing and
+      about the room's files separately.
+- [x] The export script for the old CozyCast is gone. The server still
+      imports an archive it made (`COZYCAST_IMPORT`,
+      `worker/import-home.sh`; `docs/migration.md` is cut down to that).
+
+## 4. Done on 2026-10-05
 
 Chat
 - [x] A message keeps its author's picture after the author has left; a
@@ -101,7 +115,7 @@ The leftovers of the UI redesign (four Codex runs, each reviewed)
 - [x] `tests/chat-browser.cjs` passes again; new optional browser tests:
       `design-system-browser.cjs`, `ux-browser.cjs`, `contrast-browser.cjs`.
 
-## 4. Done on 2026-10-04
+## 5. Done on 2026-10-04
 
 - [x] Stream settings offer only 16:9 resolutions.
 - [x] Passwords over 72 bytes are refused (400) wherever a password is set,
@@ -166,7 +180,7 @@ The leftovers of the UI redesign (four Codex runs, each reviewed)
 - Decided: Tab stays with the desktop while holding the remote; a keyboard
   way out is an idea for later (`docs/ideas.md`).
 
-## 5. Done on 2026-10-03
+## 6. Done on 2026-10-03
 
 - [x] Anonymous impersonation: the public `a:<id>` was the `cozy_anon`
       cookie; it is now a hash of it.

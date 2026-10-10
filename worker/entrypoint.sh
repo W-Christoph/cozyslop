@@ -8,9 +8,10 @@
 #    Rooms pick one in their settings; neko only runs the pipelines someone
 #    is watching, so offering many costs nothing. Override with
 #    COZYCAST_STREAM_BITRATES (kbit/s), COZYCAST_STREAM_SCALES (percent of
-#    the desktop size), COZYCAST_X264_PRESETS (fastest first) and
-#    COZYCAST_X264_PRESET (the default), or set NEKO_CAPTURE_VIDEO_PIPELINES
-#    yourself to skip this.
+#    the desktop size) and COZYCAST_X264_PRESETS (fastest first); the
+#    default stream is COZYCAST_STREAM_BITRATE, COZYCAST_STREAM_SCALE and
+#    COZYCAST_X264_PRESET. Or set NEKO_CAPTURE_VIDEO_PIPELINES yourself to
+#    skip this.
 # 2. The room's neko admin token: supplied as COZYCAST_NEKO_TOKEN (directly,
 #    or in COZYCAST_ENV_FILE written by the agent of a paired room), or
 #    derived from COZYCAST_NEKO_SECRET and the room's name (COZYCAST_ROOM),
@@ -28,11 +29,15 @@ set -eu
 stream_pipelines() {
     bitrates=${COZYCAST_STREAM_BITRATES:-1000 1500 2500 4000 6000 8000}
     scales=${COZYCAST_STREAM_SCALES:-100 75 67 50}
+    bitrate=${COZYCAST_STREAM_BITRATE:-2500}
+    scale=${COZYCAST_STREAM_SCALE:-100}
     preset=${COZYCAST_X264_PRESET:-veryfast}
     presets=${COZYCAST_X264_PRESETS:-ultrafast superfast veryfast}
-    # The default preset is always offered.
+    # The default bitrate, size and preset are always offered.
+    case " $bitrates " in *" $bitrate "*) ;; *) bitrates="$bitrates $bitrate" ;; esac
+    case " $scales " in *" $scale "*) ;; *) scales="$scales $scale" ;; esac
     case " $presets " in *" $preset "*) ;; *) presets="$presets $preset" ;; esac
-    preferred=${COZYCAST_STREAM_DEFAULT:-b2500-s100-$preset}
+    preferred=${COZYCAST_STREAM_DEFAULT:-b$bitrate-s$scale-$preset}
 
     ids="" json="" first="" found=""
     for b in $bitrates; do

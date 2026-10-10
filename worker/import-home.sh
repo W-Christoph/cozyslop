@@ -3,9 +3,9 @@
 # room's home folder (files, folders, Firefox profile) from a migration
 # archive, once.
 #
-# COZYCAST_IMPORT_HOME points at cozycast-export.tar.gz (see
-# migrate/export-cozycast.sh). A marker in the home folder makes sure an
-# import never runs twice, so the archive can stay in place.
+# COZYCAST_IMPORT_HOME points at cozycast-export.tar.gz, an export of the
+# old CozyCast. A marker in the home folder makes sure an import never runs
+# twice, so the archive can stay in place.
 set -eu
 
 archive=${COZYCAST_IMPORT_HOME:-}

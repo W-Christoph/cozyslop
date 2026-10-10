@@ -144,8 +144,9 @@ from both existing users and numeric account identity keys retained in chat.
   rewrites requests for a pipeline to the room's stream, and moves
   connected viewers when the setting changes. Rooms themselves come from configuration (`COZYCAST_ROOMS`); a row
   holds their settings. Clearing a room's screen applies
-  `COZYCAST_DEFAULT_SCREEN`, one container default for all rooms, parsed and
-  validated at startup. Compose sets it from the same `SCREEN` value as
+  `COZYCAST_DEFAULT_SCREEN`, one container default for the rooms on the
+  server (a room on another computer keeps the size that computer set),
+  parsed and validated at startup. Compose sets it from the same `SCREEN` value as
   `NEKO_DESKTOP_SCREEN`; when unset, clearing leaves the desktop size alone.
 - `room_permissions`: (room, user_id) unique; remote, image, upload, trusted,
   invited, invite_name, banned, banned_until.

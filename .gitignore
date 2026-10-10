@@ -5,3 +5,4 @@ web/node_modules/
 server/webui/dist/*
 !server/webui/dist/.gitkeep
 import/
+cozycast-room.tar.gz

@@ -37,7 +37,7 @@ func TestPairedRoomThroughTunnel(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	cfg := config.Config{DataDir: t.TempDir(), TunnelPort: freeUDPPort(t), TunnelNet: netip.MustParsePrefix("10.77.0.0/24")}
+	cfg := config.Config{DataDir: t.TempDir(), TunnelPort: freeUDPPort(t), TunnelNet: netip.MustParsePrefix("10.77.0.0/24"), DefaultScreen: "1280x720@30"}
 
 	nodeKey, err := tunnel.GenerateKey()
 	if err != nil {
@@ -94,6 +94,10 @@ func TestPairedRoomThroughTunnel(t *testing.T) {
 	rooms, err := loadRooms(ctx, db, cfg, roomBuilder(cfg, tun))
 	if err != nil || len(rooms) != 1 || rooms[0].Source != "paired" {
 		t.Fatalf("rooms: %+v %v", rooms, err)
+	}
+	// The other computer's desktop size stands.
+	if rooms[0].DefaultScreen != "" {
+		t.Fatalf("paired room got the server's default screen %q", rooms[0].DefaultScreen)
 	}
 	h := hub.New(db, t.TempDir(), rooms)
 	if err := h.Start(ctx); err != nil {

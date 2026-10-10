@@ -35,7 +35,7 @@ type Config struct {
 	InitAdminPass string   // creates the "admin" account if it does not exist
 	NekoSecret    string   // each room's neko admin token is derived from it (see NekoToken)
 	NekoAPIToken  string   // instead of NekoSecret: one token for every neko, as given
-	DefaultScreen string   // container default desktop size for all rooms; empty leaves it alone
+	DefaultScreen string   // container default desktop size for the server's rooms; empty leaves it alone
 	Rooms         []Room
 	WebDir        string // serve the UI from disk instead of the embedded build (dev)
 	SourceURL     string // where users can get this server's source code (AGPL)

@@ -31,7 +31,8 @@ community over a long time.** The numbers so far are under
   [Stream settings](#stream-settings)).
 - **A room desktop that stays**: files, folders and the Firefox profile
   (open tabs, logins, extensions) live in a Docker volume and survive
-  restarts and image updates.
+  restarts and image updates. It can move to another computer (see
+  [Moving a room's desktop](#moving-a-rooms-desktop)).
 - **Rooms on other computers**: someone lends a computer at home to run a
   room, without opening ports or showing their address; the server stays
   the only thing the internet sees (see
@@ -39,9 +40,6 @@ community over a long time.** The numbers so far are under
   Chat and the user list live on the server and keep working while a
   room's desktop is offline.
 - **Automatic HTTPS** with Let's Encrypt when a domain is set.
-- **Import** of accounts, logins, avatars, permissions, invites and the
-  room desktop from a [CozyCast](https://github.com/Vorlent/cozycast)
-  instance ([guide](docs/migration.md)).
 
 ## Built on neko
 
@@ -92,10 +90,14 @@ git clone https://github.com/W-Christoph/cozyslop.git cozycast && cd cozycast
 ```
 
 `setup` asks for the server's public IP address, a domain name, whether
-rooms run on other computers and whether the server has a room of its own.
+rooms run on other computers, whether the server has a room of its own, and
+what that room starts with (desktop size, bitrate, stream size, encoder
+speed).
 It makes the secrets and prints the admin password and the ports to open.
-It only writes a new `.env`; later changes are edits to that file followed
-by `./cozycast.sh start`.
+It only writes a new `.env`: a copy of `.env.example` with the answers
+filled in, so every other setting is there too, commented out with its
+default. Later changes are edits to that file followed by
+`./cozycast.sh start`.
 
 Without a domain of your own, a name from [sslip.io](https://sslip.io) works
 for HTTPS: for the address 203.0.113.10, answer the domain question with
@@ -108,9 +110,6 @@ A server with 1 GB of memory needs swap for the build:
 fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
 echo "/swapfile none swap sw 0 0" >> /etc/fstab
 ```
-
-Importing from a CozyCast instance happens on the first start, into the
-empty database: see [Migration](docs/migration.md) before starting.
 
 Or by hand: `cp .env.example .env`, set `PUBLIC_IP`, `NEKO_API_TOKEN` and
 `ADMIN_PASSWORD`, then `docker compose up -d --build`. `./cozycast.sh` without
@@ -171,7 +170,7 @@ leave an existing account's password unchanged.
 | `COZYCAST_NEKO_API_TOKEN` | | instead of the secret: one token used as-is for every room, for a neko you run yourself with `NEKO_SESSION_API_TOKEN` |
 | `COZYCAST_ROOMS` | `default=http://room-default:8080` | `name=url,name2=url2`; configured rooms alongside database registrations; `none` for no configured room (empty uses the default) |
 | `COZYCAST_NEKO_TOKEN` | | worker only: ready neko admin token for a registered room; takes precedence over `COZYCAST_NEKO_SECRET`; both variables are removed before starting desktop processes |
-| `COZYCAST_DEFAULT_SCREEN` | | container default screen for all rooms (`1280x720@30`); Compose sets it from `SCREEN`; empty leaves the desktop size alone when clearing the room setting |
+| `COZYCAST_DEFAULT_SCREEN` | | container default screen for the rooms on the server (`1280x720@30`); Compose sets it from `SCREEN`; empty leaves the desktop size alone when clearing the room setting, as it is for rooms on other computers |
 | `COZYCAST_DATA_DIR` | `data` | database, uploaded chat media and the tunnel's key (`wireguard.key`) |
 | `COZYCAST_INIT_ADMIN_PASSWORD` | | creates the `admin` account on first start; sets its password with `reset-admin` |
 | `COZYCAST_LISTEN` | `:8080` | HTTP; with a domain set it only redirects and answers Let's Encrypt |
@@ -179,7 +178,7 @@ leave an existing account's password unchanged.
 | `COZYCAST_DOMAIN` | | host names for automatic HTTPS, comma separated |
 | `COZYCAST_ACME_EMAIL` | | optional contact address for Let's Encrypt |
 | `COZYCAST_TRUST_PROXY` | `false` | take client IP from the last entry of the last `X-Forwarded-For` header, and scheme from `X-Forwarded-Proto` |
-| `COZYCAST_IMPORT` | | CozyCast export archive, imported into an empty database |
+| `COZYCAST_IMPORT` | | archive exported from the old CozyCast, imported into an empty database ([what happens with one](docs/migration.md)) |
 | `COZYCAST_MAX_UPLOAD_MB` | `10` | maximum chat image/video size |
 | `COZYCAST_DOCKER` | `false` | opt in to restarting rooms from the UI, and to starting and stopping them under Admin > Rooms |
 | `COZYCAST_DOCKER_SOCKET` | `/var/run/docker.sock` | Unix socket path or `tcp://host:port` for a Docker socket proxy (plain HTTP) |
@@ -244,10 +243,46 @@ and accepts; nothing else is copied. The computer reconnects by itself after
 restarts on either side. The room cannot reach that computer or its home
 network: it browses through the server, so websites see the server's address.
 
+The first `connect` asks what the room starts with there (desktop size,
+bitrate, stream size, encoder speed) and writes `.env.node`, a copy of
+`.env.node.example`: a weak computer picks a smaller desktop or stream and
+a faster encoder. That holds until an admin picks something else in the
+room's settings; the stream choices offered there are that computer's too
+(`STREAM_BITRATES`, `STREAM_SCALES`, `X264_PRESETS`). The server's `SCREEN`
+does not apply to such a room.
+
+`./cozycast.sh connect <another server>` moves the computer to another
+server: it asks before deleting the pairing, and then, as a question of its
+own, whether the room's files go too. `./cozycast.sh forget` asks the same
+two questions and connects to nothing.
+
+## Moving a room's desktop
+
+A room's home folder (its files and the Firefox profile with logins and
+open tabs) moves between any two checkouts: from the server's own room to a
+computer at home, back, or from one home computer to the next.
+
+```bash
+./cozycast.sh export-room                        # where the room runs now
+scp cozycast-room.tar.gz other-computer:cozycast/
+./cozycast.sh import-room cozycast-room.tar.gz   # where it runs next
+```
+
+`export-room` stops the room while it copies (it asks first) and starts it
+again. `import-room` makes the room's home folder from the file; if the
+room has one already it asks before replacing it. On a computer that is to
+run a room for a server elsewhere it works before `connect`, so the room
+starts with the desktop it is given. Caches are left out. The file holds
+the room browser's logins: delete it on both sides afterwards. Accounts,
+chat and room settings live on the server and do not move with it.
+
 ## Stream settings
 
-`SCREEN` in `.env` sets the shared container default; clearing a room's
-screen setting restores it.
+`SCREEN` in `.env` sets the default of the rooms on the server; clearing a
+room's screen setting restores it. `STREAM_BITRATE`, `STREAM_SCALE` and
+`X264_PRESET` are the stream of a room that never picked one. A room on
+another computer takes all four from that computer's `.env.node`; clearing
+its screen setting leaves the desktop as it is until the room restarts.
 
 Admins change these in the room settings; viewers switch over within
 seconds without reconnecting:

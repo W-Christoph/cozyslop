@@ -1,4 +1,10 @@
-# Move an existing CozyCast instance
+# Import from the old CozyCast
+
+The script that exported an old CozyCast instance is no longer part of this
+repository (it was `migrate/export-cozycast.sh`; `git log` has it). The
+server still imports an archive it made, `cozycast-export.tar.gz`, and
+this is what happens with one. To move a room's desktop between two
+servers of this project, see "Moving a room's desktop" in the README.
 
 Use an empty database on the new server. Import runs automatically before
 initial admin creation; later starts skip it when accounts already exist.
@@ -6,19 +12,7 @@ Passwords keep working. Browsers that were logged in to the old server stay
 logged in when the new one runs at the same address (see
 [Logins](#logins)); everyone else logs in once.
 
-1. Copy this repository's `migrate/export-cozycast.sh` to the old server.
-   From the old CozyCast checkout, run:
-
-   ```bash
-   ./export-cozycast.sh
-   # If Docker needs root: sudo ./export-cozycast.sh
-   ```
-
-   You can also pass the old checkout path as the first argument. If the
-   script cannot identify Postgres, set `POSTGRES_CONTAINER` to its running
-   container name (with sudo, use `sudo env POSTGRES_CONTAINER=name ...`).
-
-2. Copy the resulting file to `import/` next to the new `compose.yaml`,
+1. Copy the archive to `import/` next to the new `compose.yaml`,
    using a secure transfer such as `scp`:
 
    ```bash
@@ -35,7 +29,7 @@ logged in when the new one runs at the same address (see
    sudo chown 65532:65532 /path/to/cozycast-next/import/cozycast-export.tar.gz
    ```
 
-3. On the new server, set up `.env` from `.env.example` (including
+2. On the new server, set up `.env` from `.env.example` (including
    `PUBLIC_IP` and `NEKO_API_TOKEN`). Configure the same room names in
    `COZYCAST_ROOMS` in `compose.yaml`, with a worker for each room.
 
@@ -46,7 +40,7 @@ logged in when the new one runs at the same address (see
    docker compose logs server
    ```
 
-4. Check for `legacy import complete`, its counts, and any skipped items
+3. Check for `legacy import complete`, its counts, and any skipped items
    (`docker compose logs server`), and for `import-home:` lines in
    `docker compose logs room-default`. Check that you can log in. Delete `cozycast-export.tar.gz` from both
    machines; it contains password hashes. The mounted `import/` directory
@@ -54,39 +48,17 @@ logged in when the new one runs at the same address (see
    A failed desktop import (for example a damaged archive) leaves the room's
    home folder as it was and is tried again on the next start.
 
-## Space, and moving the desktop later
+## An archive without accounts, or without the desktop
 
-The room desktop is the heavy part. From the old checkout,
-
-```bash
-./export-cozycast.sh --check
-```
-
-prints its size and whether an export fits, without exporting anything. The
-export copies the files to the temporary directory (`TMPDIR`, default
-`/tmp`) and builds the archive next to the copy, so it needs up to twice
-their size there; it refuses to start when that is not free. On the new
-server the import unpacks the archive and then copies the desktop into the
-room's volume: up to twice the desktop's size in Docker's storage, next to
-the archive itself. One copy stays once it is done.
-
-To move the accounts first and the desktop later:
-
-1. Export with `./export-cozycast.sh --accounts-only` and follow steps 2 to 4
-   above. The room starts with a fresh desktop.
-2. Later, export with `./export-cozycast.sh --desktop-only`. This needs no
-   database, so the old CozyCast can be stopped. Put the archive in `import/`
-   under the same name and restart the room:
-
-   ```bash
-   docker compose restart room-default
-   docker compose logs room-default | grep import-home
-   ```
-
-The desktop import replaces the Firefox profile the new room has used until
+The export could leave out the room desktop, or hold the desktop alone. A
+desktop-only archive goes in `import/` under the same name once the server
+has its accounts, followed by `docker compose restart room-default`. The
+desktop import replaces the Firefox profile the new room has used until
 then; files already on the new desktop are kept. A desktop-only archive has
 no accounts: the server ignores it once it has accounts, and refuses to
-start with it on an empty database.
+start with it on an empty database. The import unpacks the archive and then
+copies the desktop into the room's volume: up to twice the desktop's size
+in Docker's storage, next to the archive itself.
 
 ## Logins
 
@@ -125,7 +97,6 @@ the old desktop setup. This happens once; a marker in the room's home folder
 (`.cozycast-imported`) prevents a second import, so the archive can stay in
 `import/` until you delete it. To import again, remove the room's home
 volume first (`docker compose down` then `docker volume rm <project>_room-default-home`).
-Large Downloads make a large archive; the script prints its size.
 
 Not migrated: chat history, revoked logins, unused email and
 password-expired flags, or stream settings (resolution, frame rate, codecs,

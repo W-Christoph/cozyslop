@@ -37,6 +37,8 @@ x-room: &room
     # only runs pipelines someone is watching. Resolution and frame rate
     # follow the room's screen setting; a keyframe every 2 s.
     COZYCAST_X264_PRESET: ${X264_PRESET:-veryfast}
+    COZYCAST_STREAM_BITRATE: ${STREAM_BITRATE:-2500}
+    COZYCAST_STREAM_SCALE: ${STREAM_SCALE:-100}
     COZYCAST_X264_PRESETS: ${X264_PRESETS:-ultrafast superfast veryfast}
     COZYCAST_STREAM_BITRATES: ${STREAM_BITRATES:-1000 1500 2500 4000 6000 8000}
     COZYCAST_STREAM_SCALES: ${STREAM_SCALES:-100 75 67 50}

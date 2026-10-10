@@ -383,14 +383,18 @@ func loadRooms(ctx context.Context, db *store.Store, cfg config.Config, build ht
 }
 
 // roomBuilder builds rooms whose neko is reached through the tunnel when its
-// address is inside it, and directly otherwise.
+// address is inside it, and directly otherwise. A room behind the tunnel
+// runs on someone else's computer, which sets its desktop size itself: the
+// server's default is not applied there.
 func roomBuilder(cfg config.Config, tun *tunnel.Tunnel) httpapi.RoomBuilder {
 	return func(name, nekoURL, token string) (hub.RoomConfig, error) {
 		var dial neko.DialFunc
+		screen := cfg.DefaultScreen
 		if tun.Owns(nekoURL) {
 			dial = tun.DialContext
+			screen = ""
 		}
-		return hub.BuildRoomConfig(name, nekoURL, token, cfg.DefaultScreen, dial)
+		return hub.BuildRoomConfig(name, nekoURL, token, screen, dial)
 	}
 }
 

@@ -107,7 +107,7 @@ export function StreamSettings() {
           <>
             <SettingRow title="Resolution" description="Of the desktop itself." htmlFor={select('resolution')}>
               <Select id={select('resolution')} value={choices.resolution} disabled={busy} onChange={(e) => setResolution(e.currentTarget.value)}>
-                <option value="">Server default</option>
+                <option value="">Default</option>
                 {choices.resolutions.map((r) => <option key={r} value={r}>{r.replace('x', '×')}</option>)}
               </Select>
             </SettingRow>

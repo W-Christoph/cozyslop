@@ -64,6 +64,17 @@ Accepted as room "christoph-pc". Tunnel up, room starting.
 Once paired, the agent remembers everything in its volume; later starts
 connect without a code.
 
+`./cozycast.sh connect <server>` asks, the first time, what the room
+starts with (desktop size and frame rate, bitrate, stream size, encoder
+speed) and keeps the answers in `.env.node`. The hub does not apply its own
+default desktop size to a paired room; an admin's choice in the room's
+settings still does.
+
+To start with the desktop of a room that ran elsewhere (the server's own
+room, say), import it first: `./cozycast.sh export-room` there, copy the
+file over, `./cozycast.sh import-room <file>` here, then connect ("Moving a
+room's desktop" in the README).
+
 ### What the admin does
 
 The Rooms tab gets a **Requests** list: proposed name, code, the

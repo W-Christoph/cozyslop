@@ -20,10 +20,19 @@ On the server:
 
 On a computer that runs a room for a server elsewhere:
   ./cozycast.sh connect <server> start the room and show the code to accept
-                                 under Admin > Rooms, e.g. connect cozy.example.com
-  ./cozycast.sh start | stop | update | status
+                                 under Admin > Rooms, e.g. connect cozy.example.com;
+                                 the first time it asks what the room starts
+                                 with and writes .env.node
+  ./cozycast.sh start | stop | update | status   (start also after changing .env.node)
   ./cozycast.sh logs [service]   default: agent
-  ./cozycast.sh forget           stop and delete the pairing and the room's files
+  ./cozycast.sh forget           stop and delete the pairing; asks about the
+                                 room's files separately
+
+Moving a room's desktop (its files and Firefox profile) to another computer:
+  ./cozycast.sh export-room [file]  where the room runs now: write
+                                    cozycast-room.tar.gz (or the file named)
+  ./cozycast.sh import-room <file>  where it runs next, once the file is copied
+                                    there: make the room's home folder from it
 EOF
 }
 
@@ -31,7 +40,15 @@ die() { echo "$*" >&2; exit 1; }
 
 # The room for another server is its own compose project with its own
 # settings file, so both kinds of commands can share this script.
-node() { docker compose --env-file .env.node -f compose.node.yaml "$@"; }
+node() {
+  if [ -f .env.node ]; then
+    docker compose --env-file .env.node -f compose.node.yaml "$@"
+  else
+    docker compose -f compose.node.yaml "$@"
+  fi
+}
+
+hub() { [ ! -f .env.node ] || sed -n 's/^COZYCAST_HUB=//p' .env.node | tail -n 1; }
 
 ROLE=
 find_role() {
@@ -51,6 +68,51 @@ ask() { # ask <question> <default>
   local answer
   read -r -p "$1 [$2]: " answer || true
   echo "${answer:-$2}"
+}
+
+sure() { # sure <question>: only "yes" goes on
+  local answer
+  read -r -p "$1 Type yes: " answer || true
+  [ "$answer" = yes ]
+}
+
+# set_env <file> <name> <value>: the file's line for <name>, commented out or
+# not, becomes the setting; without such a line it is added at the end.
+set_env() {
+  [ -f "$1" ] || : > "$1"
+  name=$2 value=$3 awk '
+    !done && $0 ~ "^#? ?" ENVIRON["name"] "=" { print ENVIRON["name"] "=" ENVIRON["value"]; done = 1; next }
+    { print }
+    END { if (!done) print ENVIRON["name"] "=" ENVIRON["value"] }' "$1" > "$1.tmp"
+  mv "$1.tmp" "$1"
+}
+
+# What a room starts with: its desktop and its stream, until the room's
+# settings pick something else. These set the caller's screen, bitrate,
+# scale and preset.
+defaults() { screen=1280x720@30 bitrate=2500 scale=100 preset=veryfast; }
+
+ask_defaults() { # ask_defaults <whose room>
+  echo "$1 starts with (Enter keeps a default; the room's settings change it later):"
+  screen=$(ask "Desktop size and frame rate" "$screen")
+  [[ $screen =~ ^[1-9][0-9]*x[1-9][0-9]*@[1-9][0-9]*$ ]] || die "A desktop size looks like 1280x720@30."
+  bitrate=$(ask "Stream bitrate in kbit/s" "$bitrate")
+  [[ $bitrate =~ ^[1-9][0-9]*$ ]] || die "The bitrate is a number, like 2500."
+  scale=$(ask "Stream size in percent of the desktop size" "$scale")
+  [[ $scale =~ ^[1-9][0-9]?$|^100$ ]] || die "The stream size is a number from 1 to 100."
+  preset=$(ask "Encoder speed: ultrafast, superfast or veryfast (faster needs less CPU and looks blockier)" "$preset")
+  case "$preset" in
+    ultrafast | superfast | veryfast | faster | fast | medium) ;;
+    *) die "The encoder speed is one of x264's presets, like veryfast." ;;
+  esac
+}
+
+# Only what differs is written: the rest stays commented out, as the default.
+save_defaults() { # save_defaults <file>
+  [ "$screen" = 1280x720@30 ] || set_env "$1" SCREEN "$screen"
+  [ "$bitrate" = 2500 ] || set_env "$1" STREAM_BITRATE "$bitrate"
+  [ "$scale" = 100 ] || set_env "$1" STREAM_SCALE "$scale"
+  [ "$preset" = veryfast ] || set_env "$1" X264_PRESET "$preset"
 }
 
 setup() {
@@ -82,22 +144,30 @@ setup() {
   esac
   [ ! -f compose.override.yaml ] || files+=:compose.override.yaml
 
+  local screen bitrate scale preset
+  defaults
+  [ "$room" = 3 ] || ask_defaults "This server's room"
+
+  # A copy of .env.example, so that every other setting is there to see,
+  # commented out with its default.
   local password
   password=$(openssl rand -base64 15 | tr -d '/+=')
   (
     umask 077
-    {
-      echo "PUBLIC_IP=$ip"
-      echo "NEKO_API_TOKEN=$(openssl rand -hex 32)"
-      echo "ADMIN_PASSWORD=$password"
-      [ -z "$domain" ] || echo "DOMAIN=$domain"
-      [ "$files" = compose.yaml ] || echo "COMPOSE_FILE=$files"
-      [ -z "$gid" ] || echo "DOCKER_GID=$gid"
-    } > .env
+    cp .env.example .env.new
+    set_env .env.new PUBLIC_IP "$ip"
+    set_env .env.new NEKO_API_TOKEN "$(openssl rand -hex 32)"
+    set_env .env.new ADMIN_PASSWORD "$password"
+    [ -z "$domain" ] || set_env .env.new DOMAIN "$domain"
+    [ "$files" = compose.yaml ] || set_env .env.new COMPOSE_FILE "$files"
+    [ -z "$gid" ] || set_env .env.new DOCKER_GID "$gid"
+    save_defaults .env.new
+    mv .env.new .env
   )
   echo
   echo "Wrote .env. Log in as \"admin\" with the password $password"
-  echo "(it stays in .env as ADMIN_PASSWORD). More settings: .env.example."
+  echo "(it stays in .env as ADMIN_PASSWORD). The other settings are in .env"
+  echo "too, commented out with their defaults."
   echo "Ports to open: 80 and 443 (TCP)$(
     [ "$room" = 3 ] || printf ', 52000 (UDP and TCP)'
     case "$files" in *tunnel*) printf ', 51820 (UDP), 52099 (UDP and TCP)' ;; esac
@@ -134,7 +204,7 @@ stop() {
 status() {
   find_role
   if [ "$ROLE" = node ]; then
-    echo "Room for $(sed -n 's/^COZYCAST_HUB=//p' .env.node):"
+    echo "Room for $(hub):"
     node ps -a
   elif on_demand; then
     docker compose --profile room-default ps -a
@@ -160,13 +230,60 @@ update() {
   start
 }
 
+# The Docker volume behind a compose volume, if there is one yet.
+volume() { # volume <node | room_compose> <its name in the compose file>
+  local project
+  project=$("$1" config | sed -n 's/^name: //p') || return
+  docker volume ls -q --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.volume=$2"
+}
+
+# Forgets the server: the agent's keys and what it handed the room. The
+# room's home folder stays.
+unpair() {
+  local key name
+  node down
+  for key in state room-env; do
+    name=$(volume node "$key")
+    [ -z "$name" ] || docker volume rm "$name" > /dev/null
+  done
+}
+
+# A question of its own, after the pairing is gone: the desktop can go on
+# to the next server.
+delete_home() {
+  local name
+  name=$(volume node home)
+  [ -n "$name" ] || return 0
+  if sure "Also delete the room's files (its home folder, with Firefox's logins)?"; then
+    docker volume rm "$name" > /dev/null
+    echo "Deleted the room's files."
+  else
+    echo "Kept the room's files: the next room on this computer starts with them."
+  fi
+}
+
 connect() {
   [ $# -eq 1 ] || die "Which server? For example: $0 connect cozy.example.com"
   [ ! -f .env ] || die "This checkout is a server (.env); use another one for a room."
-  if [ -f .env.node ] && [ "$(sed -n 's/^COZYCAST_HUB=//p' .env.node)" != "$1" ]; then
-    die "This computer is set up for $(sed -n 's/^COZYCAST_HUB=//p' .env.node). \"$0 forget\" first to change servers."
+  local old
+  old=$(hub)
+  if [ -n "$old" ] && [ "$old" != "$1" ]; then
+    echo "This computer runs a room for $old."
+    sure "Delete that pairing and connect to $1 instead?" || die "Nothing changed."
+    unpair
+    echo "Pairing deleted. On $old, remove the room under Admin > Rooms."
+    delete_home
   fi
-  echo "COZYCAST_HUB=$1" > .env.node
+  if [ ! -f .env.node ]; then
+    # The first time: this computer decides what its room starts with.
+    local screen bitrate scale preset
+    defaults
+    ask_defaults "The room on this computer"
+    cp .env.node.example .env.node.new
+    save_defaults .env.node.new
+    mv .env.node.new .env.node
+  fi
+  set_env .env.node COZYCAST_HUB "$1"
   node up -d --build
   echo
   echo "Below is the agent's log. The first time it shows a code: compare it"
@@ -176,19 +293,95 @@ connect() {
 }
 
 forget() {
-  [ -f .env.node ] || die "This checkout runs no room for another server."
-  local answer
-  read -r -p "Delete the pairing and everything in the room's home folder? Type yes: " answer || true
-  [ "$answer" = yes ] || die "Nothing deleted."
-  node down -v
-  rm -f .env.node
-  echo "Deleted. On the server, remove the room under Admin > Rooms."
+  if [ -f .env.node ]; then
+    sure "Delete the pairing with $(hub)?" || die "Nothing deleted."
+    unpair
+    rm -f .env.node
+    echo "Pairing deleted. On the server, remove the room under Admin > Rooms."
+  elif [ -f .env ] || [ -z "$(volume node home)" ]; then
+    die "This checkout runs no room for another server."
+  fi
+  delete_home
+}
+
+# This checkout's room: the server's own, or the one for a server elsewhere
+# (also before "connect", so that a desktop can be imported first).
+room_compose() {
+  if [ -f .env ]; then docker compose --profile room-default "$@"; else node "$@"; fi
+}
+room_service() { if [ -f .env ]; then echo room-default; else echo room; fi; }
+room_home() { volume room_compose "$(if [ -f .env ]; then echo room-default-home; else echo home; fi)"; }
+room_running() { room_compose ps -q --status running "$(room_service)"; }
+
+# Runs a command as root in a container of the room's image that has the
+# room's home folder and nothing running in it. MSYS_NO_PATHCONV: Git Bash
+# on Windows would rewrite the paths meant for the container.
+room_run() {
+  MSYS_NO_PATHCONV=1 room_compose run --rm --no-deps -T --user 0 --entrypoint "$1" "$(room_service)" "${@:2}"
+}
+
+export_room() {
+  local file=${1:-cozycast-room.tar.gz} home service running ok=1
+  home=$(room_home)
+  [ -n "$home" ] || die "This checkout has no room desktop yet."
+  [ ! -e "$file" ] || die "$file exists already: move it away, or name another file."
+  service=$(room_service)
+  running=$(room_running)
+  if [ -n "$running" ]; then
+    # A copy of a running Firefox's profile is not one it can count on.
+    sure "The room is stopped while its files are copied; whoever is in it sees it offline. Go on?" || die "Nothing exported."
+    room_compose stop "$service"
+  fi
+  # Caches stay behind: large, and they fill again by themselves.
+  (umask 077 && room_run tar -czf - --warning=no-file-ignored --exclude=./.cache -C /home/cozycast . > "$file.part") || ok=""
+  [ -z "$running" ] || room_compose start "$service"
+  if [ -z "$ok" ]; then
+    rm -f "$file.part"
+    die "The export failed; nothing was written."
+  fi
+  mv "$file.part" "$file"
+  echo
+  echo "Wrote $file ($(du -h "$file" | cut -f1)). It holds the room browser's logins:"
+  echo "copy it over securely (scp), then on the other computer:"
+  echo "  $0 import-room $(basename "$file")"
+  echo "and delete the file on both once the room runs there."
+}
+
+import_room() {
+  [ $# -eq 1 ] || die "Which file? For example: $0 import-room cozycast-room.tar.gz"
+  local file=$1 first home service running
+  [ -f "$file" ] || die "$file was not found."
+  # Read all of it before anything is deleted: a file cut off on the way
+  # must not replace a desktop by half of one.
+  first=$(tar -tzf "$file" | sed -n 1p) || die "$file is damaged or cut off: copy it over again."
+  [ "$first" = ./ ] || die "$file is not a room export (\"$0 export-room\" makes one)."
+  [ -f .env ] || [ -f .env.node ] || echo "Not a server (no .env): importing for a room that runs for a server elsewhere."
+  home=$(room_home)
+  if [ -n "$home" ]; then
+    sure "This replaces everything in this room's home folder (its files and Firefox profile)." || die "Nothing imported."
+  fi
+  service=$(room_service)
+  running=$(room_running)
+  [ -z "$running" ] || room_compose stop "$service"
+  room_run sh -c 'find /home/cozycast -mindepth 1 -delete && tar -xzf - -C /home/cozycast' < "$file" ||
+    die "The import failed and the room's home folder is incomplete: free some space and import again."
+  echo
+  echo "The room's home folder is now the one from $file."
+  if [ -n "$running" ]; then
+    room_compose start "$service"
+  elif [ ! -f .env ] && [ ! -f .env.node ]; then
+    echo "Next: $0 connect <server>"
+  else
+    echo "Next: $0 start"
+  fi
 }
 
 case "${1:-}" in
   setup | start | stop | status | update | forget) [ $# -eq 1 ] || die "$1 takes no arguments."; "$1" ;;
   logs) shift; logs "$@" ;;
   connect) shift; connect "$@" ;;
+  export-room) [ $# -le 2 ] || die "export-room takes one file name."; shift; export_room "$@" ;;
+  import-room) shift; import_room "$@" ;;
   "" | help | -h | --help) usage ;;
   *) usage >&2; exit 1 ;;
 esac

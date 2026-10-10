@@ -28,6 +28,7 @@ import (
 	"cozycast/internal/neko"
 	mediarelay "cozycast/internal/relay"
 	"cozycast/internal/store"
+	"cozycast/internal/transfer"
 	"cozycast/internal/tunnel"
 	"cozycast/webui"
 
@@ -45,19 +46,30 @@ func main() {
 	}
 }
 
+// stdin is where "cozycast import" reads the archive; a variable for tests.
+var stdin io.Reader = os.Stdin
+
+const usage = "Usage: cozycast [reset-admin | export | import]"
+
 func run(args []string, out io.Writer) error {
-	if len(args) > 0 && args[0] != "reset-admin" {
-		return fmt.Errorf("unknown subcommand %q\nUsage: cozycast [reset-admin]", args[0])
+	command := ""
+	if len(args) > 0 {
+		command = args[0]
+	}
+	switch command {
+	case "", "reset-admin", "export", "import":
+	default:
+		return fmt.Errorf("unknown subcommand %q\n%s", command, usage)
 	}
 	if len(args) > 1 {
-		return errors.New("Usage: cozycast [reset-admin]")
+		return errors.New(usage)
 	}
 	cfg, err := config.FromEnv()
 	if err != nil {
 		return err
 	}
 	var adminHash string
-	if len(args) > 0 {
+	if command == "reset-admin" {
 		if err := auth.ValidatePassword(cfg.InitAdminPass); err != nil {
 			return fmt.Errorf("COZYCAST_INIT_ADMIN_PASSWORD: %w", err)
 		}
@@ -73,12 +85,25 @@ func run(args []string, out io.Writer) error {
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
 		return err
 	}
-	db, err := store.Open(ctx, filepath.Join(cfg.DataDir, "cozycast.db"))
+	if command == "import" {
+		// Before the database is opened: it is about to be replaced.
+		exported, err := transfer.Import(ctx, cfg.DataDir, stdin)
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(out, "Imported the server's data as exported on %s.\n", exported.Format("2006-01-02 15:04 MST"))
+		return err
+	}
+	db, err := store.Open(ctx, filepath.Join(cfg.DataDir, transfer.Database))
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	if len(args) > 0 {
+	if command == "export" {
+		// The archive is all that goes to out.
+		return transfer.Export(ctx, db, cfg.DataDir, out)
+	}
+	if command == "reset-admin" {
 		created, err := db.ResetAdmin(ctx, adminHash)
 		if err != nil {
 			return err

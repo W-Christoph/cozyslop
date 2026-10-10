@@ -281,6 +281,49 @@ starts with the desktop it is given. Caches are left out. The file holds
 the room browser's logins: delete it on both sides afterwards. Accounts,
 chat and room settings live on the server and do not move with it.
 
+## Moving the server
+
+Everything the server knows (accounts, logins, chat, room settings,
+permissions, invites, pairings, uploaded pictures, and its keys) moves to
+another server of this project in one file:
+
+```bash
+./cozycast.sh export-server                          # on the old server
+scp cozycast-server.tar.gz new-server:cozycast/
+./cozycast.sh setup                                  # on the new one, if it has no .env yet
+./cozycast.sh import-server cozycast-server.tar.gz
+./cozycast.sh start
+```
+
+`export-server` does not stop the server: the database goes into the file as
+it was at one moment. Stop the old server afterwards, so that nothing is
+said there that the new one never hears of. `import-server` replaces what
+the new server has (it asks first, and stops the server while it does); a
+file that is cut off, damaged or from a newer version is refused and
+changes nothing. Both servers need a version that has these commands
+(`./cozycast.sh update`). The file holds the accounts' password hashes and
+the server's keys: delete it on both sides afterwards.
+
+What does not move with it:
+
+- `.env`. The new server keeps its own address and secrets. Everyone logs
+  in with the accounts of the old server; `ADMIN_PASSWORD` no longer
+  applies, since `admin` exists.
+- The desktop of the server's own room: that is `export-room` and
+  `import-room` above, a file of its own.
+- Rooms on other computers stay where they are, and their pairings are in
+  the file. Answer "y" to home hosting in the new server's `setup`. They
+  find it by themselves if it answers at the old one's domain name; at a
+  new address each one is paired again (`./cozycast.sh connect <server>`
+  there, then accept it under Admin > Rooms).
+
+Browsers stay logged in if the new server runs at the same address.
+
+The script runs the server program's own commands, which also work without
+Compose, with the usual server environment: `cozycast export` writes the
+file to its standard output, and `cozycast import` reads one from its
+standard input (with the server stopped).
+
 ## Stream settings
 
 `SCREEN` in `.env` sets the default of the rooms on the server; clearing a

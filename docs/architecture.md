@@ -109,6 +109,15 @@ notify a separately running server's hub, so its session deletion cannot
 close room sockets already open in that process. See the
 [recovery instructions](../README.md#develop).
 
+`cozycast export` and `cozycast import` move a server's data directory to
+another server (`server/internal/transfer`, "Moving the server" in the
+README). The export is a gzipped tar: a manifest first, then the database
+as `VACUUM INTO` copied it, so it is consistent while the server runs, then
+the other files (uploaded pictures, the tunnel's key, certificates). The
+import unpacks into a folder inside the data directory, checks the archive
+to its end, opens the database (which migrates an older one) and only then
+replaces what was there. It needs the server stopped.
+
 ## Data (SQLite)
 
 One file, `data/cozycast.db`, WAL mode, foreign keys on. Schema migrations are

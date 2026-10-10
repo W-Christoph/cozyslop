@@ -33,6 +33,12 @@ Moving a room's desktop (its files and Firefox profile) to another computer:
                                     cozycast-room.tar.gz (or the file named)
   ./cozycast.sh import-room <file>  where it runs next, once the file is copied
                                     there: make the room's home folder from it
+
+Moving the server (accounts, chat, room settings, pairings) to another server:
+  ./cozycast.sh export-server [file]  on the old server, which keeps running:
+                                      write cozycast-server.tar.gz (or the file named)
+  ./cozycast.sh import-server <file>  on the new one, after "setup": replace
+                                      what it knows by the file's content
 EOF
 }
 
@@ -376,12 +382,67 @@ import_room() {
   fi
 }
 
+# The server's own compose project, for volume().
+server_compose() { docker compose "$@"; }
+
+# Runs the server program once on the server's data, beside a server that
+# may be running. Its image has no shell: exporting and importing are
+# commands of the program itself.
+server_run() { docker compose run --rm --no-deps -T server "$@"; }
+
+export_server() {
+  [ -f .env ] || die "This checkout is not a server (no .env)."
+  local file=${1:-cozycast-server.tar.gz}
+  [ ! -e "$file" ] || die "$file exists already: move it away, or name another file."
+  [ -n "$(volume server_compose server-data)" ] || die "This server has no data yet."
+  # The server goes on running: its database is copied as of one moment.
+  if ! (umask 077 && server_run export > "$file.part"); then
+    rm -f "$file.part"
+    die "The export failed; nothing was written. (A server from before this command cannot export: \"$0 update\" first.)"
+  fi
+  mv "$file.part" "$file"
+  echo
+  echo "Wrote $file ($(du -h "$file" | cut -f1)): the accounts with their password hashes, chat,"
+  echo "room settings, pairings and this server's keys. Copy it over securely (scp),"
+  echo "then on the other server:"
+  echo "  $0 import-server $(basename "$file")"
+  echo "and delete the file on both once the new server runs. A room's desktop"
+  echo "is not in it: \"$0 export-room\" moves that."
+}
+
+import_server() {
+  [ $# -eq 1 ] || die "Which file? For example: $0 import-server cozycast-server.tar.gz"
+  local file=$1 first running
+  [ -f .env ] || die "Set this server up first (\"$0 setup\"): its .env stays its own."
+  [ -f "$file" ] || die "$file was not found."
+  first=$(tar -tzf "$file" | sed -n 1p) || die "$file is damaged or cut off: copy it over again."
+  [ "$first" = cozycast-server.json ] || die "$file is not a server export (\"$0 export-server\" makes one)."
+  if [ -n "$(volume server_compose server-data)" ]; then
+    sure "This replaces everything this server knows: its accounts, chat, room settings and pairings." || die "Nothing imported."
+  fi
+  running=$(docker compose ps -q --status running server)
+  [ -z "$running" ] || docker compose stop server
+  if ! server_run import < "$file"; then
+    [ -z "$running" ] || docker compose start server
+    die "The import failed. An export that is refused leaves the server's data as it was."
+  fi
+  echo "Log in with the accounts of the old server: ADMIN_PASSWORD in .env is only"
+  echo "for an \"admin\" account that does not exist yet."
+  if [ -n "$running" ]; then
+    docker compose start server
+  else
+    echo "Next: $0 start"
+  fi
+}
+
 case "${1:-}" in
   setup | start | stop | status | update | forget) [ $# -eq 1 ] || die "$1 takes no arguments."; "$1" ;;
   logs) shift; logs "$@" ;;
   connect) shift; connect "$@" ;;
   export-room) [ $# -le 2 ] || die "export-room takes one file name."; shift; export_room "$@" ;;
   import-room) shift; import_room "$@" ;;
+  export-server) [ $# -le 2 ] || die "export-server takes one file name."; shift; export_server "$@" ;;
+  import-server) shift; import_server "$@" ;;
   "" | help | -h | --help) usage ;;
   *) usage >&2; exit 1 ;;
 esac

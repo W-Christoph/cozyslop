@@ -51,6 +51,19 @@ func Open(ctx context.Context, path string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
+// Snapshot writes a copy of the database to path, which must not exist. It
+// is the database as of one moment, also while it is being written to.
+func (s *Store) Snapshot(ctx context.Context, path string) error {
+	_, err := s.db.ExecContext(ctx, "VACUUM INTO ?", path)
+	return err
+}
+
+// SchemaVersion is the migration level of the databases this version makes.
+func SchemaVersion() int {
+	names, _ := fs.Glob(migrations, "migrations/*.sql")
+	return len(names)
+}
+
 func (s *Store) migrate(ctx context.Context) (err error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {

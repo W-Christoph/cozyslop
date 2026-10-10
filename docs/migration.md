@@ -3,8 +3,9 @@
 The script that exported an old CozyCast instance is no longer part of this
 repository (it was `migrate/export-cozycast.sh`; `git log` has it). The
 server still imports an archive it made, `cozycast-export.tar.gz`, and
-this is what happens with one. To move a room's desktop between two
-servers of this project, see "Moving a room's desktop" in the README.
+this is what happens with one. Between two servers of this project, see
+"Moving the server" (accounts, chat, settings) and "Moving a room's desktop"
+in the README: two separate files.
 
 Use an empty database on the new server. Import runs automatically before
 initial admin creation; later starts skip it when accounts already exist.

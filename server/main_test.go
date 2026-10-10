@@ -21,6 +21,7 @@ import (
 	"cozycast/internal/hub"
 	"cozycast/internal/neko"
 	"cozycast/internal/store"
+	"cozycast/internal/transfer"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -348,10 +349,10 @@ func TestResetAdminRejectsInvalidPassword(t *testing.T) {
 }
 
 func TestUnknownSubcommand(t *testing.T) {
-	for _, args := range [][]string{{"unknown"}, {"reset-admin", "extra"}} {
+	for _, args := range [][]string{{"unknown"}, {"reset-admin", "extra"}, {"import", "file"}} {
 		var out bytes.Buffer
 		err := run(args, &out)
-		if err == nil || !strings.Contains(err.Error(), "Usage: cozycast [reset-admin]") || out.Len() != 0 {
+		if err == nil || !strings.Contains(err.Error(), usage) || out.Len() != 0 {
 			t.Fatalf("args %v: err=%v output=%q", args, err, out.String())
 		}
 		if args[0] == "unknown" && !strings.Contains(err.Error(), "unknown subcommand") {
@@ -397,5 +398,51 @@ func TestLoadConfiguredAndRegisteredRooms(t *testing.T) {
 	}
 	if _, err := st.RegisteredRoom(ctx, "default"); err != nil {
 		t.Fatal("shadowed registration was deleted")
+	}
+}
+
+// "cozycast export" writes a server's data to its output, also while the
+// server has the database open; "cozycast import" makes it another server's.
+func TestExportImportCommands(t *testing.T) {
+	ctx := context.Background()
+	t.Setenv("COZYCAST_NEKO_SECRET", "test secret")
+	from := t.TempDir()
+	t.Setenv("COZYCAST_DATA_DIR", from)
+	running, err := store.Open(ctx, filepath.Join(from, "cozycast.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer running.Close()
+	if err := running.CreateUser(ctx, &store.User{Username: "moved", PasswordHash: "hash", Nickname: "Moved"}); err != nil {
+		t.Fatal(err)
+	}
+	var archive bytes.Buffer
+	if err := run([]string{"export"}, &archive); err != nil {
+		t.Fatal(err)
+	}
+
+	to := t.TempDir()
+	t.Setenv("COZYCAST_DATA_DIR", to)
+	stdin = &archive
+	defer func() { stdin = os.Stdin }()
+	var out bytes.Buffer
+	if err := run([]string{"import"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(out.String(), "Imported the server's data as exported on ") {
+		t.Fatalf("output: %q", out.String())
+	}
+	st, err := store.Open(ctx, filepath.Join(to, "cozycast.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if u, err := st.UserByUsername(ctx, "moved"); err != nil || u.Nickname != "Moved" {
+		t.Fatalf("account: %+v %v", u, err)
+	}
+
+	stdin = strings.NewReader("not an archive")
+	if err := run([]string{"import"}, &out); !errors.Is(err, transfer.ErrNotExport) {
+		t.Fatalf("err = %v", err)
 	}
 }

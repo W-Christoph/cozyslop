@@ -92,7 +92,7 @@ export function RoomPage() {
       {!userlistHidden && left && <UserStrip left fullscreen={fullscreen} hover={hover} onHover={setHover} />}
       <div class={styles.videoWrapper}>
         <VideoArea disconnected={!connected && wasConnected.current} error={error} fullscreen={fullscreen} />
-        <div class={styles.toolbar} data-remote-passthrough>
+        <div class={styles.toolbar} data-remote-passthrough={fullscreen || undefined}>
           <Controls fullscreen={fullscreen} userlistHidden={userlistHidden} chatOpen={chatOpen} unreadChat={unreadChat} window={roomWindow}
             onToggleUsers={() => setUserlistHidden((value) => !value)} onPersonalSettings={() => { settingsOpen.value = 'appearance' }}
             onChat={setChatOpen} onWindow={setRoomWindow} onFullscreen={() => { void toggle() }} />

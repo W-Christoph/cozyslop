@@ -22,6 +22,8 @@ const MOUSE_MOVE_THROTTLE_MS = 10
 const WHEEL_STEP_PX = 53
 // A pause this long starts a new scroll gesture.
 const WHEEL_GESTURE_MS = 250
+// What on the fullscreen toolbar keeps its clicks instead of passing them on.
+const TOOLBAR_CONTROLS = 'button, a, input, select, textarea, label, [tabindex], [role="menu"]'
 
 export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Props) {
   const store = useRoomStore()
@@ -148,23 +150,26 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
       return pointer.current
     }
 
-    // In fullscreen the toolbar lies over the bottom of the stream; moving
-    // across it still moves the remote pointer.
-    const overStream = (e: MouseEvent) => {
+    // In fullscreen the toolbar lies over the bottom of the stream. Moving
+    // across it still moves the remote pointer; clicks and scrolls between
+    // its controls reach the desktop too.
+    const overStream = (e: MouseEvent, controls = false) => {
       if (!(e.target instanceof Element)) return false
       if (el.contains(e.target)) return true
       if (!e.target.closest('[data-remote-passthrough]')) return false
+      if (!controls && e.target.closest(TOOLBAR_CONTROLS)) return false
       const rect = el.getBoundingClientRect()
       return e.clientX >= rect.left && e.clientX < rect.right && e.clientY >= rect.top && e.clientY < rect.bottom
     }
     let lastMove = 0
     const onMove = (e: MouseEvent) => {
-      if (!hostRef.current || e.timeStamp - lastMove < MOUSE_MOVE_THROTTLE_MS || !overStream(e)) return
+      if (!hostRef.current || e.timeStamp - lastMove < MOUSE_MOVE_THROTTLE_MS || !overStream(e, true)) return
       lastMove = e.timeStamp
       const { x, y } = toScreen(e)
       neko.move(x, y)
     }
     const onDown = (e: MouseEvent) => {
+      if (!overStream(e)) return
       el.focus()
       if (!hostRef.current) return
       e.preventDefault()
@@ -196,7 +201,7 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
     // for it (100 pixels, or three lines). Small deltas (touchpads) add up to
     // a step; the first event of a gesture scrolls at once.
     const onWheel = (e: WheelEvent) => {
-      if (!hostRef.current) return
+      if (!hostRef.current || !overStream(e)) return
       e.preventDefault()
       const first = e.timeStamp - wheelTime > WHEEL_GESTURE_MS
       wheelTime = e.timeStamp
@@ -213,24 +218,24 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
       // neko maps positive deltas to scroll up/left; browsers use down/right.
       neko.scroll(-dx, -dy, e.ctrlKey)
     }
-    const onContextMenu = (e: Event) => {
-      if (hostRef.current) e.preventDefault()
+    const onContextMenu = (e: MouseEvent) => {
+      if (hostRef.current && overStream(e)) e.preventDefault()
     }
 
     document.addEventListener('mousemove', onMove)
-    el.addEventListener('mousedown', onDown)
+    document.addEventListener('mousedown', onDown)
     window.addEventListener('blur', onBlur)
-    el.addEventListener('wheel', onWheel, { passive: false })
-    el.addEventListener('contextmenu', onContextMenu)
+    document.addEventListener('wheel', onWheel, { passive: false })
+    document.addEventListener('contextmenu', onContextMenu)
     return () => {
       document.removeEventListener('mousemove', onMove)
-      el.removeEventListener('mousedown', onDown)
+      document.removeEventListener('mousedown', onDown)
       onBlur()
       offHost()
       offStatus()
       window.removeEventListener('blur', onBlur)
-      el.removeEventListener('wheel', onWheel)
-      el.removeEventListener('contextmenu', onContextMenu)
+      document.removeEventListener('wheel', onWheel)
+      document.removeEventListener('contextmenu', onContextMenu)
     }
   }, [neko, mobile, pointer])
 

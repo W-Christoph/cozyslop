@@ -765,22 +765,35 @@ function desktop(t) {
   window.addEventListener = (name, fn) => { listeners.set(name, fn); add(name, fn) }
   window.removeEventListener = (name, fn) => { if (listeners.get(name) === fn) listeners.delete(name); remove(name, fn) }
   window.clearInterval = () => {}
-  globals(t, { window })
+  // The overlay is an element; its mouse and wheel events reach the
+  // listeners on the document, as they bubble there in a browser.
+  class Element extends EventTarget {
+    contains(node) { return node === this }
+    closest() { return null }
+    focus() {}
+    getBoundingClientRect() { return { left: 0, top: 0, right: 1280, bottom: 720, width: 1280, height: 720 } }
+  }
+  const document = new EventTarget()
+  document.querySelector = () => null
+  globals(t, { window, document, Element })
   const neko = new NekoClient(), sent = []
   neko.sessionId = neko.hostId = 'self'
   neko.channel = { readyState: 'open', send(buffer) { const v = new DataView(buffer); sent.push([v.getUint8(0), v.getUint32(3)]) } }
   f.store = { neko, video: { value: 'disconnected' }, isHost: { value: true }, paused: { value: false } }
-  const overlay = new EventTarget()
-  overlay.focus = () => {}
-  overlay.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1280, height: 720 })
+  const overlay = new Element()
   f.elements = { div: overlay }
   f.render(RemoteScreen, { mobile: false, pointer: { current: null }, video: { current: null }, onPlaybackBlocked() {} })
-  const mouse = (target, type, button, buttons) => {
+  const on = (target) => (e) => {
+    Object.defineProperty(e, 'target', { value: target })
+    document.dispatchEvent(e)
+  }
+  const onOverlay = on(overlay)
+  const mouse = (dispatch, type, button, buttons) => {
     const e = new Event(type, { cancelable: true })
     Object.assign(e, { button, buttons, clientX: 50, clientY: 50 })
-    target.dispatchEvent(e)
+    dispatch(e)
   }
-  return { f, neko, sent, window, listeners, overlay, down: (button, buttons) => mouse(overlay, 'mousedown', button, buttons), up: (button, buttons) => mouse(window, 'mouseup', button, buttons) }
+  return { f, neko, sent, window, listeners, Element, on, onOverlay, down: (button, buttons) => mouse(onOverlay, 'mousedown', button, buttons), up: (button, buttons) => mouse((e) => window.dispatchEvent(e), 'mouseup', button, buttons) }
 }
 
 test('desktop releases outside the overlay, including chorded mouse buttons', (t) => {
@@ -795,6 +808,27 @@ test('desktop releases outside the overlay, including chorded mouse buttons', (t
   assert.equal(listeners.has('mouseup'), false)
   up(0, 0)
   assert.equal(sent.filter(([op]) => op === 6).length, 2)
+})
+
+test('in fullscreen, clicks on the toolbar between its controls reach the desktop', (t) => {
+  const { Element, on, up, sent } = desktop(t)
+  // The toolbar over the stream, and a button on it.
+  const toolbar = new Element(), button = new Element()
+  toolbar.closest = (selector) => selector === '[data-remote-passthrough]' ? toolbar : null
+  button.closest = (selector) => selector === '[data-remote-passthrough]' ? toolbar : button
+  const down = (target, clientY) => {
+    const e = new Event('mousedown', { cancelable: true })
+    Object.assign(e, { button: 0, buttons: 1, clientX: 50, clientY })
+    on(target)(e)
+  }
+  const pressed = () => sent.filter(([op]) => op === 5).length
+  down(toolbar, 700)
+  assert.equal(pressed(), 1)
+  up(0, 0)
+  down(button, 700)
+  assert.equal(pressed(), 1, 'the toolbar keeps clicks on its controls')
+  down(toolbar, 750)
+  assert.equal(pressed(), 1, 'nothing passes through below the stream')
 })
 
 test('input goes on the data channel, or over the WebSocket without one', (t) => {
@@ -838,7 +872,7 @@ test('the desktop file list keeps well-formed entries, and download addresses ar
 })
 
 test('a wheel notch is one scroll step whatever its delta; small deltas add up', (t) => {
-  const { overlay, neko } = desktop(t)
+  const { onOverlay, neko } = desktop(t)
   globals(t, { WheelEvent: { DOM_DELTA_PIXEL: 0 } })
   const steps = []
   neko.scroll = (x, y) => steps.push([x + 0, y + 0])
@@ -846,7 +880,7 @@ test('a wheel notch is one scroll step whatever its delta; small deltas add up',
     const e = new Event('wheel', { cancelable: true })
     Object.defineProperty(e, 'timeStamp', { value: time })
     Object.assign(e, { deltaX, deltaY, deltaMode, ctrlKey: false })
-    overlay.dispatchEvent(e)
+    onOverlay(e)
     assert.equal(e.defaultPrevented, true)
   }
   // A mouse wheel: 100 or more pixels a notch in Chrome, three lines in Firefox.
@@ -1522,7 +1556,6 @@ test('paste confirmation defaults on and persists through the existing preferenc
 })
 
 test('desktop waits to forward Ctrl/Meta, preserving copy shortcuts and modifier-clicks', (t) => {
-  globals(t, { document: { querySelector: () => null } })
   const { f, neko, down } = desktop(t)
   const keys = []
   neko.keyDown = k => keys.push(['down', k])

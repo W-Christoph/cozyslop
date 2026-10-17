@@ -8,7 +8,7 @@ import styles from './UserStrip.module.css'
 
 export function UserStrip({ left, fullscreen, hover, onHover }: { left: boolean; fullscreen: boolean; hover: HoverName | null; onHover: (hover: HoverName | null) => void }) {
   const store = useRoomStore()
-  const { smallPfp, showUsernames, showIfMuted } = preferences.value
+  const { smallPfp, showUsernames, showMuted } = preferences.value
   const pinned = useRef<HTMLDivElement | null>(null)
   const touch = useRef(false)
   useLayoutEffect(() => { if (!hover) pinned.current = null }, [hover])
@@ -43,7 +43,7 @@ export function UserStrip({ left, fullscreen, hover, onHover }: { left: boolean;
       {Array.from(store.users.value.values()).map((user) => <div class={styles.user} role="listitem" key={user.key}>
         <div class={styles.avatar} tabIndex={0} aria-label={[user.nickname, userIdentity(user),
           !user.active && 'away', store.remoteHolder.value === user.key && 'has the remote',
-          showIfMuted && user.muted && 'sound off'].filter(Boolean).join(', ')}
+          showMuted && user.muted && (user.paused ? 'stream paused' : 'sound off')].filter(Boolean).join(', ')}
           onPointerEnter={(e) => { if (e.pointerType === 'mouse' && !pinned.current) showHover(e, user) }}
           onPointerLeave={() => { if (!pinned.current) onHover(null) }}
           onPointerDown={(e) => {

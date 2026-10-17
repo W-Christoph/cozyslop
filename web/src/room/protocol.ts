@@ -32,7 +32,8 @@ export interface User {
   anonymous: boolean
   admin: boolean
   active: boolean
-  muted: boolean
+  muted: boolean // not listening to the stream
+  paused: boolean // not listening because the stream is paused; implies muted
   joinedAt: number
 }
 
@@ -94,7 +95,7 @@ export type ClientMessage =
   | { type: 'chat_delete'; id: number }
   | { type: 'typing'; typing: boolean }
   | { type: 'activity'; active: boolean }
-  | { type: 'muted'; muted: boolean }
+  | { type: 'muted'; muted: boolean; paused: boolean }
   | { type: 'whisper'; to: string; body: string }
   | { type: 'remote_reset' }
   | { type: 'restart' }

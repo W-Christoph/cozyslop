@@ -38,15 +38,16 @@ export function useRoomPresence() {
     })
     // What the server was last told; null after a welcome/reconnect, which
     // replaces presence with its defaults.
-    let sentMuted: boolean | null = null
+    let sentMuted: string | null = null
     const stopMuted = effect(() => {
-      const { muted, volume, showIfMuted } = preferences.value
-      const listeningOff = store.paused.value || muted || volume === 0
+      const { muted, volume, shareMuted } = preferences.value
+      const paused = shareMuted && store.paused.value
+      const listeningOff = shareMuted && (paused || muted || volume === 0)
       if (store.server.value !== 'connected' || !store.selfKey.value) { sentMuted = null; return }
       // Only changes: dragging the volume slider updates the preferences many
       // times a second, and every message counts against the rate limit.
-      const value = showIfMuted && listeningOff
-      if (value !== sentMuted) { sentMuted = value; store.setMuted(value) }
+      const value = `${listeningOff} ${paused}`
+      if (value !== sentMuted) { sentMuted = value; store.setMuted(listeningOff, paused) }
     })
     const stopChat = effect(() => {
       const messages = store.chat.value

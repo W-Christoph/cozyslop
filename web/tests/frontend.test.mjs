@@ -481,7 +481,7 @@ test('the compact preview repeats the name and timestamp for every sample messag
     f.preferences = { chatStyle, chatScale: 100, showLeaveJoinMsg: false }
     const node = ChatPreview({ nickname: 'Alice' })
     const headers = nodes(node).filter((n) => n.props?.style?.['--name-colour'])
-    assert.deepEqual(headers.map((n) => n.props.children[0]), chatStyle === 'compact' ? ['Mochi', 'Alice', 'Alice'] : ['Mochi', 'Alice'])
+    assert.deepEqual(headers.map((n) => n.props.children[0]), chatStyle === 'compact' ? ['Mr.Cozy', 'Alice', 'Alice'] : ['Mr.Cozy', 'Alice'])
     assert.deepEqual(headers.map((n) => nodes(n).find((child) => child.type === 'span').props.children), chatStyle === 'compact' ? ['8:57 PM', '8:58 PM', '8:58 PM'] : ['8:57 PM', '8:58 PM'])
   }
 })

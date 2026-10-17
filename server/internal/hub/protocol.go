@@ -21,6 +21,7 @@ type User struct {
 	Admin     bool   `json:"admin"`
 	Active    bool   `json:"active"` // tab visible
 	Muted     bool   `json:"muted"`  // not listening to the stream
+	Paused    bool   `json:"paused"` // not listening because the stream is paused; implies Muted
 	JoinedAt  int64  `json:"joinedAt"`
 }
 
@@ -161,6 +162,7 @@ type ClientMsg struct {
 	Typing bool   `json:"typing"` // typing
 	Active bool   `json:"active"` // activity
 	Muted  bool   `json:"muted"`  // muted
+	Paused bool   `json:"paused"` // muted: because the stream is paused
 	To     string `json:"to"`     // whisper: identity key
 	Name   string `json:"name"`   // file_delete, file_play: a file in the desktop's Downloads
 }

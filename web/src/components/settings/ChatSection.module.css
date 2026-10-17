@@ -1,0 +1,29 @@
+/* The preview stays in view while the look below it is changed, on screens
+   tall enough to keep room for the controls. */
+@media (min-width: 641px) and (min-height: 720px) {
+  .sticky { position: sticky; top: -1px; z-index: 1; margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-1)); padding: var(--space-2) var(--space-1) var(--space-3); background: var(--bg-surface); transition: box-shadow 0.15s; }
+  .stuck { border-bottom: 1px solid var(--border); box-shadow: 0 8px 12px -10px var(--color-shadow); }
+}
+.sticky { display: flex; flex-direction: column; gap: var(--space-2); }
+/* Phones show the chat across the whole width, as in the room. */
+@media (max-width: 780px) and (orientation: portrait) {
+  .width { display: none; }
+}
+.group { display: flex; flex-direction: column; gap: var(--space-2); }
+.hint { font-weight: 400; color: var(--text-muted); }
+
+/* Chat in miniature, in the room's colours. */
+.mini { height: 64px; padding: 10px 12px; background: var(--color-menu); }
+.miniMessage { display: flex; gap: 6px; height: 100%; }
+.miniAvatar { flex-shrink: 0; width: 16px; height: 16px; margin-top: 4px; border-radius: 50%; background: var(--accent); }
+.miniText { flex: 1; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.miniLine { display: flex; gap: 4px; }
+.miniName { flex-shrink: 0; width: 24px; height: 6px; border-radius: 3px; background: var(--accent-text); }
+.miniBody { width: var(--length); height: 6px; border-radius: 3px; background: var(--color-text); opacity: 0.45; }
+/* Name on its own line above the text, as in the chat. */
+.mini:not([data-style='compact']) .miniLine:first-child { flex-direction: column; gap: 5px; }
+.mini[data-style='classic'] .miniMessage { padding: 5px 6px; border-radius: 3px; background: var(--color-message-bg); box-shadow: var(--shadow-message); }
+.mini[data-style='modern'] .miniMessage { padding: 2px 0; }
+.mini[data-style='modern'] .miniText { gap: 6px; }
+.mini[data-style='compact'] .miniText { gap: 4px; }
+.mini[data-style='compact'] .miniName { width: 18px; }

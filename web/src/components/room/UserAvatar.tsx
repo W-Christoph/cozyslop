@@ -22,7 +22,9 @@ export function UserAvatar({ user, small = false }: { user: User; small?: boolea
         aria-label={`Load profile picture for ${user.nickname}`} onClick={() => setLoadedUrl(avatarUrl)}>{content}</button>
         : <div class={`${styles.avatar} ${user.active ? '' : styles.away}`} style={user.anonymous ? { backgroundColor: user.nameColor } : undefined}>{content}</div>}
       {remote && <><span class={styles.ring} /><span class={styles.remote} title="Remote holder"><img src="/svg/remoteAlpha.svg" alt="Remote holder" /></span></>}
-      {preferences.value.showIfMuted && user.muted && <span class={styles.muted} title="Muted"><img src="/svg/headphone-slash.svg" alt="Muted" /></span>}
+      {preferences.value.showMuted && user.muted && (user.paused
+        ? <span class={styles.muted} title="Stream paused"><img src="/svg/paused.svg" alt="Stream paused" /></span>
+        : <span class={styles.muted} title="Muted"><img src="/svg/headphone-slash.svg" alt="Muted" /></span>)}
     </div>
   )
 }

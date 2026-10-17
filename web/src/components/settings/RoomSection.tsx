@@ -31,8 +31,12 @@ export function RoomSection({ room }: { room: RoomStore | null }) {
         checked={prefs.showUsernames} onChange={(showUsernames) => updatePreferences({ showUsernames })} />
       <ToggleRow title="Small profile pictures" description="Leaves more room for the stream."
         checked={prefs.smallPfp} onChange={(smallPfp) => updatePreferences({ smallPfp })} />
-      <ToggleRow title="Show who is muted" description="Mark people who have the sound off, and let others see when you do."
-        checked={prefs.showIfMuted} onChange={(showIfMuted) => updatePreferences({ showIfMuted })} />
+    </Section>
+    <Section title="Muted and paused" description="Paused counts as muted: the pause icon takes the place of the muted one.">
+      <ToggleRow title="See who is muted or paused" description="An icon on the picture of everyone who has the sound off or the stream paused."
+        checked={prefs.showMuted} onChange={(showMuted) => updatePreferences({ showMuted })} />
+      <ToggleRow title="Show others when I am" description="Others see an icon on your picture while you have the sound off or the stream paused."
+        checked={prefs.shareMuted} onChange={(shareMuted) => updatePreferences({ shareMuted })} />
     </Section>
     <Section title="Playback">
       <ToggleRow title="Sound only" description="Receive the room's sound without the picture. Saves bandwidth, for music or a slow connection."

@@ -249,6 +249,21 @@ func TestTypingAndPresence(t *testing.T) {
 	requireEqual(t, watch.wait(t, "user_updated").(userMsg).User.Muted, true)
 	f.r.Handle(f.ctx, c, ClientMsg{Type: "muted", Muted: false})
 	requireEqual(t, watch.wait(t, "user_updated").(userMsg).User.Muted, false)
+	// Paused only when every tab is; a tab is paused only if it is muted.
+	f.r.Handle(f.ctx, c, ClientMsg{Type: "muted", Muted: true, Paused: true})
+	u = watch.wait(t, "user_updated").(userMsg).User
+	requireEqual(t, u.Muted, true)
+	requireEqual(t, u.Paused, false)
+	f.r.Handle(f.ctx, tab, ClientMsg{Type: "muted", Muted: true, Paused: true})
+	requireEqual(t, watch.wait(t, "user_updated").(userMsg).User.Paused, true)
+	f.r.Handle(f.ctx, tab, ClientMsg{Type: "muted", Paused: true})
+	u = watch.wait(t, "user_updated").(userMsg).User
+	requireEqual(t, u.Muted, false)
+	requireEqual(t, u.Paused, false)
+	f.r.Handle(f.ctx, tab, ClientMsg{Type: "muted", Muted: true})
+	requireEqual(t, watch.wait(t, "user_updated").(userMsg).User.Muted, true)
+	f.r.Handle(f.ctx, c, ClientMsg{Type: "muted", Muted: false})
+	requireEqual(t, watch.wait(t, "user_updated").(userMsg).User.Muted, false)
 	// Leaving the sole active/unmuted tab changes the remaining person's state.
 	f.r.Leave(f.ctx, c)
 	u = watch.wait(t, "user_updated").(userMsg).User

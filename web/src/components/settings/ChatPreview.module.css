@@ -18,3 +18,12 @@
   -webkit-font-smoothing: auto;
   word-break: break-word;
 }
+/* As wide as the chat in the room on a full HD screen (15em of the sidebar's
+   16px); phones show it across the whole width. */
+.sized { height: 210px; }
+/* The newest messages at the bottom, as in the room; older ones go out at the top. */
+.sized .chat { display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; width: min(100%, calc(240px * var(--chat-width))); }
+.messages { flex-shrink: 0; }
+@media (max-width: 780px) and (orientation: portrait) {
+  .sized .chat { width: 100%; border-inline: 0; }
+}

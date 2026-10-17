@@ -129,6 +129,7 @@ type Client struct {
 	m      *member
 	active bool
 	muted  bool
+	paused bool
 	typing time.Time // last typing broadcast, for throttling
 
 	nekoToken string                 // the tab's current neko session token
@@ -1197,10 +1198,12 @@ func (r *Room) userLocked(m *member) User {
 		JoinedAt:  m.joinedAt,
 		Anonymous: m.user == nil,
 		Muted:     true,
+		Paused:    true,
 	}
 	for _, c := range m.clients {
 		u.Active = u.Active || c.active
 		u.Muted = u.Muted && c.muted
+		u.Paused = u.Paused && c.paused
 	}
 	if m.user != nil {
 		u.Username, u.Nickname, u.NameColor, u.AvatarURL = m.user.Username, m.user.Nickname, m.user.NameColor, avatarURL(m.user)

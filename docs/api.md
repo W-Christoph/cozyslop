@@ -260,8 +260,9 @@ forwarding. Other neko APIs are inaccessible, and so are neko members the
 server did not create: their tokens are refused. No separate CozyCast JSON
 schema applies to proxied requests or responses.
 
-The room WebSocket carries presence, chat, typing, activity, mute status,
-rights, room settings, remote ownership, moderation and per-tab neko tokens.
+The room WebSocket carries presence, chat, typing, activity, mute and pause
+status, rights, room settings, remote ownership, moderation and per-tab neko
+tokens.
 `welcome.windowTitle` is the title of the window in front on the room's
 desktop (`""` if unknown); `{"type":"window_title","title":"…"}` follows when
 it changes (see `docs/architecture.md`).

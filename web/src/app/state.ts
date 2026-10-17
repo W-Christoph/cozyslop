@@ -10,7 +10,6 @@ export type Accent = 'orange' | 'blurple' | 'blue' | 'teal' | 'green' | 'pink' |
 // classic: CozyCast's bubbles; modern: flat, with room for pictures;
 // compact: one line per message.
 export type ChatStyle = 'classic' | 'modern' | 'compact'
-export type ChatWidth = 'default' | 'wide' | 'wider'
 
 // Per-browser preferences, persisted in localStorage.
 export interface Preferences {
@@ -19,14 +18,15 @@ export interface Preferences {
   chatStyle: ChatStyle
   chatAvatars: boolean
   chatScale: number // percent of the normal text size
-  chatWidth: ChatWidth
+  chatWidth: number // percent of the normal sidebar width
   volume: number // 0-100
   muted: boolean
   muteChatNotification: boolean
   showUsernames: boolean
   transparentChat: boolean
   showLeaveJoinMsg: boolean
-  showIfMuted: boolean
+  showMuted: boolean // mark others who are muted or paused
+  shareMuted: boolean // tell others when this browser is
   titleNameInFront: boolean
   userlistOnLeft: boolean
   smallPfp: boolean
@@ -42,14 +42,15 @@ const defaultPreferences: Preferences = {
   chatStyle: 'classic',
   chatAvatars: false,
   chatScale: 100,
-  chatWidth: 'default',
+  chatWidth: 100,
   volume: 100,
   muted: false,
   muteChatNotification: true,
   showUsernames: true,
   transparentChat: true,
   showLeaveJoinMsg: true,
-  showIfMuted: true,
+  showMuted: true,
+  shareMuted: true,
   titleNameInFront: false,
   userlistOnLeft: false,
   smallPfp: false,
@@ -63,8 +64,17 @@ const PREFS_KEY = 'preferences'
 
 function loadPreferences(): Preferences {
   try {
-    const stored = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
-    return { ...defaultPreferences, ...(stored && typeof stored === 'object' ? stored : {}) }
+    const parsed: unknown = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
+    const stored = parsed && typeof parsed === 'object' ? { ...parsed } as Record<string, unknown> : {}
+    // Older versions: one setting for seeing and sharing muted, and three
+    // chat widths.
+    if (typeof stored.showIfMuted === 'boolean') {
+      stored.showMuted ??= stored.showIfMuted
+      stored.shareMuted ??= stored.showIfMuted
+      delete stored.showIfMuted
+    }
+    if (typeof stored.chatWidth === 'string') stored.chatWidth = ({ wide: 130, wider: 170 } as Record<string, number>)[stored.chatWidth] ?? 100
+    return { ...defaultPreferences, ...stored }
   } catch {
     return { ...defaultPreferences }
   }

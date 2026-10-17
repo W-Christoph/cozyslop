@@ -81,7 +81,7 @@ export function RoomPage() {
   </>
   return (
     <div ref={page} class={`${styles.page} ${fullscreen ? styles.fullscreen : ''} ${fullscreen && idle && !overlay ? styles.idle : ''}`}
-      data-chat-width={chatWidth} style={{ '--screen-ratio': screen.width > 0 && screen.height > 0 ? screen.width / screen.height : 16 / 9 }}
+      style={{ '--screen-ratio': screen.width > 0 && screen.height > 0 ? screen.width / screen.height : 16 / 9, '--chat-size': `max(${0.12 * chatWidth}%, ${0.15 * chatWidth}em)` }}
       onMouseMove={wake} onTouchStart={wake} onKeyDown={wake}
       // Icons, avatars and the stream are not things to drag around. The
       // sidebar keeps its text and pictures draggable.

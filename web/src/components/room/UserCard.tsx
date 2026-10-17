@@ -10,7 +10,7 @@ export function UserCard({ hover }: { hover: HoverName | null }) {
   const card = useRef<HTMLDivElement>(null)
   const user = hover && store.users.value.get(hover.user.key)
   const remote = user && store.remoteHolder.value === user.key
-  const muted = user && preferences.value.showIfMuted && user.muted
+  const muted = user && preferences.value.showMuted && user.muted && (user.paused ? 'Stream paused' : 'Sound off')
   useLayoutEffect(() => {
     if (!hover || !card.current) return
     const clamp = () => {
@@ -32,6 +32,6 @@ export function UserCard({ hover }: { hover: HoverName | null }) {
     <strong>{user.nickname}</strong>
     <span>{userIdentity(user)}</span>
     {remote && <span>Has the remote</span>}
-    {muted && <span>Sound off</span>}
+    {muted && <span>{muted}</span>}
   </div>
 }

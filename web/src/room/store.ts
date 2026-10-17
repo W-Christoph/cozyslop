@@ -157,8 +157,8 @@ export class RoomStore {
     this.socket.send({ type: 'activity', active })
   }
 
-  setMuted(muted: boolean) {
-    this.socket.send({ type: 'muted', muted })
+  setMuted(muted: boolean, paused: boolean) {
+    this.socket.send({ type: 'muted', muted, paused })
   }
 
   whisper(to: string, body: string) {

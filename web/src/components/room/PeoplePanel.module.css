@@ -1,5 +1,6 @@
-/* As wide as the chat it stands in for; a shade darker than the chat. */
-.panel { width: var(--chat-size); flex-shrink: 0; min-width: 0; overflow-y: auto; padding: var(--space-2) var(--space-2) var(--space-4); background: linear-gradient(var(--color-message-bg), var(--color-message-bg)), var(--color-menu); color: var(--color-text); animation: enter 0.2s ease-out; }
+/* In the room page's chat view grid, as wide as the chat's column; a shade
+   darker than the chat. */
+.panel { grid-area: people; min-width: 0; overflow-y: auto; padding: var(--space-2) var(--space-2) var(--space-4); background: linear-gradient(var(--color-message-bg), var(--color-message-bg)), var(--color-menu); color: var(--color-text); animation: enter 0.3s ease-out; }
 .heading { margin: var(--space-4) var(--space-2) var(--space-1); font-size: 0.72em; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-text-muted); }
 .desktop .heading { margin-top: var(--space-2); }
 .preview { width: 100%; }
@@ -10,6 +11,7 @@
 .names { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
 .name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; color: var(--readable-name-colour, var(--name-colour)); }
 .detail { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 0.75em; color: var(--color-text-muted); }
+/* Only fades in: the stream shrinks into the preview (StreamPreview). */
 @keyframes enter { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .panel { animation: none; }

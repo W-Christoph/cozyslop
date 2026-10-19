@@ -8,8 +8,8 @@ import { UserAvatar } from './UserAvatar'
 import { userIdentity } from './UserHoverName'
 import styles from './PeoplePanel.module.css'
 
-// The right column of the chat view, where the chat is otherwise: what is on
-// the desktop, and who is in the room, grouped as in a chat app's member list.
+// The left column of the chat view, where the stream was: what is on the
+// desktop, and who is in the room, grouped as in a chat app's member list.
 export function PeoplePanel() {
   const store = useRoomStore()
   const panel = useRef<HTMLElement>(null)

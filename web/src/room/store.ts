@@ -25,6 +25,12 @@ export interface DesktopUpload {
   message: string
 }
 
+// A frame of the stream (a data: URL) and where on the page it was shown.
+export interface Picture {
+  image: string
+  rect: { left: number; top: number; width: number; height: number }
+}
+
 export interface Kick {
   reason: KickReason
   bannedUntil?: number | null // unix seconds; null = forever
@@ -56,6 +62,10 @@ export class RoomStore {
   // there at the first welcome (after: null if there was none). The room's
   // chat is not kept for long, so that is what is worth marking.
   readonly joined = signal<{ after: number | null; time: number } | null>(null)
+  // Where this tab was last left for another tab or window, once others
+  // wrote while it was away (a line in the chat view, like joined).
+  readonly away = signal<{ after: number | null; time: number } | null>(null)
+  private leftAt: { after: number | null; time: number } | null = null
   private welcomed = false
   readonly remoteHolder = signal<string | null>(null) // identity key
   readonly windowTitle = signal('') // of the window in front on the desktop
@@ -76,8 +86,14 @@ export class RoomStore {
   readonly listening = signal(false)
   private soundOnly = false // the setting (Settings › Room)
   // The last still of the desktop the server sent (a data: URL), while there
-  // is no picture: paused, or sound only.
+  // is no picture: paused, or sound only. Until the first one comes, the
+  // last frame of the stream.
   readonly preview = signal<{ image: string; time: number } | null>(null)
+  // The screen sets grabPicture while it is shown. The picture it grabs as
+  // the stream goes away is kept in lastPicture for the chat view's preview
+  // to shrink from (StreamPreview takes it).
+  grabPicture: (() => Picture | null) | null = null
+  lastPicture: (Picture & { time: number }) | null = null
 
   readonly selfKey = computed(() => this.self.value?.key ?? null)
   readonly hasRemote = computed(() => this.isHost.value)
@@ -194,6 +210,7 @@ export class RoomStore {
   // Stop receiving the stream entirely (the room stays joined). Ends
   // listening too.
   pause() {
+    if (!this.paused.value && !this.audioOnly.value) this.keepPicture()
     this.paused.value = true
     window.clearTimeout(this.nekoRetry)
     this.neko.disconnect()
@@ -229,6 +246,32 @@ export class RoomStore {
     this.socket.send({ type: 'neko_token' })
   }
 
+  // The stream's last frame, before it goes: the preview until the server's
+  // first still.
+  private keepPicture() {
+    const picture = this.grabPicture?.()
+    if (!picture) return
+    const time = Date.now()
+    this.lastPicture = { ...picture, time }
+    this.preview.value = { image: picture.image, time }
+  }
+
+  // The tab or its window lost the focus (away) or got it back. The line
+  // moves only when someone else wrote meanwhile.
+  setAway(away: boolean) {
+    if (away) {
+      this.leftAt ??= { after: this.chat.value.at(-1)?.id ?? null, time: Date.now() }
+      return
+    }
+    const left = this.leftAt
+    this.leftAt = null
+    if (!left) return
+    const chat = this.chat.value
+    const start = left.after === null ? 0 : chat.findIndex((message) => message.id === left.after) + 1
+    if (start === 0 && left.after !== null) return // cleared from the chat meanwhile
+    if (chat.slice(start).some((message) => message.author !== this.selfKey.value)) this.away.value = left
+  }
+
   // Ask for a still of the desktop; the answer replaces preview.
   requestPreview() {
     this.socket.send({ type: 'preview' })
@@ -243,6 +286,7 @@ export class RoomStore {
   private applyAudioOnly() {
     const audioOnly = this.soundOnly || this.listening.value
     if (audioOnly === this.audioOnly.value) return
+    if (audioOnly && !this.paused.value) this.keepPicture()
     this.audioOnly.value = audioOnly
     if (!audioOnly && !this.paused.value) this.preview.value = null
     if (!this.paused.value) {

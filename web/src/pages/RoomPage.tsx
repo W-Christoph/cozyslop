@@ -3,7 +3,7 @@ import { useRoute } from 'preact-iso'
 import { preferences, settingsOpen } from '../app/state'
 import { useChatEvents } from '../components/chat/useChatEvents'
 import { ChatStage } from '../components/room/ChatStage'
-import { ChatViewBar } from '../components/room/ChatViewBar'
+import { ChatViewActions, ChatViewBar } from '../components/room/ChatViewBar'
 import { Controls } from '../components/room/Controls'
 import { FilesWindow } from '../components/room/FilesWindow'
 import { KickedScreen } from '../components/room/KickedScreen'
@@ -18,6 +18,7 @@ import { UserStrip } from '../components/room/UserStrip'
 import { VideoArea } from '../components/room/VideoArea'
 import { useRoomFullscreen } from '../components/room/useRoomFullscreen'
 import { useRoomPresence } from '../components/room/useRoomPresence'
+import { useAwayLine } from '../components/room/useAwayLine'
 import { useRoomShortcuts } from '../components/room/useRoomShortcuts'
 import { useUnreadChat } from '../components/room/useUnreadChat'
 import { useRoom } from '../room/useRoom'
@@ -68,14 +69,16 @@ export function RoomPage() {
   const left = fullscreen || (preferences.value.userlistOnLeft && !narrow)
   const admin = store.rights.value.admin
   useRoomPresence()
+  useAwayLine()
   const files = store.rights.value.upload
   const { audioOnly, chatWidth, chatViewOnPause } = preferences.value
   // Chat view: with no picture (paused, or sound only), chat takes the
   // stream's place. Not in fullscreen, which is for watching.
   const chatView = !fullscreen && (((store.paused.value || store.audioOnly.value) && chatViewOnPause) || store.desktopOffline.value)
-  // Wide screens: the chat moves into the stream's place and the people take
-  // the chat's column; the user strip folds away. Nothing else moves. Phones
-  // keep their chat under a bar.
+  // Wide screens: the chat widens from its column into the stream's place and
+  // the people come in on its left. The toolbar stays where it is, but slides
+  // down as the user strip under it folds away; the buttons on go beside it, under
+  // the chat's column (if it was open). Phones keep their chat under a bar.
   const stage = chatView && !phone
   const chatShown = chatOpen || chatView
   const unreadChat = useUnreadChat(chatShown)
@@ -102,7 +105,7 @@ export function RoomPage() {
     {personalSettings && <SettingsDialog />}
   </>
   return (
-    <div ref={page} class={`${styles.page} ${fullscreen ? styles.fullscreen : ''} ${fullscreen && idle && !overlay ? styles.idle : ''}`}
+    <div ref={page} class={`${styles.page} ${fullscreen ? styles.fullscreen : ''} ${fullscreen && idle && !overlay ? styles.idle : ''} ${stage ? styles.stage : ''} ${stage && userlistHidden ? styles.noPeople : ''} ${stage && !chatOpen ? styles.chatClosed : ''}`}
       style={{ '--screen-ratio': screen.width > 0 && screen.height > 0 ? screen.width / screen.height : 16 / 9, '--chat-size': `max(${0.12 * chatWidth}%, ${0.15 * chatWidth}em)` }}
       onMouseMove={wake} onTouchStart={wake} onKeyDown={wake}
       // Icons, avatars and the stream are not things to drag around. The
@@ -111,9 +114,10 @@ export function RoomPage() {
         const from = e.target instanceof Element ? e.target : (e.target as Node | null)?.parentElement
         if (!from?.closest('aside, [data-chat-stage]')) e.preventDefault()
       }}>
-      {!userlistHidden && left && <UserStrip left fullscreen={fullscreen} folded={stage} hover={hover} onHover={setHover} />}
+      {!userlistHidden && left && <UserStrip left fullscreen={fullscreen} hover={hover} onHover={setHover} />}
+      {stage && !userlistHidden && <PeoplePanel />}
       <div class={styles.videoWrapper}>
-        {stage ? <ChatStage lines={lines} /> : chatView && <ChatViewBar preview />}
+        {stage ? <ChatStage lines={lines} actions={!chatOpen} /> : chatView && <ChatViewBar preview />}
         <VideoArea hidden={chatView} disconnected={!connected && wasConnected.current} error={error} fullscreen={fullscreen} />
         <div class={styles.toolbar} data-remote-passthrough={fullscreen || undefined}>
           <Controls fullscreen={fullscreen} userlistHidden={userlistHidden} chatOpen={chatOpen} chatView={chatView} unreadChat={unreadChat} window={roomWindow}
@@ -122,8 +126,8 @@ export function RoomPage() {
           {!userlistHidden && !left && <UserStrip left={false} fullscreen={false} folded={stage} hover={hover} onHover={setHover} />}
         </div>
       </div>
-      {stage ? !userlistHidden && <PeoplePanel />
-        : <Sidebar chatOpen={chatShown} lines={lines} fullscreen={fullscreen} idle={idle && !overlay} />}
+      {stage && chatOpen && <ChatViewActions corner />}
+      {!stage && <Sidebar chatOpen={chatShown} lines={lines} fullscreen={fullscreen} idle={idle && !overlay} />}
       {personalSettings && <SettingsDialog onClose={wake} />}
       {roomWindow === 'files' && files && <FilesWindow onClose={closeWindow} />}
       {roomWindow === 'settings' && admin && <RoomSettingsWindow onClose={closeWindow} />}

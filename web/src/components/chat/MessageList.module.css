@@ -6,6 +6,9 @@
 /* Where this visit started: a thin line with the time in it. */
 .joined { display: flex; align-items: center; gap: 0.6em; margin: 1.5em 1em 0.25em; font-size: 0.75em; font-weight: 600; color: var(--color-text-muted); }
 .joined::before, .joined::after { content: ''; flex: 1; height: 1px; background: currentColor; opacity: 0.3; }
+/* Where the tab was last left: the same line in the accent, to find again. */
+.away { color: var(--accent-text); }
+.away::before, .away::after { opacity: 0.6; }
 [data-chat-wide] .temporary { margin: 0.5em 1em 0; }
 .temporary { position: relative; background: var(--color-message-bg); margin-top: 10px; padding: 0.2em; border-radius: 0.2em; box-shadow: var(--shadow-message); font-size: 0.75em; font-style: italic; text-align: center; }
 .temporary:hover { background: var(--color-message-hover); }

@@ -10,12 +10,35 @@ function Action({ icon, label, title, primary = false, onClick, children }: { ic
   </button>
 }
 
-// The top of the chat view: why there is no picture, what is on the desktop,
-// and the ways on. Paused: listen (sound only for now, the chat stays in
-// front) or watch. Listening: stop, or watch. With the setting Sound only the
-// stream has no picture anyway: just play and pause.
+// The ways on from the chat view. Paused: listen (sound only for now, the
+// chat stays in front) or watch. Listening: stop, or watch. With the setting
+// Sound only the stream has no picture anyway: just play and pause.
+// corner: in the room page's grid, beside the toolbar under the chat
+// (wide screens); otherwise in the bar.
+export function ChatViewActions({ corner = false }: { corner?: boolean }) {
+  const store = useRoomStore()
+  const paused = store.paused.value
+  const soundOnly = preferences.value.audioOnly
+  const actions = store.desktopOffline.value ? null : soundOnly
+    ? paused
+      ? <Action icon="play_button" label="Play" primary onClick={() => store.watch()}>Play</Action>
+      : <Action icon="pause_button" label="Pause" onClick={() => store.pause()}>Pause</Action>
+    : <>
+      {paused
+        ? <Action icon="volume-up" label="Listen: sound only" title="Only the sound, the chat stays in front" onClick={() => store.listen()}>Listen</Action>
+        : <Action icon="pause_button" label="Stop listening" onClick={() => store.pause()}>Stop</Action>}
+      <Action icon="play_button" label="Watch the stream" primary onClick={() => store.watch()}>Watch</Action>
+    </>
+  // The corner keeps its background without buttons (desktop offline).
+  if (corner) return <div class={styles.corner}><div class={styles.actions}>{actions}</div></div>
+  return actions && <div class={styles.actions}>{actions}</div>
+}
+
+// The top of the chat view: why there is no picture and what is on the
+// desktop, with the ways on (ChatViewActions) unless the room page has them
+// in its corner.
 // preview: the still sits in the bar (phones, which have no column for it).
-export function ChatViewBar({ preview = false }: { preview?: boolean }) {
+export function ChatViewBar({ preview = false, actions = true }: { preview?: boolean; actions?: boolean }) {
   const store = useRoomStore()
   const offline = store.desktopOffline.value
   const paused = store.paused.value
@@ -33,18 +56,7 @@ export function ChatViewBar({ preview = false }: { preview?: boolean }) {
         <span class={styles.detail} title={detail}>{detail}</span>
       </div>
       {preview && <div class={styles.preview}><StreamPreview /></div>}
-      {!offline && <div class={styles.actions}>
-        {soundOnly
-          ? paused
-            ? <Action icon="play_button" label="Play" primary onClick={() => store.watch()}>Play</Action>
-            : <Action icon="pause_button" label="Pause" onClick={() => store.pause()}>Pause</Action>
-          : <>
-            {paused
-              ? <Action icon="volume-up" label="Listen: sound only" title="Only the sound, the chat stays in front" onClick={() => store.listen()}>Listen</Action>
-              : <Action icon="pause_button" label="Stop listening" onClick={() => store.pause()}>Stop</Action>}
-            <Action icon="play_button" label="Watch the stream" primary onClick={() => store.watch()}>Watch</Action>
-          </>}
-      </div>}
+      {actions && <ChatViewActions />}
     </header>
   )
 }

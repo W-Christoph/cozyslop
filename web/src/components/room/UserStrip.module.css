@@ -1,4 +1,4 @@
-.strip { -webkit-user-select: none; user-select: none; display: flex; gap: 5px; overflow: auto; background: var(--color-menu) var(--noise); scrollbar-width: thin; flex-shrink: 0; transition: height 0.2s ease, width 0.2s ease, opacity 0.2s ease; }
+.strip { -webkit-user-select: none; user-select: none; display: flex; gap: 5px; overflow: auto; background: var(--color-menu) var(--noise); scrollbar-width: thin; flex-shrink: 0; transition: height 0.2s ease, opacity 0.2s ease; }
 /* The users sit in the middle, and none is cut off when they overflow: the
    free space goes to both ends. Not as margins of the first and last user:
    Firefox keeps :first-child and :last-child styles as they were when the
@@ -10,7 +10,7 @@
 .away { opacity: 0.6; }
 .bottom { height: 4.5em; min-width: 0; }
 .bottom.names { height: 5.5em; }
-.left { flex-direction: column; width: 5em; height: 100%; }
+.left { grid-area: strip; flex-direction: column; width: 5em; height: 100%; }
 .left .name { margin-top: 0.4em; font-size: 0.75em; max-width: 98%; }
 .left.small { width: 2.6em; }
 .bottom.small { height: 2.6em; }
@@ -26,10 +26,10 @@
   .user { font-size: 0.75em; }
   .left { display: none; }
 }
-/* Folding away for the chat view, and back. After the other sizes, and at
-   least as specific, so that it wins over all of them. */
+/* Folding away under the toolbar for the chat view, and back: the toolbar
+   slides down and up with it. After the other heights, and at least as
+   specific, so that it wins over all of them. */
 .bottom.folded, .bottom.names.folded, .bottom.small.folded, .bottom.small.names.folded { height: 0; }
-.left.folded, .left.small.folded { width: 0; }
 .folded { overflow: hidden; opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
   .strip { transition: none; }

@@ -17,6 +17,7 @@
 .volume::-webkit-slider-thumb { appearance: none; width: 20px; height: 20px; background: var(--color-scroll-thumb); border: 1px solid var(--color-high-contrast); border-radius: 50%; cursor: pointer; margin-top: -7.5px; }
 .volume::-moz-range-thumb { width: 20px; height: 20px; background: var(--color-scroll-thumb); border: 1px solid var(--color-high-contrast); border-radius: 50%; cursor: pointer; }
 .fullscreen { background: transparent; }
+.held { opacity: 0.45; }
 /* The side groups are quieter than the playback buttons in the middle; a
    line under the picture marks what is switched on. */
 .quiet { background: transparent; }

@@ -70,12 +70,18 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
 - **Chat view**: with no picture to show (paused, or sound only) and
   `preferences.chatViewOnPause`, or while the desktop is offline, chat takes
   the stream's place. On wide screens `room/ChatStage` (`ChatViewBar` and a
-  `ChatPanel` with `wide`) fills the video slot and `room/PeoplePanel`
-  (preview, people by watching, listening, sound off, paused, away) takes the
-  chat's column; the user strip folds away and the toolbar stays. Phones keep
+  `ChatPanel` with `wide`) fills the video slot and the chat's column, and
+  `room/PeoplePanel` (preview, people by watching, listening, sound off,
+  paused, away) comes in on its left; the room page becomes a grid so that
+  the toolbar keeps its place sideways (the user strip under it goes), and
+  the buttons on (`ChatViewActions`) sit beside it under the chat's column. The stream's
+  last frame (`store.grabPicture`, kept in `store.lastPicture`) flies into the
+  preview and stands in for it until the server's first still. Phones keep
   their chat and get the bar with a small preview. The `wide` chat always has
   the modern look with pictures, a full-width text box and a line where this
-  visit started (`store.joined`). The chat's join/leave lines
+  visit started (`store.joined`) and one in the accent where the tab was
+  last left for another tab or window, once someone else wrote meanwhile
+  (`store.away`, from `useAwayLine`). The chat's join/leave lines
   (`useChatEvents`, in the room page) and draft (`store.chatDraft`) outlive
   the move. Playback: `store.listen()` is sound only for now (`listening`),
   `watch()` the stream as `preferences.audioOnly` has it, `togglePlayback()`

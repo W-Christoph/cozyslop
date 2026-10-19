@@ -17,6 +17,18 @@
 .primary:hover:not(:disabled) { border-color: transparent; background: var(--color-orange-hover); }
 .primary img { filter: none; }
 .preview { flex-shrink: 0; width: 80px; }
+/* Beside the toolbar, as wide as the chat's column above it, the buttons
+   centred between its line and the right edge: smaller buttons, and only their icons where even those do not fit. */
+.corner { position: relative; grid-area: corner; container-type: inline-size; display: flex; align-items: center; justify-content: center; min-width: 0; padding: 0 var(--space-3); background: var(--color-menu) var(--noise); }
+/* A light line at its left edge: the toolbar beside it reads as its own,
+   centred bar. */
+.corner::before { content: ''; position: absolute; left: 0; top: 50%; height: 28px; width: 1px; transform: translateY(-50%); background: var(--color-text-muted); opacity: 0.35; }
+.corner .actions { gap: var(--space-2); }
+.corner .action, .corner .action:hover:not(:disabled) { height: 34px; padding: 0 14px 0 10px; gap: 6px; font-size: 0.95em; }
+@container (max-width: 205px) {
+  .corner .action, .corner .action:hover:not(:disabled) { padding: 0 10px; }
+  .corner .label { display: none; }
+}
 /* Phones: the topic goes under the name, the button keeps only its icon. */
 @media (max-width: 780px) and (orientation: portrait) {
   .bar { height: auto; min-height: 56px; gap: var(--space-2); padding: var(--space-1) var(--space-2); }

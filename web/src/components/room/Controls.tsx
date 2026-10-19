@@ -69,8 +69,10 @@ export function Controls({ fullscreen, userlistHidden, chatOpen, chatView, unrea
         <IconButton class={`${styles.quiet} ${styles.sideOnly}`} icon="settings" label="Personal settings" onClick={onPersonalSettings} />
         <IconButton class={`${styles.quiet} ${styles.sideOnly} ${userlistHidden ? '' : styles.on}`} icon="users" shortcut="users"
           label={userlistHidden ? 'Show Users' : 'Hide Users'} aria-pressed={!userlistHidden} onClick={onToggleUsers} />
-        {!chatView && <IconButton shortcut="chat" icon="message-circle" label={chatOpen ? 'Hide chat' : `Show chat${unreadChat ? `, ${unreadChat} new messages` : ''}`}
-          class={`${styles.quiet} ${chatOpen ? styles.on : ''}`} aria-pressed={chatOpen} badge={chatOpen ? 0 : unreadChat} onClick={() => onChat(!chatOpen)} />}
+        {/* Kept, disabled, in the chat view: the buttons do not move. */}
+        <IconButton shortcut="chat" icon="message-circle" label={chatOpen ? 'Hide chat' : `Show chat${unreadChat ? `, ${unreadChat} new messages` : ''}`}
+          tooltip={chatView ? 'The chat stays open in the chat view' : undefined} disabled={chatView}
+          class={`${styles.quiet} ${chatOpen ? styles.on : ''} ${chatView ? styles.held : ''}`} aria-pressed={chatOpen} badge={chatOpen || chatView ? 0 : unreadChat} onClick={() => onChat(!chatOpen)} />
         {!fullscreen && <MoreMenu userlistHidden={userlistHidden} onToggleUsers={onToggleUsers} onPersonalSettings={onPersonalSettings} onWindow={onWindow} />}
       </div>}
     </div>

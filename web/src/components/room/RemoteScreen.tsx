@@ -4,6 +4,7 @@
 import { useEffect, useRef } from 'preact/hooks'
 import type { RefObject } from 'preact'
 import { preferences } from '../../app/state'
+import type { Picture } from '../../room/store'
 import { useRoomStore } from './RoomContext'
 import GuacamoleKeyboard from '../../neko/guacamole-keyboard.js'
 import styles from './RemoteScreen.module.css'
@@ -24,6 +25,30 @@ const WHEEL_STEP_PX = 53
 const WHEEL_GESTURE_MS = 250
 // What on the fullscreen toolbar keeps its clicks instead of passing them on.
 const TOOLBAR_CONTROLS = 'button, a, input, select, textarea, label, [tabindex], [role="menu"]'
+// The frame for the chat view's preview needs no more than this.
+const PICTURE_WIDTH = 960
+
+// The frame on screen and where the picture is (letterboxed by object-fit:
+// contain), or null without one.
+function grabPicture(el: HTMLVideoElement | null): Picture | null {
+  if (!el || el.readyState < 2 || !el.videoWidth || !el.videoHeight) return null
+  const box = el.getBoundingClientRect()
+  if (!box.width || !box.height) return null
+  const scale = Math.min(box.width / el.videoWidth, box.height / el.videoHeight)
+  const width = el.videoWidth * scale, height = el.videoHeight * scale
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.min(el.videoWidth, PICTURE_WIDTH)
+  canvas.height = Math.round(canvas.width * el.videoHeight / el.videoWidth)
+  try {
+    canvas.getContext('2d')?.drawImage(el, 0, 0, canvas.width, canvas.height)
+    return {
+      image: canvas.toDataURL('image/jpeg', 0.85),
+      rect: { left: box.left + (box.width - width) / 2, top: box.top + (box.height - height) / 2, width, height },
+    }
+  } catch {
+    return null
+  }
+}
 
 export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Props) {
   const store = useRoomStore()
@@ -62,6 +87,11 @@ export function RemoteScreen({ mobile, pointer, video, onPlaybackBlocked }: Prop
     }
     return () => { cancelled = true }
   }, [stream, paused, video, onPlaybackBlocked])
+
+  useEffect(() => {
+    store.grabPicture = () => grabPicture(video.current)
+    return () => { store.grabPicture = null }
+  }, [store, video])
 
   useEffect(() => {
     pointer.current = { x: neko.screen.width / 2, y: neko.screen.height / 2 }

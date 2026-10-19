@@ -403,6 +403,53 @@ test('sound only also gets previews; turning the picture back on drops them', (t
   assert.equal(store.preview.value, null)
 })
 
+test('the last frame stands in for the preview and is kept for the chat view to shrink from', (t) => {
+  const { store, welcome } = fixture(t)
+  welcome(false)
+  const rect = { left: 0, top: 0, width: 640, height: 360 }
+  let grabs = 0
+  store.grabPicture = () => { grabs++; return { image: 'data:image/jpeg;base64,LAST', rect } }
+  store.pause()
+  assert.equal(store.preview.value.image, 'data:image/jpeg;base64,LAST')
+  assert.deepEqual({ ...store.lastPicture, time: 0 }, { image: 'data:image/jpeg;base64,LAST', rect, time: 0 })
+  // Listening has no picture to grab; pausing from it grabs nothing.
+  store.lastPicture = null
+  store.listen()
+  store.pause()
+  assert.equal(store.lastPicture, null)
+  // Switching to sound only while watching grabs the picture too.
+  store.watch()
+  store.setAudioOnly(true)
+  assert.equal(grabs, 2)
+  assert.equal(store.preview.value.image, 'data:image/jpeg;base64,LAST')
+})
+
+test('the away line marks where the tab was left, once someone else wrote meanwhile', (t) => {
+  const { store, room, welcome } = fixture(t)
+  welcome(false)
+  const chat = (id, author) => room.message({ type: 'chat', message: { id, author, body: `m${id}` } })
+  chat(1, 'u:2')
+  // Nothing written meanwhile: no line.
+  store.setAway(true)
+  store.setAway(false)
+  assert.equal(store.away.value, null)
+  // Blur and hidden both arrive: the first one counts.
+  store.setAway(true)
+  chat(2, 'u:2')
+  store.setAway(true)
+  store.setAway(false)
+  assert.equal(store.away.value.after, 1)
+  // Only one's own messages meanwhile: the line stays where it is.
+  store.setAway(true)
+  chat(3, 'u:1')
+  store.setAway(false)
+  assert.equal(store.away.value.after, 1)
+  store.setAway(true)
+  chat(4, 'u:3')
+  store.setAway(false)
+  assert.equal(store.away.value.after, 3)
+})
+
 test('listen is sound only for now: play/pause afterwards means the whole stream', (t) => {
   const { store, welcome } = fixture(t)
   welcome(false)

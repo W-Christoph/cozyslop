@@ -324,7 +324,15 @@ export class NekoClient extends Emitter<NekoEvents> {
       }
     }
     peer.ontrack = (e) => {
-      if (e.streams[0]) this.emit('stream', e.streams[0])
+      if (!e.streams[0]) return
+      // Sound only still gets an empty video track, and Chromium does not
+      // start a video element until that track has a frame: no sound. Sound
+      // only plays the audio track alone.
+      if (this.audioOnly) {
+        if (e.track.kind === 'audio') this.emit('stream', new MediaStream([e.track]))
+        return
+      }
+      this.emit('stream', e.streams[0])
     }
     peer.ondatachannel = (e) => {
       this.channel = e.channel

@@ -6,7 +6,8 @@ import { UserAvatar } from './UserAvatar'
 import { userIdentity, type HoverName } from './UserHoverName'
 import styles from './UserStrip.module.css'
 
-// folded: the chat view shows the people in its own column; the strip folds away.
+// folded: the chat view shows the people in its own column; the strip under
+// the toolbar folds away.
 export function UserStrip({ left, fullscreen, folded = false, hover, onHover }: { left: boolean; fullscreen: boolean; folded?: boolean; hover: HoverName | null; onHover: (hover: HoverName | null) => void }) {
   const store = useRoomStore()
   const { smallPfp, showUsernames, outlineNames, showMuted } = preferences.value

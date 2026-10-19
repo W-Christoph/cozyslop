@@ -43,11 +43,13 @@ export function useRoomPresence() {
       const { muted, volume, shareMuted } = preferences.value
       const paused = shareMuted && store.paused.value
       const listeningOff = shareMuted && (paused || muted || volume === 0)
+      // The sound without the picture: Sound only, or Listen in the chat view.
+      const listening = shareMuted && !listeningOff && !store.paused.value && store.audioOnly.value
       if (store.server.value !== 'connected' || !store.selfKey.value) { sentMuted = null; return }
       // Only changes: dragging the volume slider updates the preferences many
       // times a second, and every message counts against the rate limit.
-      const value = `${listeningOff} ${paused}`
-      if (value !== sentMuted) { sentMuted = value; store.setMuted(listeningOff, paused) }
+      const value = `${listeningOff} ${paused} ${listening}`
+      if (value !== sentMuted) { sentMuted = value; store.setMuted(listeningOff, paused, listening) }
     })
     const stopChat = effect(() => {
       const messages = store.chat.value

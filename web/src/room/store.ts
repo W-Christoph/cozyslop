@@ -49,6 +49,14 @@ export class RoomStore {
   readonly users = signal<ReadonlyMap<string, User>>(new Map())
   readonly chat = signal<readonly ChatMessage[]>([])
   readonly typing = signal<ReadonlySet<string>>(new Set()) // identity keys
+  // What is written in the chat box and not sent yet; the box is remounted
+  // when the chat moves into the chat view and back.
+  readonly chatDraft = signal('')
+  // Where this visit started in the chat: after the last message that was
+  // there at the first welcome (after: null if there was none). The room's
+  // chat is not kept for long, so that is what is worth marking.
+  readonly joined = signal<{ after: number | null; time: number } | null>(null)
+  private welcomed = false
   readonly remoteHolder = signal<string | null>(null) // identity key
   readonly windowTitle = signal('') // of the window in front on the desktop
   readonly restartAvailable = signal(false)
@@ -62,7 +70,14 @@ export class RoomStore {
   readonly desktopUpload = signal<DesktopUpload>({ state: 'idle', progress: 0, message: '' })
   // The desktop's Downloads folder; empty without the upload right.
   readonly desktopFiles = signal<readonly DesktopFile[]>([])
-  readonly audioOnly = signal(false)
+  readonly audioOnly = signal(false) // the setting Sound only, or listening
+  // Listen in the chat view: sound only for now, without the setting. Ends
+  // with watching or pausing; play then means the whole stream again.
+  readonly listening = signal(false)
+  private soundOnly = false // the setting (Settings › Room)
+  // The last still of the desktop the server sent (a data: URL), while there
+  // is no picture: paused, or sound only.
+  readonly preview = signal<{ image: string; time: number } | null>(null)
 
   readonly selfKey = computed(() => this.self.value?.key ?? null)
   readonly hasRemote = computed(() => this.isHost.value)
@@ -84,7 +99,7 @@ export class RoomStore {
     access?: string, // temporary access invite code
     { audioOnly = false, autoConnect = true } = {},
   ) {
-    this.audioOnly.value = audioOnly
+    this.soundOnly = this.audioOnly.value = audioOnly
     this.socket = new RoomSocket(room, access, autoConnect)
     const neko = this.neko
     this.offs.push(
@@ -157,8 +172,8 @@ export class RoomStore {
     this.socket.send({ type: 'activity', active })
   }
 
-  setMuted(muted: boolean, paused: boolean) {
-    this.socket.send({ type: 'muted', muted, paused })
+  setMuted(muted: boolean, paused: boolean, listening: boolean) {
+    this.socket.send({ type: 'muted', muted, paused, listening })
   }
 
   whisper(to: string, body: string) {
@@ -176,23 +191,60 @@ export class RoomStore {
     this.neko.releaseControl(center ? { x: Math.round(width / 2), y: Math.round(height / 2) } : undefined)
   }
 
-  // Stop receiving the stream entirely (the room stays joined).
+  // Stop receiving the stream entirely (the room stays joined). Ends
+  // listening too.
   pause() {
     this.paused.value = true
     window.clearTimeout(this.nekoRetry)
     this.neko.disconnect()
+    this.listening.value = false
+    this.applyAudioOnly()
+  }
+
+  // Sound only until watch or pause, whatever the setting.
+  listen() {
+    this.listening.value = true
+    this.applyAudioOnly()
+    this.resume()
+  }
+
+  // The stream as the setting has it: the picture too, unless Sound only.
+  watch() {
+    this.listening.value = false
+    this.applyAudioOnly()
+    this.resume()
+  }
+
+  // The play/pause button: play is always the stream, never listening.
+  togglePlayback() {
+    if (this.paused.value || this.listening.value) this.watch()
+    else this.pause()
   }
 
   resume() {
     if (!this.paused.value) return
     this.paused.value = false
+    // Sound only still shows the still until the picture is back.
+    if (!this.audioOnly.value) this.preview.value = null
     this.socket.send({ type: 'neko_token' })
   }
 
-  // Switch between sound only and full video; reconnects the stream.
+  // Ask for a still of the desktop; the answer replaces preview.
+  requestPreview() {
+    this.socket.send({ type: 'preview' })
+  }
+
+  // The setting Sound only; switching reconnects the stream.
   setAudioOnly(audioOnly: boolean) {
+    this.soundOnly = audioOnly
+    this.applyAudioOnly()
+  }
+
+  private applyAudioOnly() {
+    const audioOnly = this.soundOnly || this.listening.value
     if (audioOnly === this.audioOnly.value) return
     this.audioOnly.value = audioOnly
+    if (!audioOnly && !this.paused.value) this.preview.value = null
     if (!this.paused.value) {
       this.neko.disconnect()
       this.socket.send({ type: 'neko_token' })
@@ -316,6 +368,11 @@ export class RoomStore {
           this.settings.value = msg.settings
           this.users.value = new Map(msg.users.map((u) => [u.key, u]))
           this.chat.value = msg.history
+          if (!this.welcomed) {
+            this.welcomed = true
+            const last = msg.history.at(-1)
+            this.joined.value = { after: last?.id ?? null, time: Date.now() }
+          }
           this.remoteHolder.value = msg.remote
           this.windowTitle.value = msg.windowTitle ?? ''
           this.restartAvailable.value = msg.restart
@@ -406,6 +463,10 @@ export class RoomStore {
         break
       case 'window_title':
         this.windowTitle.value = msg.title
+        break
+      case 'preview':
+        // No picture this time (the desktop did not answer): keep the last one.
+        if ((this.paused.value || this.audioOnly.value) && msg.image) this.preview.value = { image: msg.image, time: msg.time ?? Date.now() }
         break
       case 'restarting':
         this.restarting.value = msg.by

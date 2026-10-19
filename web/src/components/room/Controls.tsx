@@ -11,6 +11,7 @@ interface Props {
   fullscreen: boolean
   userlistHidden: boolean
   chatOpen: boolean
+  chatView: boolean // chat has the stream's place and cannot be hidden
   unreadChat: number
   window: RoomWindow | null
   onToggleUsers: () => void
@@ -20,7 +21,7 @@ interface Props {
   onFullscreen: () => void
 }
 
-export function Controls({ fullscreen, userlistHidden, chatOpen, unreadChat, window, onToggleUsers, onPersonalSettings, onChat, onWindow, onFullscreen }: Props) {
+export function Controls({ fullscreen, userlistHidden, chatOpen, chatView, unreadChat, window, onToggleUsers, onPersonalSettings, onChat, onWindow, onFullscreen }: Props) {
   const store = useRoomStore()
   const host = store.isHost.value
   const holder = store.remoteHolder.value
@@ -31,6 +32,7 @@ export function Controls({ fullscreen, userlistHidden, chatOpen, unreadChat, win
   const remoteTooltip = !store.rights.value.remote ? 'You are not allowed to use the remote'
     : ownershipLocked ? `${holderName} owns the remote` : remoteLabel
   const { muted, volume } = preferences.value
+  const playing = !store.paused.value && !store.listening.value
   const upload = store.desktopUpload.value
   const uploading = upload.state === 'uploading'
   return (
@@ -49,8 +51,9 @@ export function Controls({ fullscreen, userlistHidden, chatOpen, unreadChat, win
           <IconButton icon="remoteAlpha" label={remoteLabel} tooltip={false} active={host} disabled={!host && disabled}
             onClick={() => host ? store.dropRemote() : store.takeRemote()} />
         </span></RoomTooltip>
-        <IconButton shortcut="playback" icon={store.paused.value ? 'play_button' : 'pause_button'} label={store.paused.value ? 'Play' : 'Pause'}
-          active={store.paused.value} onClick={() => store.paused.value ? store.resume() : store.pause()} />
+        {/* Listening counts as not playing: play brings the picture back. */}
+        <IconButton shortcut="playback" icon={playing ? 'pause_button' : 'play_button'} label={playing ? 'Pause' : 'Play'}
+          active={!playing} onClick={() => store.togglePlayback()} />
         <IconButton shortcut="fullscreen" icon="fullscreen_button" label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} active={fullscreen} onClick={onFullscreen} />
         <IconButton shortcut="mute" icon={muted || volume === 0 ? 'sound-mute' : 'sound-max'} label={muted ? 'Unmute' : 'Mute'} active={muted}
           onClick={() => updatePreferences({ muted: !muted })} />
@@ -66,8 +69,8 @@ export function Controls({ fullscreen, userlistHidden, chatOpen, unreadChat, win
         <IconButton class={`${styles.quiet} ${styles.sideOnly}`} icon="settings" label="Personal settings" onClick={onPersonalSettings} />
         <IconButton class={`${styles.quiet} ${styles.sideOnly} ${userlistHidden ? '' : styles.on}`} icon="users" shortcut="users"
           label={userlistHidden ? 'Show Users' : 'Hide Users'} aria-pressed={!userlistHidden} onClick={onToggleUsers} />
-        <IconButton shortcut="chat" icon="message-circle" label={chatOpen ? 'Hide chat' : `Show chat${unreadChat ? `, ${unreadChat} new messages` : ''}`}
-          class={`${styles.quiet} ${chatOpen ? styles.on : ''}`} aria-pressed={chatOpen} badge={chatOpen ? 0 : unreadChat} onClick={() => onChat(!chatOpen)} />
+        {!chatView && <IconButton shortcut="chat" icon="message-circle" label={chatOpen ? 'Hide chat' : `Show chat${unreadChat ? `, ${unreadChat} new messages` : ''}`}
+          class={`${styles.quiet} ${chatOpen ? styles.on : ''}`} aria-pressed={chatOpen} badge={chatOpen ? 0 : unreadChat} onClick={() => onChat(!chatOpen)} />}
         {!fullscreen && <MoreMenu userlistHidden={userlistHidden} onToggleUsers={onToggleUsers} onPersonalSettings={onPersonalSettings} onWindow={onWindow} />}
       </div>}
     </div>

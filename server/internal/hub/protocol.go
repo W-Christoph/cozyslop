@@ -19,9 +19,10 @@ type User struct {
 	AvatarURL string `json:"avatarUrl"`
 	Anonymous bool   `json:"anonymous"`
 	Admin     bool   `json:"admin"`
-	Active    bool   `json:"active"` // tab visible
-	Muted     bool   `json:"muted"`  // not listening to the stream
-	Paused    bool   `json:"paused"` // not listening because the stream is paused; implies Muted
+	Active    bool   `json:"active"`    // tab visible
+	Muted     bool   `json:"muted"`     // not listening to the stream
+	Paused    bool   `json:"paused"`    // not listening because the stream is paused; implies Muted
+	Listening bool   `json:"listening"` // the sound without the picture; never with Muted
 	JoinedAt  int64  `json:"joinedAt"`
 }
 
@@ -71,6 +72,13 @@ type nekoMsg struct {
 	Type  string `json:"type"` // "neko"
 	Token string `json:"token"`
 	Path  string `json:"path"`
+}
+
+// Answer to preview, sent only to the tab that asked.
+type previewMsg struct {
+	Type  string `json:"type"`           // "preview"
+	Image string `json:"image"`          // JPEG data URL; "" if unavailable
+	Time  int64  `json:"time,omitempty"` // capture time, unix ms
 }
 
 type nekoUnavailableMsg struct {
@@ -156,13 +164,14 @@ type errorMsg struct {
 // ClientMsg is any message a browser may send. Fields not used by a type are
 // ignored.
 type ClientMsg struct {
-	Type   string `json:"type"`
-	Body   string `json:"body"`   // chat_send, chat_edit, whisper
-	ID     int64  `json:"id"`     // chat_edit, chat_delete
-	Typing bool   `json:"typing"` // typing
-	Active bool   `json:"active"` // activity
-	Muted  bool   `json:"muted"`  // muted
-	Paused bool   `json:"paused"` // muted: because the stream is paused
-	To     string `json:"to"`     // whisper: identity key
-	Name   string `json:"name"`   // file_delete, file_play: a file in the desktop's Downloads
+	Type      string `json:"type"`
+	Body      string `json:"body"`      // chat_send, chat_edit, whisper
+	ID        int64  `json:"id"`        // chat_edit, chat_delete
+	Typing    bool   `json:"typing"`    // typing
+	Active    bool   `json:"active"`    // activity
+	Muted     bool   `json:"muted"`     // muted
+	Paused    bool   `json:"paused"`    // muted: because the stream is paused
+	Listening bool   `json:"listening"` // muted: the sound without the picture (unmuted only)
+	To        string `json:"to"`        // whisper: identity key
+	Name      string `json:"name"`      // file_delete, file_play: a file in the desktop's Downloads
 }

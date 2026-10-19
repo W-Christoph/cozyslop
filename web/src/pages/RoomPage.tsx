@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { useRoute } from 'preact-iso'
 import { preferences, settingsOpen } from '../app/state'
+import { useChatEvents } from '../components/chat/useChatEvents'
+import { ChatStage } from '../components/room/ChatStage'
+import { ChatViewBar } from '../components/room/ChatViewBar'
 import { Controls } from '../components/room/Controls'
 import { FilesWindow } from '../components/room/FilesWindow'
 import { KickedScreen } from '../components/room/KickedScreen'
 import { RoomContext, useRoomStore } from '../components/room/RoomContext'
 import { Sidebar } from '../components/room/Sidebar'
+import { PeoplePanel } from '../components/room/PeoplePanel'
 import { RoomSettingsWindow } from '../components/room/admin/RoomSettingsWindow'
 import { SettingsDialog } from '../components/settings/SettingsDialog'
 import { UserCard } from '../components/room/UserCard'
@@ -28,12 +32,23 @@ export function RoomRoute() {
 
 export type RoomWindow = 'files' | 'settings'
 
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches)
+  useEffect(() => {
+    const list = window.matchMedia(query)
+    const change = () => setMatches(list.matches)
+    change()
+    list.addEventListener('change', change)
+    return () => list.removeEventListener('change', change)
+  }, [query])
+  return matches
+}
+
 export function RoomPage() {
   const store = useRoomStore()
   const page = useRef<HTMLDivElement>(null)
   const { fullscreen, idle, wake, toggle, error } = useRoomFullscreen(page)
   const [chatOpen, setChatOpen] = useState(true)
-  const unreadChat = useUnreadChat(chatOpen)
   const [userlistHidden, setUserlistHidden] = useState(false)
   // Windows over the room: the desktop's files and the room's settings.
   const [roomWindow, setRoomWindow] = useState<RoomWindow | null>(null)
@@ -45,18 +60,25 @@ export function RoomPage() {
   const connected = store.server.value === 'connected'
   if (connected) wasConnected.current = true
   // Narrow screens have no room beside the stream: the strip stays below it.
-  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 780px)').matches)
-  useEffect(() => {
-    const query = window.matchMedia('(max-width: 780px)')
-    const change = () => setNarrow(query.matches)
-    query.addEventListener('change', change)
-    return () => query.removeEventListener('change', change)
-  }, [])
+  const narrow = useMediaQuery('(max-width: 780px)')
+  // Phones held upright show the chat under the stream, across the width.
+  const phone = useMediaQuery('(max-width: 780px) and (orientation: portrait)')
+  // Join and leave lines live here: the chat moves into the chat view and back.
+  const lines = useChatEvents(store)
   const left = fullscreen || (preferences.value.userlistOnLeft && !narrow)
   const admin = store.rights.value.admin
   useRoomPresence()
   const files = store.rights.value.upload
-  const { audioOnly, chatWidth } = preferences.value
+  const { audioOnly, chatWidth, chatViewOnPause } = preferences.value
+  // Chat view: with no picture (paused, or sound only), chat takes the
+  // stream's place. Not in fullscreen, which is for watching.
+  const chatView = !fullscreen && (((store.paused.value || store.audioOnly.value) && chatViewOnPause) || store.desktopOffline.value)
+  // Wide screens: the chat moves into the stream's place and the people take
+  // the chat's column; the user strip folds away. Nothing else moves. Phones
+  // keep their chat under a bar.
+  const stage = chatView && !phone
+  const chatShown = chatOpen || chatView
+  const unreadChat = useUnreadChat(chatShown)
   useEffect(() => {
     if ((!admin && roomWindow === 'settings') || (!files && roomWindow === 'files')) setRoomWindow(null)
   }, [admin, files, roomWindow])
@@ -84,22 +106,24 @@ export function RoomPage() {
       style={{ '--screen-ratio': screen.width > 0 && screen.height > 0 ? screen.width / screen.height : 16 / 9, '--chat-size': `max(${0.12 * chatWidth}%, ${0.15 * chatWidth}em)` }}
       onMouseMove={wake} onTouchStart={wake} onKeyDown={wake}
       // Icons, avatars and the stream are not things to drag around. The
-      // sidebar keeps its text and pictures draggable.
+      // chat keeps its text and pictures draggable.
       onDragStart={(e) => {
         const from = e.target instanceof Element ? e.target : (e.target as Node | null)?.parentElement
-        if (!from?.closest('aside')) e.preventDefault()
+        if (!from?.closest('aside, [data-chat-stage]')) e.preventDefault()
       }}>
-      {!userlistHidden && left && <UserStrip left fullscreen={fullscreen} hover={hover} onHover={setHover} />}
+      {!userlistHidden && left && <UserStrip left fullscreen={fullscreen} folded={stage} hover={hover} onHover={setHover} />}
       <div class={styles.videoWrapper}>
-        <VideoArea disconnected={!connected && wasConnected.current} error={error} fullscreen={fullscreen} />
+        {stage ? <ChatStage lines={lines} /> : chatView && <ChatViewBar preview />}
+        <VideoArea hidden={chatView} disconnected={!connected && wasConnected.current} error={error} fullscreen={fullscreen} />
         <div class={styles.toolbar} data-remote-passthrough={fullscreen || undefined}>
-          <Controls fullscreen={fullscreen} userlistHidden={userlistHidden} chatOpen={chatOpen} unreadChat={unreadChat} window={roomWindow}
+          <Controls fullscreen={fullscreen} userlistHidden={userlistHidden} chatOpen={chatOpen} chatView={chatView} unreadChat={unreadChat} window={roomWindow}
             onToggleUsers={() => setUserlistHidden((value) => !value)} onPersonalSettings={() => { settingsOpen.value = 'appearance' }}
             onChat={setChatOpen} onWindow={setRoomWindow} onFullscreen={() => { void toggle() }} />
-          {!userlistHidden && !left && <UserStrip left={false} fullscreen={false} hover={hover} onHover={setHover} />}
+          {!userlistHidden && !left && <UserStrip left={false} fullscreen={false} folded={stage} hover={hover} onHover={setHover} />}
         </div>
       </div>
-      <Sidebar chatOpen={chatOpen} fullscreen={fullscreen} idle={idle && !overlay} />
+      {stage ? !userlistHidden && <PeoplePanel />
+        : <Sidebar chatOpen={chatShown} lines={lines} fullscreen={fullscreen} idle={idle && !overlay} />}
       {personalSettings && <SettingsDialog onClose={wake} />}
       {roomWindow === 'files' && files && <FilesWindow onClose={closeWindow} />}
       {roomWindow === 'settings' && admin && <RoomSettingsWindow onClose={closeWindow} />}

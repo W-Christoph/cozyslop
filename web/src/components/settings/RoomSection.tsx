@@ -29,14 +29,29 @@ export function RoomSection({ room }: { room: RoomStore | null }) {
         ]} />
       <ToggleRow title="Show names" description="Write each nickname under its picture."
         checked={prefs.showUsernames} onChange={(showUsernames) => updatePreferences({ showUsernames })} />
+      <ToggleRow title="Outline names over the stream" description="In fullscreen the names sit on the picture. A dark outline keeps them readable on bright and busy scenes."
+        checked={prefs.outlineNames} disabled={!prefs.showUsernames} onChange={(outlineNames) => updatePreferences({ outlineNames })} />
       <ToggleRow title="Small profile pictures" description="Leaves more room for the stream."
         checked={prefs.smallPfp} onChange={(smallPfp) => updatePreferences({ smallPfp })} />
     </Section>
-    <Section title="Muted and paused" description="Paused counts as muted: the pause icon takes the place of the muted one.">
-      <ToggleRow title="See who is muted or paused" description="An icon on the picture of everyone who has the sound off or the stream paused."
+    <Section title="Muted, paused and listening" description="Paused counts as muted: the pause icon takes the place of the muted one. Listening is the sound without the picture: a music note.">
+      <ToggleRow title="See who is muted, paused or listening" description="An icon on the picture of everyone who has the sound off, the stream paused, or only the sound on."
         checked={prefs.showMuted} onChange={(showMuted) => updatePreferences({ showMuted })} />
-      <ToggleRow title="Show others when I am" description="Others see an icon on your picture while you have the sound off or the stream paused."
+      <ToggleRow title="Show others when I am" description="Others see an icon on your picture while you have the sound off, the stream paused, or only the sound on."
         checked={prefs.shareMuted} onChange={(shareMuted) => updatePreferences({ shareMuted })} />
+    </Section>
+    <Section title="While paused" description="Pausing stops the video and sound, and with them almost all the data the room uses.">
+      <ToggleRow title="Chat takes the stream's place" description="The room becomes a chat, with a bar at the top to listen (sound only) or watch. Also with Sound only, and while the room's desktop is offline. Not in fullscreen."
+        checked={prefs.chatViewOnPause} onChange={(chatViewOnPause) => updatePreferences({ chatViewOnPause })} />
+      <SettingRow title="Preview of the desktop" description="A small, blurry picture of what is on the stream in a corner of the chat, renewed every few seconds. A few kB each time.">{null}</SettingRow>
+      <RadioCards name="streamPreview" label="Preview of the desktop" columns={4} mobileColumns={2} disabled={!prefs.chatViewOnPause}
+        value={String(prefs.streamPreview)} onChange={(value) => updatePreferences({ streamPreview: Number(value) })}
+        options={[
+          { value: '0', label: 'Off' },
+          { value: '2', label: 'Every 2 s' },
+          { value: '5', label: 'Every 5 s' },
+          { value: '10', label: 'Every 10 s' },
+        ]} />
     </Section>
     <Section title="Playback">
       <ToggleRow title="Sound only" description="Receive the room's sound without the picture. Saves bandwidth, for music or a slow connection."

@@ -104,6 +104,12 @@ test('groups use author keys, retaining the first nickname/colour snapshot', () 
   assert.equal(groups[0][0], first)
 })
 
+test('a pause of two minutes starts a new group', () => {
+  const at = (id, time) => ({ ...message(id), time })
+  const groups = groupMessages([at(1, 0), at(2, 60_000), at(3, 179_000), at(4, 299_000)])
+  assert.deepEqual(groups.map((g) => g.map((m) => m.id)), [[1, 2, 3], [4]])
+})
+
 test('whispers can group by author despite negative IDs', () => {
   assert.equal(groupMessages([message(1), { ...message(-1), type: 'whisper' }]).length, 1)
 })

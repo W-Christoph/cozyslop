@@ -1,7 +1,7 @@
 # TODO
 
 From the full-codebase review on 2026-10-03 (three Codex runs, every file
-read; findings checked against the code). State as of 2026-10-10.
+read; findings checked against the code). State as of 2026-10-19.
 
 ## 1. Open: when deploying
 
@@ -49,7 +49,28 @@ Housekeeping
       are never reconciled.
 - [ ] Legacy avatar import cannot resume after a crash.
 
-## 3. Done on 2026-10-10
+## 3. Done on 2026-10-19
+
+Chat
+- [x] Chat view: pausing (or Sound only, or an offline desktop) puts the
+      chat in the stream's place, with a bar (what is on the desktop,
+      Listen/Stop, Watch), people grouped in the chat's column and a line
+      where this visit started. Fades in; the user strip folds away.
+- [x] Listen in the chat view: sound only for now. Play/pause always means
+      the whole stream again, unless the Sound only setting is on.
+- [x] Preview of the desktop in the chat view: a shared, shrunken neko
+      screenshot every 2, 5 or 10 s (`hub/preview.go`, about 5 kB, 30 ms).
+      Tried with a real neko screenshot; the rest against a mocked room.
+- [x] Presence carries listening (sound without the picture): a music note
+      on the picture.
+- [x] A pause of two minutes starts a new message group with its own time.
+- [x] Picture height in chat (200px to full, 400px by default); narrowed
+      pictures are centred in the sidebar.
+- [x] Outline for the user list's names over the stream in fullscreen.
+- [x] The muted icon no longer shows for a moment when pausing (the icons
+      are loaded up front).
+
+## 4. Done on 2026-10-10
 
 - [x] `./cozycast.sh setup` writes `.env` as a copy of `.env.example` and
       asks what a room starts with (desktop size, bitrate, stream size,
@@ -72,7 +93,7 @@ Housekeeping
       and a room restart in between; not through the tunnel to a room on
       another computer, and not with a video playing.
 
-## 4. Done on 2026-10-05
+## 5. Done on 2026-10-05
 
 Chat
 - [x] A message keeps its author's picture after the author has left; a
@@ -121,7 +142,7 @@ The leftovers of the UI redesign (four Codex runs, each reviewed)
 - [x] `tests/chat-browser.cjs` passes again; new optional browser tests:
       `design-system-browser.cjs`, `ux-browser.cjs`, `contrast-browser.cjs`.
 
-## 5. Done on 2026-10-04
+## 6. Done on 2026-10-04
 
 - [x] Stream settings offer only 16:9 resolutions.
 - [x] Passwords over 72 bytes are refused (400) wherever a password is set,
@@ -186,7 +207,7 @@ The leftovers of the UI redesign (four Codex runs, each reviewed)
 - Decided: Tab stays with the desktop while holding the remote; a keyboard
   way out is an idea for later (`docs/ideas.md`).
 
-## 6. Done on 2026-10-03
+## 7. Done on 2026-10-03
 
 - [x] Anonymous impersonation: the public `a:<id>` was the `cozy_anon`
       cookie; it is now a hash of it.

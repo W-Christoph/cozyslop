@@ -46,7 +46,9 @@ func (r *Room) Handle(ctx context.Context, c *Client, msg ClientMsg) {
 	case "activity":
 		r.setPresence(c, func() { c.active = msg.Active })
 	case "muted":
-		r.setPresence(c, func() { c.muted, c.paused = msg.Muted, msg.Muted && msg.Paused })
+		r.setPresence(c, func() {
+			c.muted, c.paused, c.listening = msg.Muted, msg.Muted && msg.Paused, !msg.Muted && msg.Listening
+		})
 	case "whisper":
 		err = r.whisper(c, msg.To, msg.Body)
 	// What asks the desktop runs on its own: the desktop may be slow to
@@ -60,6 +62,9 @@ func (r *Room) Handle(ctx context.Context, c *Client, msg ClientMsg) {
 		return
 	case "neko_token":
 		go r.sendNekoToken(ctx, c)
+		return
+	case "preview":
+		go r.sendPreview(ctx, c)
 		return
 	case "restart":
 		err = r.Restart(c)

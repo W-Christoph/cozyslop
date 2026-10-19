@@ -1,4 +1,7 @@
 .chatbox { margin: 15px 10px 5px; position: relative; }
+/* Chat view: across the whole width, roomier, as in a chat app. */
+[data-chat-wide] .chatbox { margin: 0 1em 1.25em; }
+[data-chat-wide] .wrapper { padding: 13px 16px; border-radius: 8px; }
 .uploader { position: relative; }
 .wrapper { background: var(--color-accent) var(--noise); border-radius: 5px; padding: 10px; cursor: text; }
 .textarea { display: block; color: var(--color-text); background: transparent; resize: none; width: 100%; height: 18px; border: 0; padding: 0; font: 15px/18px var(--font-sans); }

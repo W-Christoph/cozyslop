@@ -100,6 +100,9 @@ type Room struct {
 	// Not nil while neko is gone and the tabs have not been told; closed
 	// when it is back or they are told. Token requests wait for it.
 	lost chan struct{}
+
+	preview       *previewShot    // shared cached still; guarded by mu
+	previewFlight *previewRequest // at most one capture in flight
 }
 
 // member is one person in the room, with all their tabs.
@@ -126,15 +129,17 @@ type Client struct {
 	joinedAt    time.Time
 
 	// guarded by Room.mu
-	m      *member
-	active bool
-	muted  bool
-	paused bool
-	typing time.Time // last typing broadcast, for throttling
+	m         *member
+	active    bool
+	muted     bool
+	paused    bool
+	listening bool      // sound without the picture; never while muted
+	typing    time.Time // last typing broadcast, for throttling
 
-	nekoToken string                 // the tab's current neko session token
-	tokenBusy bool                   // a request for a new one is being answered
-	nekoConns map[*NekoConn]struct{} // its proxied connections to neko
+	nekoToken   string                 // the tab's current neko session token
+	tokenBusy   bool                   // a request for a new one is being answered
+	previewBusy bool                   // a preview request is being answered
+	nekoConns   map[*NekoConn]struct{} // its proxied connections to neko
 
 	nekoMu       sync.Mutex // serializes neko member creation, updates and deletion
 	nekoPassword string
@@ -244,6 +249,7 @@ var offlineGrace = 5 * time.Second
 func (r *Room) desktopLost() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.preview = nil
 	if !r.offline {
 		r.offlineSince = time.Now()
 		if r.lost == nil {
@@ -1200,11 +1206,18 @@ func (r *Room) userLocked(m *member) User {
 		Muted:     true,
 		Paused:    true,
 	}
+	// Listening when every tab that plays the sound shows no picture.
+	hearing, listening := false, true
 	for _, c := range m.clients {
 		u.Active = u.Active || c.active
 		u.Muted = u.Muted && c.muted
 		u.Paused = u.Paused && c.paused
+		if !c.muted {
+			hearing = true
+			listening = listening && c.listening
+		}
 	}
+	u.Listening = hearing && listening
 	if m.user != nil {
 		u.Username, u.Nickname, u.NameColor, u.AvatarURL = m.user.Username, m.user.Nickname, m.user.NameColor, avatarURL(m.user)
 	} else {

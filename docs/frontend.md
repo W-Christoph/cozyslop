@@ -67,6 +67,19 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
   and notification sound expect. Nicknames the parser cannot mention (such as
   names containing `@` or parsed as links) are omitted. The accessible listbox
   appears above the textarea, inside the fullscreen element when present.
+- **Chat view**: with no picture to show (paused, or sound only) and
+  `preferences.chatViewOnPause`, or while the desktop is offline, chat takes
+  the stream's place. On wide screens `room/ChatStage` (`ChatViewBar` and a
+  `ChatPanel` with `wide`) fills the video slot and `room/PeoplePanel`
+  (preview, people by watching, listening, sound off, paused, away) takes the
+  chat's column; the user strip folds away and the toolbar stays. Phones keep
+  their chat and get the bar with a small preview. The `wide` chat always has
+  the modern look with pictures, a full-width text box and a line where this
+  visit started (`store.joined`). The chat's join/leave lines
+  (`useChatEvents`, in the room page) and draft (`store.chatDraft`) outlive
+  the move. Playback: `store.listen()` is sound only for now (`listening`),
+  `watch()` the stream as `preferences.audioOnly` has it, `togglePlayback()`
+  (button, shortcut) never resumes into listening.
 - **State**: app-wide state from `app/state.ts`; room state and actions from
   the `RoomStore` (pass the store down as a prop or via a context created in
   the room page). Local UI state with hooks. Signals are read with `.value`

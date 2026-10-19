@@ -19,6 +19,10 @@ community over a long time.** The numbers so far are under
 - **Accounts and chat**: registration (open or invite only), profiles with
   avatars and name colours, chat with images, videos and edits. Chat clears
   itself after an hour, at most 1,000 messages are kept.
+- **Chat view while paused**: pausing turns the room into a chat app, with
+  the people beside it and a small picture of the desktop renewed every few
+  seconds (a few kB instead of the stream). Listen plays only the sound
+  while the chat stays in front.
 - **Room permissions**: public, account, verified or invite-only rooms;
   per-user remote, chat image and desktop upload rights; invites with use
   limits; kicks and bans (anonymous viewers by cookie and IP).

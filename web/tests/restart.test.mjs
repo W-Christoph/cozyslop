@@ -375,3 +375,67 @@ test('desktop file actions resolve with their own answer and fail when the conne
   assert.equal(await lost, 'Connection lost.')
   assert.equal(await store.desktopFileAction('play', 'b.mp4'), 'Not connected to the room.')
 })
+
+test('previews are asked for while paused; an empty answer keeps the last one; resuming drops it', (t) => {
+  const { store, room, welcome } = fixture(t)
+  welcome(false)
+  store.pause()
+  store.requestPreview()
+  assert.deepEqual(room.sent.at(-1), { type: 'preview' })
+  room.message({ type: 'preview', image: 'data:image/jpeg;base64,AAAA', time: 5 })
+  assert.deepEqual(store.preview.value, { image: 'data:image/jpeg;base64,AAAA', time: 5 })
+  room.message({ type: 'preview', image: '' })
+  assert.equal(store.preview.value.image, 'data:image/jpeg;base64,AAAA')
+  store.resume()
+  assert.equal(store.preview.value, null)
+  // A late answer after resuming is not shown again.
+  room.message({ type: 'preview', image: 'data:image/jpeg;base64,BBBB', time: 6 })
+  assert.equal(store.preview.value, null)
+})
+
+test('sound only also gets previews; turning the picture back on drops them', (t) => {
+  const { store, room, welcome } = fixture(t)
+  welcome(false)
+  store.setAudioOnly(true)
+  room.message({ type: 'preview', image: 'data:image/jpeg;base64,AAAA', time: 5 })
+  assert.equal(store.preview.value.image, 'data:image/jpeg;base64,AAAA')
+  store.setAudioOnly(false)
+  assert.equal(store.preview.value, null)
+})
+
+test('listen is sound only for now: play/pause afterwards means the whole stream', (t) => {
+  const { store, welcome } = fixture(t)
+  welcome(false)
+  store.pause()
+  store.listen()
+  assert.equal(store.paused.value, false)
+  assert.equal(store.audioOnly.value, true)
+  assert.equal(store.listening.value, true)
+  // Play while listening brings the picture back.
+  store.togglePlayback()
+  assert.equal(store.listening.value, false)
+  assert.equal(store.audioOnly.value, false)
+  assert.equal(store.paused.value, false)
+  // Pause, listen, stop (the chat view's button), play: the stream with its
+  // picture, not listening.
+  store.togglePlayback()
+  store.listen()
+  store.pause()
+  assert.equal(store.paused.value, true)
+  assert.equal(store.listening.value, false)
+  store.togglePlayback()
+  assert.equal(store.audioOnly.value, false)
+  assert.equal(store.paused.value, false)
+})
+
+test('with the setting Sound only, play and pause stay sound only', (t) => {
+  const { store, welcome } = fixture(t)
+  welcome(false)
+  store.setAudioOnly(true)
+  store.togglePlayback()
+  assert.equal(store.paused.value, true)
+  store.togglePlayback()
+  assert.equal(store.paused.value, false)
+  assert.equal(store.audioOnly.value, true)
+  assert.equal(store.listening.value, false)
+})

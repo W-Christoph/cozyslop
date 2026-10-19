@@ -34,6 +34,7 @@ export interface User {
   active: boolean
   muted: boolean // not listening to the stream
   paused: boolean // not listening because the stream is paused; implies muted
+  listening: boolean // the sound without the picture; never with muted
   joinedAt: number
 }
 
@@ -84,6 +85,8 @@ export type ServerMessage =
   | { type: 'room_settings'; settings: RoomSettings }
   | { type: 'remote'; holder: string | null }
   | { type: 'window_title'; title: string }
+  // A small still of the desktop, answering preview; image "" when there is none.
+  | { type: 'preview'; image: string; time?: number }
   | { type: 'restarting'; by: string }
   | { type: 'file_result'; action: 'delete' | 'play'; name: string; error: string } // error "" if it worked
   | { type: 'kicked'; reason: KickReason; bannedUntil?: number | null }
@@ -95,9 +98,10 @@ export type ClientMessage =
   | { type: 'chat_delete'; id: number }
   | { type: 'typing'; typing: boolean }
   | { type: 'activity'; active: boolean }
-  | { type: 'muted'; muted: boolean; paused: boolean }
+  | { type: 'muted'; muted: boolean; paused: boolean; listening: boolean }
   | { type: 'whisper'; to: string; body: string }
   | { type: 'remote_reset' }
   | { type: 'restart' }
   | { type: 'neko_token' }
+  | { type: 'preview' } // a still of the desktop, for the chat view while paused
   | { type: 'file_delete' | 'file_play'; name: string } // a file in the desktop's Downloads

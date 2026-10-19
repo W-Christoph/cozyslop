@@ -42,11 +42,14 @@ export function matchedPingNames(users: ReadonlyMap<string, User>): ReadonlySet<
   return new Set([...users.values()].map((user) => pingName(user.nickname)))
 }
 
+// A pause this long starts a new group, with its own time.
+const GROUP_GAP_MS = 2 * 60 * 1000
+
 export function groupMessages(messages: readonly ChatMessage[]): ChatMessage[][] {
   const groups: ChatMessage[][] = []
   for (const message of messages) {
     const last = groups.at(-1)
-    if (last?.[0].author === message.author) last.push(message)
+    if (last?.[0].author === message.author && message.time - last[last.length - 1].time < GROUP_GAP_MS) last.push(message)
     else groups.push([message])
   }
   return groups

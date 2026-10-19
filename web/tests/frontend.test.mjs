@@ -196,7 +196,7 @@ for (const editing of [false, true]) {
     f.store = {
       server: { value: 'connected' }, error: { value: null }, self: { value: self }, selfKey: { value: self.key },
       users: { value: new Map([self, { key: 'u:2', nickname: 'B ob' }, { key: 'u:3', nickname: 'Cora' }].map((user) => [user.key, user])) },
-      rights: { value: { image: false } }, chat: { value: [] }, setTyping() {},
+      rights: { value: { image: false } }, chat: { value: [] }, chatDraft: { value: '', peek() { return this.value } }, setTyping() {},
       sendChat: (text) => sent.push(text), editChat: (_, text) => sent.push(text),
     }
     const doc = { activeElement: null, addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) }

@@ -263,6 +263,11 @@ schema applies to proxied requests or responses.
 The room WebSocket carries presence, chat, typing, activity, mute and pause
 status, rights, room settings, remote ownership, moderation and per-tab neko
 tokens.
+A tab sends `{"type":"muted","muted":…,"paused":…,"listening":…}`:
+`paused` (only with `muted`) means the stream is paused, `listening` (only
+without `muted`) that the sound plays without the picture. A user is muted
+and paused when all their tabs are, and listening when every tab that is not
+muted is listening.
 `welcome.windowTitle` is the title of the window in front on the room's
 desktop (`""` if unknown); `{"type":"window_title","title":"…"}` follows when
 it changes (see `docs/architecture.md`).
@@ -289,6 +294,17 @@ because neko failed sends `{"type":"neko_unavailable","message":"..."}`
 with a user-facing explanation. Clients can retry the token request while
 keeping the chat connection. A successful request sends the usual `neko`
 message with `token` and `path`.
+
+Clients send `{"type":"preview"}` for a small still of the desktop, without
+receiving the WebRTC stream. Only the asking tab receives
+`{"type":"preview","image":"data:image/jpeg;base64,...","time":<unix ms>}`.
+The JPEG fits inside 320×180, preserves the desktop's aspect ratio and is
+never upscaled. `time` is when the shot was taken; all tabs share a shot for
+1.5 seconds and simultaneous requests share one capture. A tab has one
+preview request at a time; extra requests while it waits are dropped. The
+same room admission rules as watching the stream apply. An offline desktop
+or a failed capture answers `{"type":"preview","image":""}` (no `time`).
+Preview requests run independently of the tab's later messages.
 
 `welcome.desktop` is `"online"` or `"offline"`. When the room's neko has been
 unreachable for 5 seconds the server broadcasts

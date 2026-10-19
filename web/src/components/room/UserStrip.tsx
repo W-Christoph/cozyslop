@@ -6,9 +6,10 @@ import { UserAvatar } from './UserAvatar'
 import { userIdentity, type HoverName } from './UserHoverName'
 import styles from './UserStrip.module.css'
 
-export function UserStrip({ left, fullscreen, hover, onHover }: { left: boolean; fullscreen: boolean; hover: HoverName | null; onHover: (hover: HoverName | null) => void }) {
+// folded: the chat view shows the people in its own column; the strip folds away.
+export function UserStrip({ left, fullscreen, folded = false, hover, onHover }: { left: boolean; fullscreen: boolean; folded?: boolean; hover: HoverName | null; onHover: (hover: HoverName | null) => void }) {
   const store = useRoomStore()
-  const { smallPfp, showUsernames, showMuted } = preferences.value
+  const { smallPfp, showUsernames, outlineNames, showMuted } = preferences.value
   const pinned = useRef<HTMLDivElement | null>(null)
   const touch = useRef(false)
   useLayoutEffect(() => { if (!hover) pinned.current = null }, [hover])
@@ -38,12 +39,12 @@ export function UserStrip({ left, fullscreen, hover, onHover }: { left: boolean;
       y: left ? rect.top + rect.height / 2 : rect.top - 8 })
   }
   return (
-    <div class={`${styles.strip} ${left ? styles.left : styles.bottom} ${smallPfp ? styles.small : ''} ${showUsernames ? styles.names : ''} ${fullscreen ? styles.fullscreen : ''} ${fullscreen && store.isHost.value ? styles.host : ''}`}
-      role="list" aria-label="Room users">
+    <div class={`${styles.strip} ${left ? styles.left : styles.bottom} ${smallPfp ? styles.small : ''} ${showUsernames ? styles.names : ''} ${fullscreen ? styles.fullscreen : ''} ${fullscreen && outlineNames ? styles.outlined : ''} ${fullscreen && store.isHost.value ? styles.host : ''} ${folded ? styles.folded : ''}`}
+      role="list" aria-label="Room users" inert={folded}>
       {Array.from(store.users.value.values()).map((user) => <div class={styles.user} role="listitem" key={user.key}>
         <div class={styles.avatar} tabIndex={0} aria-label={[user.nickname, userIdentity(user),
           !user.active && 'away', store.remoteHolder.value === user.key && 'has the remote',
-          showMuted && user.muted && (user.paused ? 'stream paused' : 'sound off')].filter(Boolean).join(', ')}
+          showMuted && (user.muted ? (user.paused ? 'stream paused' : 'sound off') : user.listening && 'listening, no picture')].filter(Boolean).join(', ')}
           onPointerEnter={(e) => { if (e.pointerType === 'mouse' && !pinned.current) showHover(e, user) }}
           onPointerLeave={() => { if (!pinned.current) onHover(null) }}
           onPointerDown={(e) => {

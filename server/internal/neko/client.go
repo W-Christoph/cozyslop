@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -45,6 +46,9 @@ type Member struct {
 }
 
 var ErrNotFound = errors.New("neko: not found")
+
+// maxScreenshotBytes bounds a raw screenshot response before decoding it.
+const maxScreenshotBytes = 16 << 20
 
 type Client struct {
 	connected atomic.Bool
@@ -152,6 +156,7 @@ func (c *Client) Healthy(ctx context.Context) bool {
 	return c.do(ctx, http.MethodGet, "/health", nil, nil, false) == nil
 }
 
+// do decodes JSON into out, or reads a bounded raw body when out is *[]byte.
 func (c *Client) do(ctx context.Context, method, path string, in, out any, admin bool) error {
 	c.mu.Lock()
 	gen := c.gen
@@ -200,6 +205,17 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any, admin
 		return fmt.Errorf("neko: %s %s: %s: %s", method, path, res.Status, message)
 	}
 	if out != nil {
+		if raw, ok := out.(*[]byte); ok {
+			b, err := io.ReadAll(io.LimitReader(res.Body, maxScreenshotBytes+1))
+			if err != nil {
+				return err
+			}
+			if len(b) > maxScreenshotBytes {
+				return errors.New("neko: screenshot exceeds size limit")
+			}
+			*raw = b
+			return nil
+		}
 		return json.NewDecoder(res.Body).Decode(out)
 	}
 	return nil
@@ -244,6 +260,13 @@ func (c *Client) Screen(ctx context.Context) (ScreenSize, error) {
 	var s ScreenSize
 	err := c.do(ctx, http.MethodGet, "/api/room/screen", nil, &s, true)
 	return s, err
+}
+
+// Screenshot returns a JPEG of the desktop, using neko's admin-only API.
+func (c *Client) Screenshot(ctx context.Context, quality int) ([]byte, error) {
+	var shot []byte
+	err := c.do(ctx, http.MethodGet, "/api/room/screen/shot.jpg?quality="+strconv.Itoa(quality), nil, &shot, true)
+	return shot, err
 }
 
 // ScreenConfigurations lists the resolutions the desktop supports.

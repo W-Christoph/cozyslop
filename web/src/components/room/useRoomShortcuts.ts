@@ -30,7 +30,7 @@ export function useRoomShortcuts({ windowOpen, onFullscreen, onChat, onMessage, 
       switch (action) {
         case 'fullscreen': onFullscreen(); break
         case 'mute': updatePreferences({ muted: !muted }); break
-        case 'playback': store.paused.value ? store.resume() : store.pause(); break
+        case 'playback': store.togglePlayback(); break
         case 'volumeUp': updatePreferences({ volume: Math.min(100, volume + 5), muted: false }); break
         case 'volumeDown': updatePreferences({ volume: Math.max(0, volume - 5) }); break
         case 'chat': onChat(); break

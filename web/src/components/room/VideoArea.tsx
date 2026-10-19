@@ -8,7 +8,8 @@ import styles from './VideoArea.module.css'
 // Match CozyCast's device test, including tablet browsers.
 const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 
-export function VideoArea({ disconnected, error, fullscreen }: { disconnected: boolean; error: string; fullscreen: boolean }) {
+// hidden: chat has the stream's place (chat view); the screen stays mounted.
+export function VideoArea({ hidden = false, disconnected, error, fullscreen }: { hidden?: boolean; disconnected: boolean; error: string; fullscreen: boolean }) {
   const store = useRoomStore()
   const drop = useDesktopDrop()
   const pointer = useRef({ x: store.neko.screen.width / 2, y: store.neko.screen.height / 2 })
@@ -26,7 +27,7 @@ export function VideoArea({ disconnected, error, fullscreen }: { disconnected: b
     : offline ? 'It reconnects by itself when it is back. Chat still works.' : '')
   const play = () => {
     if (store.paused.value) {
-      store.resume()
+      store.watch()
       return
     }
     // Call play in the gesture handler so restrictive mobile browsers can
@@ -34,7 +35,7 @@ export function VideoArea({ disconnected, error, fullscreen }: { disconnected: b
     void video.current?.play().then(() => setBlocked(false)).catch(() => setBlocked(true))
   }
   return (
-    <div class={`${styles.area} ${fullscreen ? '' : styles.fitted}`}>
+    <div hidden={hidden} class={`${styles.area} ${fullscreen ? '' : styles.fitted}`}>
       <main class={styles.screen} aria-label="Room screen" {...drop}>
         <DesktopUploadStatus />
         {error && <div role="alert" class={styles.error}>{error}</div>}

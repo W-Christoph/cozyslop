@@ -8,6 +8,8 @@ import styles from './ChatSection.module.css'
 
 const SCALES = [80, 90, 100, 110, 120, 130, 140]
 const WIDTHS = [100, 110, 120, 130, 140, 150, 160, 170]
+// Picture heights in px; the last stop is full size (0 in the preferences).
+const MEDIA_HEIGHTS = [200, 300, 400, 500, 600, 700]
 
 // A few lines of chat drawn as bars, for the cards.
 function MiniChat({ style, avatars }: { style: ChatStyle; avatars: boolean }) {
@@ -84,6 +86,11 @@ export function ChatSection() {
         checked={prefs.showLeaveJoinMsg} onChange={(showLeaveJoinMsg) => updatePreferences({ showLeaveJoinMsg })} />
       <ToggleRow title="Load pictures and videos on click" description="Nothing is downloaded until you ask for it. For slow connections."
         checked={prefs.manualLoadMedia} onChange={(manualLoadMedia) => updatePreferences({ manualLoadMedia })} />
+      <div>
+        <SettingRow title={`Picture height: ${prefs.chatMediaHeight ? `up to ${prefs.chatMediaHeight}px` : 'full size'}`} description="Tall pictures and videos are shown smaller. Click one to see all of it.">{null}</SettingRow>
+        <Slider label="Picture height in chat" value={prefs.chatMediaHeight || 700} stops={MEDIA_HEIGHTS} format={(value) => value === 700 ? 'Full' : `${value}px`}
+          onChange={(value) => updatePreferences({ chatMediaHeight: value === 700 ? 0 : value })} />
+      </div>
     </Section>
     <Section title="Fullscreen">
       <ToggleRow title="See-through chat in fullscreen" description="Chat floats over the stream and fades away when nothing is said."

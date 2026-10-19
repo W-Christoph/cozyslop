@@ -1,0 +1,32 @@
+/* Like the header of a chat app's channel: one line, the name and then the
+   topic (here the window in front on the desktop), a shadow under it. */
+.bar { position: relative; z-index: 1; display: flex; flex-shrink: 0; align-items: center; gap: var(--space-3); min-width: 0; height: 60px; padding: 0 var(--space-4); background: var(--color-menu) var(--noise); box-shadow: 0 1px 0 var(--color-message-bg), 0 2px 6px -2px var(--color-shadow); }
+.icon { flex-shrink: 0; width: 28px; height: 28px; opacity: 0.8; filter: var(--icon-invert); }
+.cat { flex-shrink: 0; width: 36px; opacity: 0.6; }
+.text { flex: 1; display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; white-space: nowrap; }
+.title { flex-shrink: 0; font-size: 1.2em; font-weight: 700; }
+/* A thin divider before the topic. */
+.detail { overflow: hidden; text-overflow: ellipsis; padding-left: var(--space-3); border-left: 1px solid var(--color-text-muted); font-size: 0.95em; color: var(--color-text-muted); }
+/* A quiet outlined button beside the one that matters, filled in the accent. */
+.actions { flex-shrink: 0; display: flex; gap: 10px; }
+.action, .action:hover:not(:disabled) { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px 0 14px; border: 1px solid var(--border-strong); border-radius: 8px; background: transparent; color: var(--color-text); font: inherit; font-size: 1em; font-weight: 600; transition: background-color 0.15s, border-color 0.15s, filter 0.15s; }
+.action:hover:not(:disabled) { border-color: var(--color-text-muted); background: var(--color-message-hover); }
+.action:active:not(:disabled) { filter: brightness(0.9); }
+.action img { width: 20px; height: 20px; filter: var(--icon-invert); }
+.primary, .primary:hover:not(:disabled) { border-color: transparent; background: var(--color-orange); color: var(--color-on-orange); }
+.primary:hover:not(:disabled) { border-color: transparent; background: var(--color-orange-hover); }
+.primary img { filter: none; }
+.preview { flex-shrink: 0; width: 80px; }
+/* Phones: the topic goes under the name, the button keeps only its icon. */
+@media (max-width: 780px) and (orientation: portrait) {
+  .bar { height: auto; min-height: 56px; gap: var(--space-2); padding: var(--space-1) var(--space-2); }
+  .title { font-size: 1.05em; }
+  .detail { font-size: 0.85em; }
+  .text { flex-direction: column; align-items: stretch; gap: 0; }
+  .detail { padding-left: 0; border-left: 0; }
+  .action, .action:hover:not(:disabled) { width: 40px; padding: 0; justify-content: center; }
+  .label { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .action { transition: none; }
+}

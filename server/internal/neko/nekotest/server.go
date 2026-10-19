@@ -5,10 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -369,6 +373,24 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/room/screen/configurations" && r.Method == http.MethodGet:
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(Screens)
+	case r.URL.Path == "/api/room/screen/shot.jpg" && r.Method == http.MethodGet:
+		quality, err := strconv.Atoi(r.URL.Query().Get("quality"))
+		if err != nil || quality < 1 || quality > 100 {
+			http.Error(w, "invalid quality", http.StatusBadRequest)
+			return
+		}
+		screen := s.screen
+		if screen.Width == 0 || screen.Height == 0 {
+			screen = Screens[0] // the desktop's default before SetScreen
+		}
+		img := image.NewRGBA(image.Rect(0, 0, screen.Width, screen.Height))
+		for y := 0; y < screen.Height; y++ {
+			for x := 0; x < screen.Width; x++ {
+				img.SetRGBA(x, y, color.RGBA{R: uint8(x * 255 / screen.Width), G: uint8(y * 255 / screen.Height), B: 100, A: 255})
+			}
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		_ = jpeg.Encode(w, img, &jpeg.Options{Quality: quality})
 	case r.URL.Path == "/api/filetransfer" && r.Method == http.MethodDelete:
 		name := r.URL.Query().Get("filename")
 		switch {

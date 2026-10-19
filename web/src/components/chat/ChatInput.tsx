@@ -10,7 +10,8 @@ import styles from './ChatInput.module.css'
 
 export function ChatInput({ inputRef, onEdit }: { inputRef: RefObject<HTMLTextAreaElement | null>; onEdit: (id: number) => void }) {
   const store = useRoomStore()
-  const [text, setText] = useState('')
+  const [text, setText] = useState(() => store.chatDraft.peek())
+  useEffect(() => { store.chatDraft.value = text }, [store, text])
   const mentions = useMentionSuggestions(inputRef, text, setText)
   const [notice, setNotice] = useState('')
   const lastTyping = useRef(-Infinity)

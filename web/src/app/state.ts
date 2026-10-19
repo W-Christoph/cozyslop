@@ -19,10 +19,12 @@ export interface Preferences {
   chatAvatars: boolean
   chatScale: number // percent of the normal text size
   chatWidth: number // percent of the normal sidebar width
+  chatMediaHeight: number // tallest picture or video in chat, in px; 0: no limit
   volume: number // 0-100
   muted: boolean
   muteChatNotification: boolean
   showUsernames: boolean
+  outlineNames: boolean // names in the user list over the stream, in fullscreen
   transparentChat: boolean
   showLeaveJoinMsg: boolean
   showMuted: boolean // mark others who are muted or paused
@@ -33,6 +35,8 @@ export interface Preferences {
   manualLoadMedia: boolean
   shortcuts: boolean
   audioOnly: boolean
+  chatViewOnPause: boolean // chat takes the stream's place while it is paused
+  streamPreview: number // seconds between stills of the desktop in the chat view; 0: none
   askBeforePaste: boolean
 }
 
@@ -43,10 +47,12 @@ const defaultPreferences: Preferences = {
   chatAvatars: false,
   chatScale: 100,
   chatWidth: 100,
+  chatMediaHeight: 400,
   volume: 100,
   muted: false,
   muteChatNotification: true,
   showUsernames: true,
+  outlineNames: true,
   transparentChat: true,
   showLeaveJoinMsg: true,
   showMuted: true,
@@ -57,6 +63,8 @@ const defaultPreferences: Preferences = {
   manualLoadMedia: false,
   shortcuts: true,
   audioOnly: false,
+  chatViewOnPause: true,
+  streamPreview: 5,
   askBeforePaste: true,
 }
 

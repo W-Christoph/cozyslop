@@ -12,8 +12,9 @@ import { applyNameColors } from './nameColor'
 import { RoomTooltip } from '../room/RoomTooltip'
 import styles from './MessageGroup.module.css'
 
-export function MessageGroup({ messages, editing, onEdit, onEndEdit, onMedia, onLoad }: {
+export function MessageGroup({ messages, wide = false, editing, onEdit, onEndEdit, onMedia, onLoad }: {
   messages: readonly ChatMessage[]
+  wide?: boolean // the chat view: always pictures, in the modern style
   editing: number | null
   onEdit: (id: number) => void
   onEndEdit: () => void
@@ -56,7 +57,9 @@ export function MessageGroup({ messages, editing, onEdit, onEndEdit, onMedia, on
     ? author.avatarUrl || (author.anonymous ? '/png/default_avatar_on_alpha.png' : '/png/default_avatar.png')
     : first.avatarUrl
   const username = first.anonymous ? userIdentity(first.author) : author && userIdentity(author)
-  const { chatAvatars, chatStyle, manualLoadMedia } = preferences.value
+  const { manualLoadMedia } = preferences.value
+  const chatAvatars = wide || preferences.value.chatAvatars
+  const chatStyle = wide ? 'modern' : preferences.value.chatStyle
   useLayoutEffect(() => applyNameColors(bubble.current))
   const avatar = chatAvatars && chatStyle !== 'compact'
   return <div data-chat-bubble class={`${styles.message} ${avatar ? styles.withAvatar : ''}`} ref={bubble}>

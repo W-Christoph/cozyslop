@@ -1,5 +1,11 @@
 .media { display: block; width: 100%; }
+/* The wide chat of the chat view would make every picture huge. */
+[data-chat-wide] .media { max-width: 26em; }
+/* There the pictures line up with the text, as in a chat app. */
+[data-chat-wide] .preview img, [data-chat-wide] .preview video { margin-left: 0; object-position: left; }
 .preview, .preview:hover { padding: 0; background: transparent; display: block; width: 100%; }
-.preview img, .preview video { display: block; width: 100%; height: auto; border-radius: 0.2em; }
+/* A picture made narrower by the height limit sits in the middle. object-fit
+   keeps the shape while the limit applies before the picture is loaded. */
+.preview img, .preview video { display: block; width: 100%; height: auto; margin: 0 auto; border-radius: 0.2em; object-fit: contain; }
 .placeholder { width: 100%; padding: 5px 10px; background: var(--color-message-bg); border: 1px solid var(--color-orange); border-radius: 4px; font-size: 0.9em; color: var(--color-orange); text-align: center; }
 .placeholder:hover { background: var(--color-message-hover); }

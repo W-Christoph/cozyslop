@@ -297,6 +297,19 @@ window or opening a page; the server cuts it to one line of 200 characters
 and browsers show it as text. A neko without the helper has no title, and
 the tab shows the room's name.
 
+## Stream preview
+
+The chat view (below) shows a small still of the desktop instead of the
+stream. A tab sends `preview`; the server asks neko for a screenshot
+(`GET /api/room/screen/shot.jpg`, admin only, quality 80), shrinks it to fit
+320×180 and answers that tab with a JPEG data URL of about 5 kB
+(`hub/preview.go`). One shot is shared by every tab of the room for 1.5
+seconds, and requests that arrive meanwhile wait for the same capture, so
+the desktop is asked at most about once a second however many people look.
+Tabs ask only while they show the preview (every 2, 5 or 10 seconds, and not
+while hidden): nothing runs for a room nobody previews. An offline desktop
+or a failed shot answers an empty image.
+
 ## Deleting and playing files
 
 The Files window lists, uploads and downloads through neko's file transfer,

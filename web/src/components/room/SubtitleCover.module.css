@@ -1,0 +1,36 @@
+/* The area is the whole stream; the frame is the picture inside it,
+   letterboxed the same way as the video (object-fit: contain). */
+.area { position: absolute; inset: 0; container-type: size; pointer-events: none; }
+.frame {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(100cqw, 100cqh * var(--screen-ratio, 16 / 9));
+  height: min(100cqh, 100cqw / var(--screen-ratio, 16 / 9));
+}
+.cover {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: move;
+  outline: 1px dashed transparent;
+}
+.black { background: #000; }
+/* The copy is the size of the whole picture, moved so that its part under
+   the box shows in it. Dark behind, where the blur fades at the picture's edge. */
+.clip { position: absolute; inset: 0; overflow: hidden; background: #000; }
+.copy { position: absolute; max-width: none; object-fit: fill; filter: blur(var(--blur)); pointer-events: none; }
+/* The outline and handles only show while the pointer is on the box. */
+.cover:hover, .moving { outline-color: var(--color-crop-white); }
+.handle { position: absolute; width: 12px; height: 12px; margin: -6px; opacity: 0; }
+.cover:hover .handle, .moving .handle { opacity: 1; }
+.handle::after { content: ''; position: absolute; inset: 3px; background: var(--color-crop-white); border-radius: 50%; box-shadow: 0 0 2px #000; }
+.handle[data-edge='n'] { top: 0; left: 50%; cursor: ns-resize; }
+.handle[data-edge='s'] { top: 100%; left: 50%; cursor: ns-resize; }
+.handle[data-edge='e'] { top: 50%; left: 100%; cursor: ew-resize; }
+.handle[data-edge='w'] { top: 50%; left: 0; cursor: ew-resize; }
+.handle[data-edge='nw'] { top: 0; left: 0; cursor: nwse-resize; }
+.handle[data-edge='ne'] { top: 0; left: 100%; cursor: nesw-resize; }
+.handle[data-edge='sw'] { top: 100%; left: 0; cursor: nesw-resize; }
+.handle[data-edge='se'] { top: 100%; left: 100%; cursor: nwse-resize; }

@@ -10,6 +10,8 @@ export type Accent = 'orange' | 'blurple' | 'blue' | 'teal' | 'green' | 'pink' |
 // classic: CozyCast's bubbles; modern: flat, with room for pictures;
 // compact: one line per message.
 export type ChatStyle = 'classic' | 'modern' | 'compact'
+// Where the subtitle cover sits, as fractions of the picture.
+export interface CoverBox { x: number; y: number; width: number; height: number }
 
 // Per-browser preferences, persisted in localStorage.
 export interface Preferences {
@@ -38,6 +40,10 @@ export interface Preferences {
   chatViewOnPause: boolean // chat takes the stream's place while it is paused
   streamPreview: number // seconds between stills of the desktop in the chat view; 0: none
   askBeforePaste: boolean
+  subtitleCover: boolean // a toolbar button for a box over the subtitles
+  subtitleCoverStyle: 'blur' | 'black'
+  subtitleCoverBlur: number // px
+  subtitleCoverBox: CoverBox
 }
 
 const defaultPreferences: Preferences = {
@@ -66,6 +72,10 @@ const defaultPreferences: Preferences = {
   chatViewOnPause: true,
   streamPreview: 5,
   askBeforePaste: true,
+  subtitleCover: false,
+  subtitleCoverStyle: 'blur',
+  subtitleCoverBlur: 15,
+  subtitleCoverBox: { x: 0.1, y: 0.78, width: 0.8, height: 0.17 },
 }
 
 const PREFS_KEY = 'preferences'

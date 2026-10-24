@@ -3,6 +3,7 @@ import type { RoomStore } from '../../room/store'
 import { RestartButton } from '../room/RestartButton'
 import { RadioCards } from '../ui/RadioCards'
 import { Section, SettingRow, ToggleRow } from '../ui/Section'
+import { SubtitleCoverSection } from './SubtitleCoverSection'
 import styles from './RoomSection.module.css'
 
 function ListPreview({ left }: { left: boolean }) {
@@ -61,6 +62,7 @@ export function RoomSection({ room }: { room: RoomStore | null }) {
       <ToggleRow title="Ask before pasting into the desktop" description="Preview clipboard text before sharing it with the room."
         checked={prefs.askBeforePaste} onChange={(askBeforePaste) => updatePreferences({ askBeforePaste })} />
     </Section>
+    <SubtitleCoverSection />
     {restart && (
       <Section title="This room">
         <SettingRow title="Restart the room" description="Restarts the desktop for everyone, for when the stream or the browser is stuck.">

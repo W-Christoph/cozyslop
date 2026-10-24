@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'preact/hooks'
 import { MobileRemoteControls } from './MobileRemoteControls'
 import { RemoteScreen } from './RemoteScreen'
+import { SubtitleCover } from './SubtitleCover'
 import { DesktopUploadStatus, useDesktopDrop } from './DesktopUpload'
 import { useRoomStore } from './RoomContext'
 import styles from './VideoArea.module.css'
@@ -40,6 +41,7 @@ export function VideoArea({ hidden = false, disconnected, error, fullscreen }: {
         <DesktopUploadStatus />
         {error && <div role="alert" class={styles.error}>{error}</div>}
         <RemoteScreen mobile={mobile} pointer={pointer} video={video} onPlaybackBlocked={onPlaybackBlocked} />
+        <SubtitleCover />
         {paused && <span class={styles.status} role="status">Paused</span>}
         {!disconnected && (paused || blocked) ? (
           <button class={styles.play} aria-label={blocked ? 'Play stream' : 'Resume stream'} onClick={play}>

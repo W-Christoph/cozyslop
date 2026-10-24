@@ -3,6 +3,7 @@ import { shortcutKeys } from './shortcuts'
 import { RoomTooltip } from './RoomTooltip'
 import { MoreMenu } from './MoreMenu'
 import { IconButton } from './IconButton'
+import { coverShown } from './SubtitleCover'
 import { useRoomStore } from './RoomContext'
 import type { RoomWindow } from '../../pages/RoomPage'
 import styles from './Controls.module.css'
@@ -39,6 +40,8 @@ export function Controls({ fullscreen, userlistHidden, chatOpen, chatView, unrea
     <div class={`${styles.controls} ${fullscreen ? styles.fullscreen : ''} ${fullscreen && host ? styles.host : ''}`}>
       {!(fullscreen && host) && <div class={`${styles.group} ${styles.navigation}`}>
         <RoomTooltip label="Home"><a class={styles.home} href="/" aria-label="Home"><img src="/svg/home.svg" alt="" /></a></RoomTooltip>
+        {preferences.value.subtitleCover && <IconButton class={`${styles.quiet} ${coverShown.value ? styles.on : ''}`} icon="subtitles"
+          label={coverShown.value ? 'Hide subtitle cover' : 'Cover subtitles'} aria-pressed={coverShown.value} onClick={() => { coverShown.value = !coverShown.value }} />}
         {store.rights.value.upload && <IconButton class={`${styles.quiet} ${window === 'files' ? styles.on : uploading ? styles.uploading : ''}`} icon="folder" label="Files of the desktop"
           tooltip={uploading ? upload.message : undefined} style={uploading ? { '--fill': `${Math.round(upload.progress * 100)}%` } : undefined}
           aria-haspopup="dialog" onClick={() => onWindow('files')} />}

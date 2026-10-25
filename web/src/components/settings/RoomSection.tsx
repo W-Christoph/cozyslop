@@ -4,6 +4,7 @@ import { RestartButton } from '../room/RestartButton'
 import { RadioCards } from '../ui/RadioCards'
 import { Section, SettingRow, ToggleRow } from '../ui/Section'
 import { SubtitleCoverSection } from './SubtitleCoverSection'
+import { supportsStreamBuffer } from '../../neko/streamBuffer'
 import styles from './RoomSection.module.css'
 
 function ListPreview({ left }: { left: boolean }) {
@@ -19,6 +20,7 @@ function ListPreview({ left }: { left: boolean }) {
 // opened from one.
 export function RoomSection({ room }: { room: RoomStore | null }) {
   const prefs = preferences.value
+  const bufferSupported = supportsStreamBuffer()
   const restart = !!room && room.restartAvailable.value && (room.rights.value.trusted || room.rights.value.admin)
   return <>
     <Section title="User list" description="The people watching, shown next to the stream.">
@@ -55,6 +57,19 @@ export function RoomSection({ room }: { room: RoomStore | null }) {
         ]} />
     </Section>
     <Section title="Playback">
+      <SettingRow title="Stream buffer" description={bufferSupported
+        ? 'Smooth short network interruptions by keeping some audio and video in reserve. More buffering puts you behind live: controls feel delayed and chat may arrive ahead of the picture. The browser may use less or more than requested. Changes take effect gradually. Only affects you.'
+        : 'This browser does not support a custom stream buffer. Playback uses automatic buffering.'}>{null}</SettingRow>
+      <RadioCards name="streamBuffer" label="Stream buffer" columns={5} mobileColumns={2} disabled={!bufferSupported}
+        value={prefs.streamBuffer === null ? 'auto' : String(prefs.streamBuffer)}
+        onChange={(value) => updatePreferences({ streamBuffer: value === 'auto' ? null : Number(value) })}
+        options={[
+          { value: 'auto', label: 'Auto' },
+          { value: '500', label: '0.5 s' },
+          { value: '1000', label: '1 s' },
+          { value: '2000', label: '2 s' },
+          { value: '4000', label: '4 s' },
+        ]} />
       <ToggleRow title="Sound only" description="Receive the room's sound without the picture. Saves bandwidth, for music or a slow connection."
         checked={prefs.audioOnly} onChange={(audioOnly) => updatePreferences({ audioOnly })} />
     </Section>

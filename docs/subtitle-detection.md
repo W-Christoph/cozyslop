@@ -36,12 +36,12 @@ Synthetic headless Chromium testing on the development machine measured about
 this into a device performance guarantee. The browser test prints a fresh
 measurement. Real-film accuracy and mobile performance remain unmeasured.
 
-Detected bounds expand immediately, retain the last 600 ms of coverage, then
-ease inward with a 400 ms time constant. Each box has independent tracking,
+Detected bounds expand immediately, retain the last 200 ms of coverage, then
+ease inward with a 100 ms time constant. Each box has independent tracking,
 reset when detection stops or the search boxes change.
 
 A new subtitle can show for the sampling interval plus processing time before
-coverage starts. At least two consecutive misses and 500 ms since the last
+coverage starts. At least two consecutive misses and 200 ms since the last
 detection remove a cover, preserving the flicker protection at faster sample rates; slow
 devices can therefore also retain covers longer. This is not frame-exact masking.
 

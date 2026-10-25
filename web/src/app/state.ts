@@ -37,6 +37,7 @@ export interface Preferences {
   manualLoadMedia: boolean
   shortcuts: boolean
   audioOnly: boolean
+  streamBuffer: number | null // target delay in ms; null lets the browser decide
   chatViewOnPause: boolean // chat takes the stream's place while it is paused
   streamPreview: number // seconds between stills of the desktop in the chat view; 0: none
   askBeforePaste: boolean
@@ -74,6 +75,7 @@ const defaultPreferences: Preferences = {
   manualLoadMedia: false,
   shortcuts: true,
   audioOnly: false,
+  streamBuffer: null,
   chatViewOnPause: true,
   streamPreview: 5,
   askBeforePaste: true,

@@ -4,11 +4,61 @@ import { createServer } from 'vite'
 
 // Load the TypeScript module through Vite, like the other tests.
 const server = await createServer({ configFile: false, server: { middlewareMode: true } })
-let mod
+let mod, NekoClient, buffer
 try {
   mod = await server.ssrLoadModule('/src/components/room/admin/streamOptions.ts')
+  ;({ NekoClient } = await server.ssrLoadModule('/src/neko/client.ts'))
+  buffer = await server.ssrLoadModule('/src/neko/streamBuffer.ts')
 } finally { await server.close() }
 const { bitrates, parseScreen, parseStream, pickRate, pickStream, presets, ratesFor, resolutions, scaledSize, scales } = mod
+
+test('stream buffer updates audio and video live and Auto restores browser defaults', () => {
+  const client = new NekoClient()
+  const audio = { jitterBufferTarget: null }, video = { jitterBufferTarget: null }
+  client.peer = { getReceivers: () => [audio, video] }
+  for (const target of [500, 1000, 2000, 4000, null]) {
+    client.setStreamBuffer(target)
+    assert.equal(audio.jitterBufferTarget, target)
+    assert.equal(video.jitterBufferTarget, target)
+  }
+})
+
+test('new receivers retain the selected buffer after peer replacement, including sound only', async (t) => {
+  const previous = globalThis.RTCPeerConnection
+  globalThis.RTCPeerConnection = class {
+    getReceivers() { return [] }
+  }
+  t.after(() => {
+    if (previous === undefined) delete globalThis.RTCPeerConnection
+    else globalThis.RTCPeerConnection = previous
+  })
+  const client = new NekoClient()
+  client.answer = async () => {}
+  client.setStreamBuffer(2000)
+  for (const audioOnly of [false, true]) {
+    client.audioOnly = audioOnly
+    await client.createPeer({ sdp: '' })
+    for (const kind of ['audio', 'video']) {
+      const receiver = { jitterBufferTarget: null }
+      client.peer.ontrack({ receiver, streams: [], track: { kind } })
+      assert.equal(receiver.jitterBufferTarget, 2000)
+    }
+  }
+})
+
+test('unsupported or rejecting receivers do not prevent playback', () => {
+  const unsupported = {}
+  buffer.applyStreamBuffer(unsupported, 1000)
+  assert.equal('jitterBufferTarget' in unsupported, false)
+  const rejecting = { set jitterBufferTarget(_) { throw new Error('unsupported') } }
+  assert.doesNotThrow(() => buffer.applyStreamBuffer(rejecting, 1000))
+})
+
+test('invalid buffer preferences cannot exceed browser limits', () => {
+  for (const invalid of [null, undefined, NaN, Infinity, '1000']) assert.equal(buffer.normalizeStreamBuffer(invalid), null)
+  assert.equal(buffer.normalizeStreamBuffer(-1), 0)
+  assert.equal(buffer.normalizeStreamBuffer(5000), 4000)
+})
 
 const screens = ['1920x1080@60', '1920x1080@30', '1920x1080@25', '1280x720@60', '1280x720@30', '1368x768@25', '800x600@60'].map(parseScreen)
 const streams = ['b2500-s100-veryfast', 'b1000-s100-veryfast', 'b1000-s50-veryfast', 'b2500-s50-veryfast', 'b4000-s100-veryfast',

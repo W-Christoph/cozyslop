@@ -71,7 +71,7 @@ export function RoomPage() {
   useRoomPresence()
   useAwayLine()
   const files = store.rights.value.upload
-  const { audioOnly, chatWidth, chatViewOnPause } = preferences.value
+  const { audioOnly, chatWidth, chatViewOnPause, streamBuffer } = preferences.value
   // Chat view: with no picture (paused, or sound only), chat takes the
   // stream's place. Not in fullscreen, which is for watching.
   const chatView = !fullscreen && (((store.paused.value || store.audioOnly.value) && chatViewOnPause) || store.desktopOffline.value)
@@ -86,6 +86,7 @@ export function RoomPage() {
     if ((!admin && roomWindow === 'settings') || (!files && roomWindow === 'files')) setRoomWindow(null)
   }, [admin, files, roomWindow])
   useEffect(() => { store.setAudioOnly(audioOnly) }, [store, audioOnly])
+  useEffect(() => { store.neko.setStreamBuffer(streamBuffer) }, [store, streamBuffer])
   useEffect(() => () => { settingsOpen.value = null }, [])
   useEffect(() => { setHover(null) }, [fullscreen, left, userlistHidden, idle])
   const overlay = personalSettings || roomWindow !== null

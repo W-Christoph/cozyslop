@@ -285,6 +285,19 @@ starts with the desktop it is given. Caches are left out. The file holds
 the room browser's logins: delete it on both sides afterwards. Accounts,
 chat and room settings live on the server and do not move with it.
 
+### Local stream buffering
+
+Settings → Room → Playback → Stream buffer offers Auto (the default), 0.5,
+1, 2, or 4 seconds. The preference is saved per browser and applies to both
+audio and video, including sound-only playback and reconnects. Changes apply
+gradually without restarting the stream.
+
+Extra buffering can smooth short network interruptions, but puts your playback
+behind live: desktop controls feel delayed and chat reactions may arrive ahead
+of the picture. This uses WebRTC's `jitterBufferTarget`, a browser-managed target,
+not a guaranteed reserve or protection against long outages. Browsers without
+support use automatic buffering and show the setting disabled.
+
 ## Moving the server
 
 Everything the server knows (accounts, logins, chat, room settings,

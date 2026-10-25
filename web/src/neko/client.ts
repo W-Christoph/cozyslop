@@ -4,6 +4,7 @@
 // Based on demodesk/neko-client (Apache-2.0), without Vue or a state store.
 
 import { Emitter } from './emitter'
+import { applyStreamBuffer, normalizeStreamBuffer } from './streamBuffer'
 
 export type NekoStatus = 'connecting' | 'connected' | 'disconnected'
 
@@ -65,6 +66,7 @@ export class NekoClient extends Emitter<NekoEvents> {
   private path = ''
   private token = ''
   private audioOnly = false
+  private streamBuffer: number | null = null
   private video = ''
   private peer?: RTCPeerConnection
   private channel?: RTCDataChannel
@@ -110,6 +112,15 @@ export class NekoClient extends Emitter<NekoEvents> {
   disconnect() {
     this.teardown()
     this.setStatus('disconnected')
+  }
+
+  // Keep the preference across reconnects and apply changes without
+  // interrupting playback. Auto restores the browser's own target.
+  setStreamBuffer(milliseconds: number | null) {
+    this.streamBuffer = normalizeStreamBuffer(milliseconds)
+    for (const receiver of this.peer?.getReceivers() ?? []) {
+      applyStreamBuffer(receiver, this.streamBuffer)
+    }
   }
 
   // ---- control ---------------------------------------------------------
@@ -324,6 +335,7 @@ export class NekoClient extends Emitter<NekoEvents> {
       }
     }
     peer.ontrack = (e) => {
+      applyStreamBuffer(e.receiver, this.streamBuffer)
       if (!e.streams[0]) return
       // Sound only still gets an empty video track, and Chromium does not
       // start a video element until that track has a frame: no sound. Sound

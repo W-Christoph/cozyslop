@@ -42,6 +42,7 @@ export interface Preferences {
   askBeforePaste: boolean
   subtitleCover: boolean // a toolbar button for a box over the subtitles
   subtitleCoverDetection: 'manual' | 'region' | 'box'
+  subtitleCoverDetectionInterval: number // ms between checks
   subtitleCoverStyle: 'blur' | 'black'
   subtitleCoverBlur: number // px
   subtitleCoverFeather: number // px, extends outside the fully covered box
@@ -78,6 +79,7 @@ const defaultPreferences: Preferences = {
   askBeforePaste: true,
   subtitleCover: false,
   subtitleCoverDetection: 'manual',
+  subtitleCoverDetectionInterval: 50,
   subtitleCoverStyle: 'blur',
   subtitleCoverBlur: 15,
   subtitleCoverFeather: 0,

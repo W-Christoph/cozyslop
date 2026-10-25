@@ -16,7 +16,6 @@
   cursor: move;
   outline: 1px dashed transparent;
 }
-.search { outline-color: rgb(255 255 255 / 20%); }
 /* The copy is the size of the whole picture, moved so that its part under
    the box shows in it. Dark behind, where the blur fades at the picture's edge. */
 .clip { pointer-events: none; position: absolute; inset: 0; overflow: hidden; background: #000; }

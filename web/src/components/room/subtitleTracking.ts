@@ -5,16 +5,17 @@ import type { CoverBox } from '../../app/state'
 export function createSubtitleTracker() {
   let recent: { box: CoverBox; time: number }[] = []
   let shown: CoverBox | null = null
-  let misses = 0, lastTime = 0
+  let misses = 0, lastTime = 0, lastDetection = 0
   return {
     update(box: CoverBox | null, now: number): CoverBox | null {
       const elapsed = Math.max(0, now - lastTime)
       lastTime = now
       if (!box) {
-        if (++misses >= 2) { recent = []; shown = null }
+        if (++misses >= 2 && now - lastDetection >= 500) { recent = []; shown = null }
         return shown
       }
       misses = 0
+      lastDetection = now
       recent = recent.filter(sample => now - sample.time < 600)
       recent.push({ box, time: now })
       const left = Math.min(...recent.map(s => s.box.x))

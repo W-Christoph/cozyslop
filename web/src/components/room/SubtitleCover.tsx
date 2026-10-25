@@ -41,7 +41,7 @@ export function SubtitleCover({ video }: { video: RefObject<HTMLVideoElement | n
   const active = prefs.subtitleCover && coverShown.value
   const automatic = prefs.subtitleCoverDetection === 'region' || prefs.subtitleCoverDetection === 'box'
   const boxes = active ? [fit(prefs.subtitleCoverBox), ...(prefs.subtitleCoverTwoBoxes ? [fit(prefs.subtitleCoverSecondBox)] : [])] : []
-  const detection = useSubtitleDetection(video, boxes, active && automatic && !store.paused.value && !store.audioOnly.value, store.stream.value)
+  const detection = useSubtitleDetection(video, boxes, active && automatic && !store.paused.value && !store.audioOnly.value, store.stream.value, prefs.subtitleCoverDetectionInterval)
   if (!active) return null
   return <>
     {boxes.map((_, index) => <Cover key={index} boxKey={index === 0 ? 'subtitleCoverBox' : 'subtitleCoverSecondBox'}
@@ -111,7 +111,7 @@ function Cover({ boxKey, automatic, detected }: { boxKey: 'subtitleCoverBox' | '
   return (
     <div class={styles.area}>
       <div ref={frame} class={styles.frame}>
-        <div class={`${styles.cover} ${automatic ? styles.search : ''} ${moving ? styles.moving : ''}`}
+        <div class={`${styles.cover} ${moving ? styles.moving : ''}`}
           title="Subtitle cover: drag to move, drag an edge to resize"
           style={{ left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.width * 100}%`, height: `${box.height * 100}%`, '--blur': `${subtitleCoverBlur}px`, '--feather': `${subtitleCoverFeather}px` }}
           onPointerDown={start([])}>

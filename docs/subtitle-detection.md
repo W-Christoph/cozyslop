@@ -20,8 +20,9 @@ positives. Use manual mode when dependable coverage matters.
 
 One lazy browser worker handles both boxes. Each crop is downscaled, preserving
 aspect ratio, to at most 640 × 240 pixels without upscaling. There is at most one
-request in flight, at most four checks per second, and slow checks increase the
-interval. Hidden tabs, hidden video, paused playback and audio-only mode do not
+request in flight. The detection interval is adjustable in Settings → Room →
+Subtitle cover from 25 to 250 ms in 25 ms steps, defaulting to 50 ms, and is saved
+per browser. Slow checks increase the interval. Hidden tabs, hidden video, paused playback and audio-only mode do not
 sample. Disabling the feature terminates the worker. Errors or a three-second
 worker timeout switch to full covers.
 
@@ -40,7 +41,8 @@ ease inward with a 400 ms time constant. Each box has independent tracking,
 reset when detection stops or the search boxes change.
 
 A new subtitle can show for the sampling interval plus processing time before
-coverage starts. Two consecutive misses remove a cover, reducing flicker; slow
+coverage starts. At least two consecutive misses and 500 ms since the last
+detection remove a cover, preserving the flicker protection at faster sample rates; slow
 devices can therefore also retain covers longer. This is not frame-exact masking.
 
 ## Verification

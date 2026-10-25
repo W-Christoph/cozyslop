@@ -84,6 +84,14 @@ test('brief misses hold coverage, two misses clear it, and boxes track independe
   const restarted = first.update(small, 750)
   assert.ok(Math.abs(restarted.width - small.width) < 1e-9)
 })
+test('faster sampling preserves coverage through brief detection misses', () => {
+  const tracker = createSubtitleTracker()
+  tracker.update(wide, 0)
+  for (let now = 50; now < 500; now += 50) contains(tracker.update(null, now), wide)
+  contains(tracker.update(small, 500), wide)
+  for (let now = 550; now < 1000; now += 50) contains(tracker.update(null, now), small)
+  assert.equal(tracker.update(null, 1000), null)
+})
 test('a subtitle moving outside old bounds is covered immediately on every edge', () => {
   const tracker = createSubtitleTracker()
   tracker.update(small, 0)

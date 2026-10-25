@@ -5,9 +5,10 @@ import { createSubtitleTracker } from './subtitleTracking'
 
 type Detection = { boxes: (CoverBox | null)[]; failed: boolean; milliseconds: number }
 
-// One worker for both boxes, no queued frames, <= 4 samples/second. Pixel
+// One worker for both boxes, no queued frames, configurable sampling. Pixel
 // extraction stays on the UI thread; connected-component analysis does not.
-export function useSubtitleDetection(video: RefObject<HTMLVideoElement | null>, boxes: CoverBox[], enabled: boolean, stream: MediaStream | null) {
+export function useSubtitleDetection(video: RefObject<HTMLVideoElement | null>, boxes: CoverBox[], enabled: boolean, stream: MediaStream | null, interval = 50) {
+  const sampleInterval = Number.isFinite(interval) ? Math.max(25, Math.min(250, interval)) : 50
   const [result, setResult] = useState<Detection>({ boxes: [], failed: false, milliseconds: 0 })
   const coordinates = JSON.stringify(boxes)
   useEffect(() => {
@@ -59,11 +60,11 @@ export function useSubtitleDetection(video: RefObject<HTMLVideoElement | null>, 
         setResult({ boxes: tracked, failed: false, milliseconds: event.data.milliseconds })
         // Slow devices automatically get fewer samples; never build a backlog.
         const elapsed = performance.now() - started
-        timer = window.setTimeout(sample, Math.max(250 - elapsed, elapsed * 4))
+        timer = window.setTimeout(sample, Math.max(sampleInterval - elapsed, elapsed * 4))
       }
       sample()
     } catch { fail() }
     return () => { stopped = true; clearTimeout(timer); clearTimeout(watchdog); worker?.terminate() }
-  }, [video, coordinates, enabled, stream])
+  }, [video, coordinates, enabled, stream, sampleInterval])
   return result
 }

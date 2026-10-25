@@ -28,7 +28,9 @@ worker timeout switch to full covers.
 
 Frame copying/readback happens on the main thread; pixel analysis runs in the
 worker. Frames stay in the browser. There is no OCR model download, server
-processing, or additional stream connection. Blur still uses local video layers.
+processing, or additional stream connection. Blur uses small transparent overlays
+with CSS backdrop filtering and feathered masks over the displayed video, with
+no extra video elements. Browsers without backdrop filtering use black covers.
 Analysis time is not a measurement of total CPU/GPU or battery use.
 
 Synthetic headless Chromium testing on the development machine measured about
@@ -56,5 +58,9 @@ PLAYWRIGHT_MODULE=/path/to/playwright/test node web/tests/subtitle-browser.cjs
 
 The browser test checks regional and whole-box coverage, text disappearing,
 outward feather geometry, two boxes, worker cleanup, and worker-failure fallback.
+Screenshot pixel checks verify both boxes blur a changing video, feather into
+the sharp picture, and switch between blur, black covers, and unfeathered edges
+without creating extra video elements. These checks currently run in Chromium;
+GPU cost and behavior in other browsers still need measurement.
 It requires an installed Chromium for Playwright. Set `SUBTITLE_TEST_URL` if Vite
 is not at `http://127.0.0.1:5173`.

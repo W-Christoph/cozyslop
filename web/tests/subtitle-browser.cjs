@@ -34,6 +34,12 @@ const assert = require('node:assert/strict')
         ctx.strokeStyle = '#000'; ctx.fillStyle = '#fff'
         ctx.strokeText(text, 640, 620); ctx.fillText(text, 640, 620)
       }
+      window.drawPattern = (color) => {
+        for (let x = 0; x < canvas.width; x += 8) {
+          ctx.fillStyle = x % 16 ? color : '#000'
+          ctx.fillRect(x, 0, 8, canvas.height)
+        }
+      }
       window.drawSubtitle()
       const stream = canvas.captureStream(30)
       const video = document.createElement('video')
@@ -75,6 +81,49 @@ const assert = require('node:assert/strict')
     await expect(clip).toHaveCount(0, { timeout: 5000 })
     await page.evaluate(() => window.subtitlePrefs.updatePreferences({ subtitleCoverDetection: 'manual', subtitleCoverTwoBoxes: true }))
     await expect(clip).toHaveCount(2)
+    // Inspect rendered pixels: CSS support alone cannot prove that a playing
+    // video is actually blurred, feathered, and updated by the compositor.
+    await page.evaluate(() => {
+      window.subtitlePrefs.updatePreferences({
+        subtitleCoverStyle: 'blur', subtitleCoverBlur: 15,
+        subtitleCoverBox: { x: .2, y: .25, width: .25, height: .15 },
+        subtitleCoverSecondBox: { x: .6, y: .6, width: .25, height: .15 },
+      })
+      window.drawPattern('#f00000')
+    })
+    await expect(page.locator('video')).toHaveCount(1)
+    const pixels = async () => {
+      const bounds = await cover.boundingBox()
+      const screenshot = (await page.screenshot()).toString('base64')
+      return page.evaluate(async ({ screenshot, bounds }) => {
+        const image = await createImageBitmap(new Blob([Uint8Array.from(atob(screenshot), c => c.charCodeAt(0))], { type: 'image/png' }))
+        const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
+        const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0); image.close()
+        const read = (x, y, width, height) => {
+          const { data } = ctx.getImageData(Math.round(x), Math.round(y), width, height)
+          const channels = [0, 1, 2].map(c => Array.from({ length: data.length / 4 }, (_, i) => data[i * 4 + c]))
+          return { range: Math.max(...channels[0]) - Math.min(...channels[0]), mean: channels.map(values => values.reduce((a, b) => a + b, 0) / values.length) }
+        }
+        const x = bounds.x, y = bounds.y + bounds.height / 2
+        // With the fixed normalized coordinates above, box 2 is 320px right
+        // and 157.5px down from box 1 on the 800×450 picture.
+        return { core: read(x + 40, y, 80, 4), feather: read(x - 16, y, 12, 4), outside: read(x - 80, y, 40, 4), second: read(x + 360, y + 157.5, 80, 4) }
+      }, { screenshot, bounds })
+    }
+    await expect.poll(async () => (await pixels()).core.range).toBeLessThan(15)
+    const red = await pixels()
+    assert.ok(red.outside.range > 200, 'Video outside the boxes should stay sharp')
+    assert.ok(red.core.mean[0] > 90, 'Blur should preserve the video rather than paint a black box')
+    assert.ok(red.second.range < 15 && red.second.mean[0] > 90, 'Both boxes should blur the video')
+    assert.ok(red.feather.range > 20 && red.feather.range < red.outside.range - 20, 'Feather should blend sharp and blurred video')
+    await page.evaluate(() => window.drawPattern('#0000f0'))
+    await expect.poll(async () => (await pixels()).core.mean[2]).toBeGreaterThan(90)
+    assert.ok((await pixels()).core.mean[0] < 10, 'Blur should follow changing video frames')
+    await page.evaluate(() => window.subtitlePrefs.updatePreferences({ subtitleCoverStyle: 'black' }))
+    await expect.poll(async () => (await pixels()).core.mean[2]).toBeLessThan(1)
+    await page.evaluate(() => window.subtitlePrefs.updatePreferences({ subtitleCoverStyle: 'blur', subtitleCoverFeather: 0 }))
+    await expect.poll(async () => (await clip.first().boundingBox()).width).toBe(200)
+    await expect.poll(async () => (await pixels()).core.mean[2]).toBeGreaterThan(90)
     await page.evaluate(() => { window.subtitlePrefs.coverShown.value = false })
     await expect(clip).toHaveCount(0)
     await expect.poll(() => page.evaluate(() => window.subtitleWorkers.active)).toBe(0)
@@ -86,7 +135,7 @@ const assert = require('node:assert/strict')
     })
     await expect(clip).toHaveCount(2)
     assert.deepEqual(errors, [])
-    console.log('PASS: real canvas text, regional/full-box detection, disappearance, outward feather, two boxes, toolbar off')
+    console.log('PASS: real canvas text, regional/full-box detection, disappearance, two backdrop blur boxes, rendered feather, changing video, black/sharp covers, toolbar off')
     // Synthetic analysis benchmark; excludes frame readback and GPU blur.
     const timing = await page.evaluate(async () => {
       const { detectSubtitle } = await import('/src/components/room/subtitleDetection.ts')

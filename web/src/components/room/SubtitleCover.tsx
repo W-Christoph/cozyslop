@@ -50,8 +50,6 @@ export function SubtitleCover({ video }: { video: RefObject<HTMLVideoElement | n
 }
 
 function Cover({ boxKey, automatic, detected }: { boxKey: 'subtitleCoverBox' | 'subtitleCoverSecondBox'; automatic: boolean; detected: CoverBox | null }) {
-  const store = useRoomStore()
-  const stream = store.stream.value
   const { subtitleCoverStyle, subtitleCoverBlur, subtitleCoverFeather } = preferences.value
   const frame = useRef<HTMLDivElement>(null)
   // The box while it is being dragged; saved when let go.
@@ -80,7 +78,6 @@ function Cover({ boxKey, automatic, detected }: { boxKey: 'subtitleCoverBox' | '
   const padX = rect?.width ? feather / (rect.width * box.width) : 0
   const padY = rect?.height ? feather / (rect.height * box.height) : 0
   const visual = { x: region.x - padX, y: region.y - padY, width: region.width + padX * 2, height: region.height + padY * 2 }
-  const picture = { x: box.x + visual.x * box.width, y: box.y + visual.y * box.height, width: visual.width * box.width, height: visual.height * box.height }
   const visible = !automatic || !!detected || !!moving
 
   const start = (edges: Edge[]) => (e: PointerEvent) => {
@@ -115,15 +112,10 @@ function Cover({ boxKey, automatic, detected }: { boxKey: 'subtitleCoverBox' | '
           title="Subtitle cover: drag to move, drag an edge to resize"
           style={{ left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.width * 100}%`, height: `${box.height * 100}%`, '--blur': `${subtitleCoverBlur}px`, '--feather': `${subtitleCoverFeather}px` }}
           onPointerDown={start([])}>
-          {/* Blur: a blurred copy of the stream, clipped to the box. Browsers
-              do not reliably apply backdrop-filter over a playing video. */}
-          {visible && <div class={`${styles.clip} ${subtitleCoverStyle === 'blur' && subtitleCoverFeather > 0 ? styles.feather : ''}`}
-            style={{ left: `${visual.x * 100}%`, top: `${visual.y * 100}%`, width: `${visual.width * 100}%`, height: `${visual.height * 100}%` }}>
-            {subtitleCoverStyle === 'blur' &&
-            <video class={styles.copy} muted autoplay playsInline aria-hidden="true"
-              ref={(el) => { if (el && el.srcObject !== stream) el.srcObject = stream }}
-              style={{ left: `${-picture.x / picture.width * 100}%`, top: `${-picture.y / picture.height * 100}%`, width: `${100 / picture.width}%`, height: `${100 / picture.height}%` }} />}
-          </div>}
+          {/* Filter the displayed picture directly; mask only the visual so
+              the fully covered core and drag handles keep their geometry. */}
+          {visible && <div class={`${styles.clip} ${subtitleCoverStyle === 'blur' ? styles.blur : ''} ${subtitleCoverStyle === 'blur' && subtitleCoverFeather > 0 ? styles.feather : ''}`}
+            style={{ left: `${visual.x * 100}%`, top: `${visual.y * 100}%`, width: `${visual.width * 100}%`, height: `${visual.height * 100}%` }} />}
           {HANDLES.map((edges) => <span key={edges.join('')} class={styles.handle} data-edge={edges.join('')} onPointerDown={start(edges)} />)}
         </div>
       </div>

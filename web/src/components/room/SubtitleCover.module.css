@@ -6,8 +6,8 @@
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: min(100cqw, 100cqh * var(--screen-ratio, 16 / 9));
-  height: min(100cqh, 100cqw / var(--screen-ratio, 16 / 9));
+  width: min(100cqw, 100cqh * (var(--screen-ratio, 16 / 9)));
+  height: min(100cqh, 100cqw / (var(--screen-ratio, 16 / 9)));
 }
 .cover {
   position: absolute;
@@ -16,9 +16,16 @@
   cursor: move;
   outline: 1px dashed transparent;
 }
-/* The copy is the size of the whole picture, moved so that its part under
-   the box shows in it. Dark behind, where the blur fades at the picture's edge. */
 .clip { pointer-events: none; position: absolute; inset: 0; overflow: hidden; background: #000; }
+.blur {
+  background: transparent;
+  -webkit-backdrop-filter: blur(var(--blur));
+  backdrop-filter: blur(var(--blur));
+}
+/* Keep text covered on browsers without backdrop filtering. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .blur { background: #000; }
+}
 /* Intersect horizontal and vertical fades; cap each at half the box size.
    Only the picture is masked, leaving the drag handles fully visible. */
 .feather {
@@ -27,7 +34,6 @@
     linear-gradient(to bottom, transparent, #000 min(var(--feather), 50%), #000 max(calc(100% - var(--feather)), 50%), transparent);
   mask-composite: intersect;
 }
-.copy { position: absolute; max-width: none; object-fit: fill; filter: blur(var(--blur)); pointer-events: none; }
 /* The outline and handles only show while the pointer is on the box. */
 .cover:hover, .moving { outline-color: var(--color-crop-white); }
 .handle { position: absolute; width: 12px; height: 12px; margin: -6px; opacity: 0; }

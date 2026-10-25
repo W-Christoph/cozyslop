@@ -1,6 +1,6 @@
 /* The area is the whole stream; the frame is the picture inside it,
    letterboxed the same way as the video (object-fit: contain). */
-.area { position: absolute; inset: 0; container-type: size; pointer-events: none; }
+.area { position: absolute; inset: 0; container-type: size; pointer-events: none; overflow: hidden; }
 .frame {
   position: absolute;
   left: 50%;
@@ -16,10 +16,18 @@
   cursor: move;
   outline: 1px dashed transparent;
 }
-.black { background: #000; }
+.search { outline-color: rgb(255 255 255 / 20%); }
 /* The copy is the size of the whole picture, moved so that its part under
    the box shows in it. Dark behind, where the blur fades at the picture's edge. */
-.clip { position: absolute; inset: 0; overflow: hidden; background: #000; }
+.clip { pointer-events: none; position: absolute; inset: 0; overflow: hidden; background: #000; }
+/* Intersect horizontal and vertical fades; cap each at half the box size.
+   Only the picture is masked, leaving the drag handles fully visible. */
+.feather {
+  mask-image:
+    linear-gradient(to right, transparent, #000 min(var(--feather), 50%), #000 max(calc(100% - var(--feather)), 50%), transparent),
+    linear-gradient(to bottom, transparent, #000 min(var(--feather), 50%), #000 max(calc(100% - var(--feather)), 50%), transparent);
+  mask-composite: intersect;
+}
 .copy { position: absolute; max-width: none; object-fit: fill; filter: blur(var(--blur)); pointer-events: none; }
 /* The outline and handles only show while the pointer is on the box. */
 .cover:hover, .moving { outline-color: var(--color-crop-white); }

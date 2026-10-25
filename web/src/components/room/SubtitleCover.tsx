@@ -1,5 +1,7 @@
+import type { RefObject } from 'preact'
+import { useSubtitleDetection } from './useSubtitleDetection'
 import { signal } from '@preact/signals'
-import { useRef, useState } from 'preact/hooks'
+import { useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { preferences, updatePreferences, type CoverBox } from '../../app/state'
 import { useRoomStore } from './RoomContext'
 import styles from './SubtitleCover.module.css'
@@ -33,15 +35,53 @@ function drag(box: CoverBox, edges: Edge[], dx: number, dy: number): CoverBox {
   return { x, y, width, height }
 }
 
-export function SubtitleCover() {
+export function SubtitleCover({ video }: { video: RefObject<HTMLVideoElement | null> }) {
+  const store = useRoomStore()
+  const prefs = preferences.value
+  const active = prefs.subtitleCover && coverShown.value
+  const automatic = prefs.subtitleCoverDetection === 'region' || prefs.subtitleCoverDetection === 'box'
+  const boxes = active ? [fit(prefs.subtitleCoverBox), ...(prefs.subtitleCoverTwoBoxes ? [fit(prefs.subtitleCoverSecondBox)] : [])] : []
+  const detection = useSubtitleDetection(video, boxes, active && automatic && !store.paused.value && !store.audioOnly.value, store.stream.value)
+  if (!active) return null
+  return <>
+    {boxes.map((_, index) => <Cover key={index} boxKey={index === 0 ? 'subtitleCoverBox' : 'subtitleCoverSecondBox'}
+      automatic={automatic && !detection.failed} detected={detection.boxes[index] ?? null} />)}
+  </>
+}
+
+function Cover({ boxKey, automatic, detected }: { boxKey: 'subtitleCoverBox' | 'subtitleCoverSecondBox'; automatic: boolean; detected: CoverBox | null }) {
   const store = useRoomStore()
   const stream = store.stream.value
-  const { subtitleCover, subtitleCoverStyle, subtitleCoverBlur, subtitleCoverBox } = preferences.value
+  const { subtitleCoverStyle, subtitleCoverBlur, subtitleCoverFeather } = preferences.value
   const frame = useRef<HTMLDivElement>(null)
   // The box while it is being dragged; saved when let go.
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
+  useLayoutEffect(() => {
+    const el = frame.current
+    if (!el) return
+    const update = () => {
+      const { width, height } = el.getBoundingClientRect()
+      setFrameSize({ width, height })
+    }
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    update()
+    return () => observer.disconnect()
+  }, [])
   const [moving, setMoving] = useState<CoverBox | null>(null)
-  if (!subtitleCover || !coverShown.value) return null
-  const box = moving ?? fit(subtitleCoverBox)
+  const box = moving ?? fit(preferences.value[boxKey])
+
+  const full = { x: 0, y: 0, width: 1, height: 1 }
+  const region = !automatic || moving || preferences.value.subtitleCoverDetection === 'box' ? full : detected ?? full
+  // The draggable box (or detected region) is the fully covered core.
+  // Add feathering outside it without changing its saved coordinates.
+  const rect = frameSize
+  const feather = subtitleCoverStyle === 'blur' ? subtitleCoverFeather : 0
+  const padX = rect?.width ? feather / (rect.width * box.width) : 0
+  const padY = rect?.height ? feather / (rect.height * box.height) : 0
+  const visual = { x: region.x - padX, y: region.y - padY, width: region.width + padX * 2, height: region.height + padY * 2 }
+  const picture = { x: box.x + visual.x * box.width, y: box.y + visual.y * box.height, width: visual.width * box.width, height: visual.height * box.height }
+  const visible = !automatic || !!detected || !!moving
 
   const start = (edges: Edge[]) => (e: PointerEvent) => {
     const rect = frame.current?.getBoundingClientRect()
@@ -60,7 +100,7 @@ export function SubtitleCover() {
       target.removeEventListener('pointermove', move)
       target.removeEventListener('pointerup', end)
       target.removeEventListener('pointercancel', end)
-      updatePreferences({ subtitleCoverBox: last })
+      updatePreferences({ [boxKey]: last })
       setMoving(null)
     }
     target.addEventListener('pointermove', move)
@@ -71,16 +111,18 @@ export function SubtitleCover() {
   return (
     <div class={styles.area}>
       <div ref={frame} class={styles.frame}>
-        <div class={`${styles.cover} ${subtitleCoverStyle === 'black' ? styles.black : ''} ${moving ? styles.moving : ''}`}
+        <div class={`${styles.cover} ${automatic ? styles.search : ''} ${moving ? styles.moving : ''}`}
           title="Subtitle cover: drag to move, drag an edge to resize"
-          style={{ left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.width * 100}%`, height: `${box.height * 100}%`, '--blur': `${subtitleCoverBlur}px` }}
+          style={{ left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.width * 100}%`, height: `${box.height * 100}%`, '--blur': `${subtitleCoverBlur}px`, '--feather': `${subtitleCoverFeather}px` }}
           onPointerDown={start([])}>
           {/* Blur: a blurred copy of the stream, clipped to the box. Browsers
               do not reliably apply backdrop-filter over a playing video. */}
-          {subtitleCoverStyle === 'blur' && <div class={styles.clip}>
+          {visible && <div class={`${styles.clip} ${subtitleCoverStyle === 'blur' && subtitleCoverFeather > 0 ? styles.feather : ''}`}
+            style={{ left: `${visual.x * 100}%`, top: `${visual.y * 100}%`, width: `${visual.width * 100}%`, height: `${visual.height * 100}%` }}>
+            {subtitleCoverStyle === 'blur' &&
             <video class={styles.copy} muted autoplay playsInline aria-hidden="true"
               ref={(el) => { if (el && el.srcObject !== stream) el.srcObject = stream }}
-              style={{ left: `${-box.x / box.width * 100}%`, top: `${-box.y / box.height * 100}%`, width: `${100 / box.width}%`, height: `${100 / box.height}%` }} />
+              style={{ left: `${-picture.x / picture.width * 100}%`, top: `${-picture.y / picture.height * 100}%`, width: `${100 / picture.width}%`, height: `${100 / picture.height}%` }} />}
           </div>}
           {HANDLES.map((edges) => <span key={edges.join('')} class={styles.handle} data-edge={edges.join('')} onPointerDown={start(edges)} />)}
         </div>

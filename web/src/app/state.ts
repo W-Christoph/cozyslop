@@ -41,9 +41,13 @@ export interface Preferences {
   streamPreview: number // seconds between stills of the desktop in the chat view; 0: none
   askBeforePaste: boolean
   subtitleCover: boolean // a toolbar button for a box over the subtitles
+  subtitleCoverDetection: 'manual' | 'region' | 'box'
   subtitleCoverStyle: 'blur' | 'black'
   subtitleCoverBlur: number // px
+  subtitleCoverFeather: number // px, extends outside the fully covered box
+  subtitleCoverTwoBoxes: boolean
   subtitleCoverBox: CoverBox
+  subtitleCoverSecondBox: CoverBox
 }
 
 const defaultPreferences: Preferences = {
@@ -73,9 +77,13 @@ const defaultPreferences: Preferences = {
   streamPreview: 5,
   askBeforePaste: true,
   subtitleCover: false,
+  subtitleCoverDetection: 'manual',
   subtitleCoverStyle: 'blur',
   subtitleCoverBlur: 15,
+  subtitleCoverFeather: 0,
+  subtitleCoverTwoBoxes: false,
   subtitleCoverBox: { x: 0.1, y: 0.78, width: 0.8, height: 0.17 },
+  subtitleCoverSecondBox: { x: 0.1, y: 0.05, width: 0.8, height: 0.17 },
 }
 
 const PREFS_KEY = 'preferences'

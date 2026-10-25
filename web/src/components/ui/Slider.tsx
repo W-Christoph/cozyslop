@@ -1,15 +1,16 @@
 import styles from './Slider.module.css'
 
 // A range with labelled stops.
-export function Slider({ label, value, stops, onChange, format = String }: {
+export function Slider({ label, value, stops, onChange, format = String, step: customStep }: {
   label: string
   value: number
   stops: number[] // ascending and evenly spaced
+  step?: number // optional finer steps between the labelled stops
   onChange: (value: number) => void
   format?: (value: number) => string
 }) {
   const min = stops[0], max = stops[stops.length - 1]
-  const step = stops.length > 1 ? stops[1] - stops[0] : 1
+  const step = customStep ?? (stops.length > 1 ? stops[1] - stops[0] : 1)
   const position = (stop: number) => (stop - min) / (max - min)
   return (
     <div class={styles.slider}>

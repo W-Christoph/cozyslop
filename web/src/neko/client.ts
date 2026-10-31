@@ -50,6 +50,12 @@ const STALE_TIMEOUT_MS = 25_000
 // Match the server's upload allowance.
 const UPLOAD_TIMEOUT_MS = 2 * 60 * 60 * 1_000
 
+// "candidate:<foundation> <component> <transport> ...", with or without the
+// SDP's "a=".
+function isUdpCandidate(candidate: string | undefined) {
+  return /^(?:a=)?candidate:\S+\s+\d+\s+udp\s/i.test(candidate ?? '')
+}
+
 interface Signal {
   sdp: string
   iceservers?: RTCIceServer[]
@@ -67,6 +73,7 @@ export class NekoClient extends Emitter<NekoEvents> {
   private token = ''
   private audioOnly = false
   private streamBuffer: number | null = null
+  private tcpOnly = false
   private video = ''
   private peer?: RTCPeerConnection
   private channel?: RTCDataChannel
@@ -127,6 +134,19 @@ export class NekoClient extends Emitter<NekoEvents> {
     for (const receiver of this.peer?.getReceivers() ?? []) {
       applyStreamBuffer(receiver, this.streamBuffer)
     }
+  }
+
+  // Media over TCP only, for networks that lose UDP packets: ICE sticks to a
+  // UDP path that loses packets but still connects. neko and the relay
+  // already offer TCP on the media port; the browser just never gets to see
+  // or announce the UDP candidates. Takes a new peer connection.
+  setTcpOnly(tcpOnly: boolean) {
+    if (tcpOnly === this.tcpOnly) return
+    this.tcpOnly = tcpOnly
+    if (!this.peer) return
+    this.closePeer()
+    this.setStatus('connecting')
+    this.requestPeer()
   }
 
   // ---- control ---------------------------------------------------------
@@ -336,6 +356,8 @@ export class NekoClient extends Emitter<NekoEvents> {
 
     peer.onicecandidate = (e) => {
       if (peer !== this.peer || !e.candidate) return
+      // neko runs full ICE: it would check a UDP candidate of ours itself.
+      if (this.tcpOnly && isUdpCandidate(e.candidate.candidate)) return
       this.send('signal/candidate', e.candidate.toJSON())
     }
     peer.onconnectionstatechange = () => {
@@ -373,6 +395,7 @@ export class NekoClient extends Emitter<NekoEvents> {
   }
 
   private async addCandidate(candidate: RTCIceCandidateInit) {
+    if (this.tcpOnly && isUdpCandidate(candidate.candidate)) return
     const peer = this.peer
     const ufrag = candidate.usernameFragment ?? candidate.candidate?.match(/(?:^|\s)ufrag\s+(\S+)/)?.[1]
     if (!peer?.remoteDescription || (ufrag && !peer.remoteDescription.sdp.split(/\r?\n/).includes(`a=ice-ufrag:${ufrag}`))) {
@@ -391,7 +414,9 @@ export class NekoClient extends Emitter<NekoEvents> {
     const negotiation = this.negotiation.then(async () => {
       if (peer !== this.peer) return
       try {
-        await peer.setRemoteDescription({ type: 'offer', sdp })
+        // The relay writes its candidates into the offer.
+        const offer = this.tcpOnly ? sdp.split(/(?<=\n)/).filter(line => !isUdpCandidate(line)).join('') : sdp
+        await peer.setRemoteDescription({ type: 'offer', sdp: offer })
         if (peer !== this.peer) return
         for (const c of this.pendingCandidates.splice(0)) {
           await peer.addIceCandidate(c).catch(() => {})

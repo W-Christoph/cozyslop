@@ -72,6 +72,8 @@ export function RoomSection({ room }: { room: RoomStore | null }) {
         ]} />
       <ToggleRow title="Sound only" description="Receive the room's sound without the picture. Saves bandwidth, for music or a slow connection."
         checked={prefs.audioOnly} onChange={(audioOnly) => updatePreferences({ audioOnly })} />
+      <ToggleRow title="Connect over TCP" description="For networks that lose part of the stream, when the sound crackles or the picture breaks up. Lost data is sent again instead of skipped, so the stream may lag or pause briefly; a stream buffer helps. Reconnects the stream. Only affects you."
+        checked={prefs.tcpOnly} onChange={(tcpOnly) => updatePreferences({ tcpOnly })} />
     </Section>
     <Section title="Desktop">
       <ToggleRow title="Ask before pasting into the desktop" description="Preview clipboard text before sharing it with the room."

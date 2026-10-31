@@ -38,6 +38,7 @@ export interface Preferences {
   shortcuts: boolean
   audioOnly: boolean
   streamBuffer: number | null // target delay in ms; null lets the browser decide
+  tcpOnly: boolean // media over TCP, for networks that lose UDP packets
   chatViewOnPause: boolean // chat takes the stream's place while it is paused
   streamPreview: number // seconds between stills of the desktop in the chat view; 0: none
   askBeforePaste: boolean
@@ -76,6 +77,7 @@ const defaultPreferences: Preferences = {
   shortcuts: true,
   audioOnly: false,
   streamBuffer: null,
+  tcpOnly: false,
   chatViewOnPause: true,
   streamPreview: 5,
   askBeforePaste: true,

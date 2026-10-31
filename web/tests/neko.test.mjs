@@ -230,3 +230,26 @@ test('failed peer construction enters recovery', async t => {
   assert.equal(f.socket.readyState, 3)
   assert.equal(f.closed.length, 1)
 })
+
+test('TCP only drops UDP candidates both ways and reconnects when switched', async t => {
+  const f = fixture(t)
+  const udp = 'candidate:1 1 udp 2130706431 203.0.113.10 52000 typ host'
+  const tcp = 'candidate:2 1 tcp 1671430143 203.0.113.10 52000 typ host tcptype passive'
+  await f.client.onMessage('signal/provide', { sdp: 'a=ice-ufrag:first\r\n' })
+  f.client.setTcpOnly(true)
+  assert.equal(f.peers[0].closed, true, 'switching replaces the peer')
+  assert.equal(f.socket.sent.at(-1).event, 'signal/request')
+  await f.client.onMessage('signal/candidate', { candidate: udp })
+  await f.client.onMessage('signal/candidate', { candidate: tcp })
+  await f.client.onMessage('signal/provide', { sdp: `v=0\r\na=ice-ufrag:next\r\na=${udp}\r\na=${tcp}\r\n` })
+  const peer = f.peers[1]
+  assert.deepEqual(peer.calls[0], ['remote', `v=0\r\na=ice-ufrag:next\r\na=${tcp}\r\n`])
+  assert.deepEqual(peer.candidates.map(c => c.candidate), [tcp])
+  const sent = f.socket.sent.length
+  peer.onicecandidate({ candidate: { candidate: udp, toJSON: () => ({ candidate: udp }) } })
+  assert.equal(f.socket.sent.length, sent, 'our own UDP candidates stay unannounced')
+  peer.onicecandidate({ candidate: { candidate: tcp, toJSON: () => ({ candidate: tcp }) } })
+  assert.deepEqual(f.socket.sent.at(-1), { event: 'signal/candidate', payload: { candidate: tcp } })
+  f.client.setTcpOnly(true)
+  assert.equal(peer.closed, false, 'the same setting again keeps the peer')
+})

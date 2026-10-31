@@ -27,6 +27,7 @@ test('new receivers retain the selected buffer after peer replacement, including
   const previous = globalThis.RTCPeerConnection
   globalThis.RTCPeerConnection = class {
     getReceivers() { return [] }
+    close() {}
   }
   t.after(() => {
     if (previous === undefined) delete globalThis.RTCPeerConnection

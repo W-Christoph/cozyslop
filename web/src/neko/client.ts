@@ -71,6 +71,7 @@ export class NekoClient extends Emitter<NekoEvents> {
   private peer?: RTCPeerConnection
   private channel?: RTCDataChannel
   private pendingCandidates: RTCIceCandidateInit[] = []
+  private negotiation: Promise<void> = Promise.resolve()
   private lastMessage = 0
   private staleTimer?: number
   private heldButtons = new Set<number>()
@@ -95,18 +96,23 @@ export class NekoClient extends Emitter<NekoEvents> {
     this.ws = ws
 
     ws.onopen = () => {
+      if (ws !== this.ws) return
       this.lastMessage = Date.now()
       this.staleTimer = window.setInterval(() => {
-        if (Date.now() - this.lastMessage > STALE_TIMEOUT_MS) this.fail('connection timed out')
+        if (ws === this.ws && Date.now() - this.lastMessage > STALE_TIMEOUT_MS) this.fail('connection timed out')
       }, 5_000)
       this.requestPeer()
     }
     ws.onmessage = (e) => {
+      if (ws !== this.ws) return
       this.lastMessage = Date.now()
-      const { event, payload } = JSON.parse(e.data)
-      void this.onMessage(event, payload)
+      const failed = () => { if (ws === this.ws) this.fail('desktop signalling failed') }
+      try {
+        const { event, payload } = JSON.parse(e.data)
+        void this.onMessage(event, payload).catch(failed)
+      } catch { failed() }
     }
-    ws.onclose = () => this.fail()
+    ws.onclose = () => { if (ws === this.ws) this.fail() }
   }
 
   disconnect() {
@@ -260,8 +266,7 @@ export class NekoClient extends Emitter<NekoEvents> {
         await this.answer((payload as Signal).sdp)
         break
       case 'signal/candidate':
-        if (this.peer?.remoteDescription) await this.peer.addIceCandidate(payload)
-        else this.pendingCandidates.push(payload)
+        await this.addCandidate(payload)
         break
       case 'control/host':
         this.updateHost(payload)
@@ -301,26 +306,37 @@ export class NekoClient extends Emitter<NekoEvents> {
   private renewPeer() {
     if (!this.peer || this.audioOnly) return
     this.closePeer()
+    this.setStatus('connecting')
     this.requestPeer()
   }
 
   private closePeer() {
-    if (this.peer) {
-      this.peer.onicecandidate = this.peer.onconnectionstatechange = null
-      this.peer.ontrack = this.peer.ondatachannel = null
-      this.peer.close()
-      this.peer = undefined
-    }
+    const peer = this.peer
+    this.peer = undefined
     this.channel = undefined
     this.pendingCandidates = []
+    this.negotiation = Promise.resolve()
+    if (peer) {
+      peer.onicecandidate = peer.onconnectionstatechange = null
+      peer.ontrack = peer.ondatachannel = null
+      peer.close()
+    }
   }
 
   private async createPeer({ sdp, iceservers }: Signal) {
-    const peer = new RTCPeerConnection({ iceServers: iceservers ?? [] })
+    // neko sends the new peer's candidates before its offer.
+    const candidates = this.pendingCandidates
+    this.closePeer()
+    this.pendingCandidates = candidates
+    this.setStatus('connecting')
+    let peer: RTCPeerConnection
+    try { peer = new RTCPeerConnection({ iceServers: iceservers ?? [] }) }
+    catch { this.fail('media connection setup failed'); return }
     this.peer = peer
 
     peer.onicecandidate = (e) => {
-      if (e.candidate) this.send('signal/candidate', e.candidate.toJSON())
+      if (peer !== this.peer || !e.candidate) return
+      this.send('signal/candidate', e.candidate.toJSON())
     }
     peer.onconnectionstatechange = () => {
       if (peer !== this.peer) return
@@ -335,6 +351,7 @@ export class NekoClient extends Emitter<NekoEvents> {
       }
     }
     peer.ontrack = (e) => {
+      if (peer !== this.peer) return
       applyStreamBuffer(e.receiver, this.streamBuffer)
       if (!e.streams[0]) return
       // Sound only still gets an empty video track, and Chromium does not
@@ -347,6 +364,7 @@ export class NekoClient extends Emitter<NekoEvents> {
       this.emit('stream', e.streams[0])
     }
     peer.ondatachannel = (e) => {
+      if (peer !== this.peer) return
       this.channel = e.channel
       this.channel.binaryType = 'arraybuffer'
     }
@@ -354,18 +372,44 @@ export class NekoClient extends Emitter<NekoEvents> {
     await this.answer(sdp)
   }
 
-  private async answer(sdp: string) {
+  private async addCandidate(candidate: RTCIceCandidateInit) {
     const peer = this.peer
-    if (!peer) return
-    await peer.setRemoteDescription({ type: 'offer', sdp })
-    for (const c of this.pendingCandidates.splice(0)) {
-      await peer.addIceCandidate(c).catch(() => {})
+    const ufrag = candidate.usernameFragment ?? candidate.candidate?.match(/(?:^|\s)ufrag\s+(\S+)/)?.[1]
+    if (!peer?.remoteDescription || (ufrag && !peer.remoteDescription.sdp.split(/\r?\n/).includes(`a=ice-ufrag:${ufrag}`))) {
+      this.pendingCandidates.push(candidate)
+      return
     }
-    const answer = await peer.createAnswer()
-    // Ask Chromium for stereo Opus.
-    answer.sdp = answer.sdp?.replace(/(stereo=1;)?useinbandfec=1/, 'useinbandfec=1;stereo=1')
-    await peer.setLocalDescription(answer)
-    this.send('signal/answer', { sdp: answer.sdp })
+    // Unusable candidates, including ones for an ended peer, are optional.
+    await peer.addIceCandidate(candidate).catch(() => {})
+  }
+
+  private answer(sdp: string) {
+    const peer = this.peer
+    if (!peer) return Promise.resolve()
+    // Offers on one peer must finish in order. A replacement gets a fresh
+    // queue, so a closed peer cannot delay it or signal on its session.
+    const negotiation = this.negotiation.then(async () => {
+      if (peer !== this.peer) return
+      try {
+        await peer.setRemoteDescription({ type: 'offer', sdp })
+        if (peer !== this.peer) return
+        for (const c of this.pendingCandidates.splice(0)) {
+          await peer.addIceCandidate(c).catch(() => {})
+          if (peer !== this.peer) return
+        }
+        const answer = await peer.createAnswer()
+        if (peer !== this.peer) return
+        // Ask Chromium for stereo Opus.
+        answer.sdp = answer.sdp?.replace(/(stereo=1;)?useinbandfec=1/, 'useinbandfec=1;stereo=1')
+        await peer.setLocalDescription(answer)
+        if (peer !== this.peer) return
+        this.send('signal/answer', { sdp: answer.sdp })
+      } catch {
+        if (peer === this.peer) this.fail('media negotiation failed')
+      }
+    })
+    this.negotiation = negotiation
+    return negotiation
   }
 
   private updateHost(host: { has_host: boolean; host_id?: string } | undefined) {

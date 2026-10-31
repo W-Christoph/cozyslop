@@ -11,7 +11,7 @@
     "test:restart": "node --test tests/restart.test.mjs",
     "test:shortcuts": "node --test tests/shortcuts.test.mjs",
     "test:subtitles": "node --test tests/subtitleDetection.test.mjs",
-    "test:stream": "node --test tests/streamOptions.test.mjs"
+    "test:stream": "node --test tests/streamOptions.test.mjs tests/neko.test.mjs"
   },
   "dependencies": {
     "@preact/signals": "^2.11.3",

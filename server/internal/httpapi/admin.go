@@ -533,6 +533,7 @@ func (s *Server) adminSaveSettings(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
+	s.hub.SetWatchlog(set.Watchlog)
 	writeJSON(w, http.StatusOK, set)
 }
 

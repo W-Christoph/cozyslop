@@ -1,0 +1,84 @@
+import type { WatchAnime, WatchPerson } from '../../api'
+import { Button } from '../Button'
+import { Avatar } from '../ui/Avatar'
+import { Cover } from './AnimeSearch'
+import { ProgressCell } from './ProgressCell'
+import { together, type Together } from './together'
+import styles from './WatchTable.module.css'
+
+// The shows as rows and the people as columns, with what they can watch
+// together last. Shows the group can go on with come first.
+export function WatchTable({ anime, people, self, admin, episodeOf, onProgress, onRemove }: {
+  anime: WatchAnime[]
+  people: WatchPerson[]
+  self: string // my username
+  admin: boolean
+  episodeOf: (animeId: number, username: string) => number
+  onProgress: (animeId: number, username: string, episode: number) => void
+  onRemove: (anime: WatchAnime) => void
+}) {
+  const nickname = new Map(people.map((p) => [p.username, p.username === self ? 'You' : p.nickname]))
+  const rows = anime.map((a) => ({ anime: a, together: together(a, people.map((p) => p.username), (u) => episodeOf(a.id, u)) }))
+  const going = (t: Together) => t.started && t.next !== null
+  rows.sort((a, b) => Number(going(b.together)) - Number(going(a.together)) || a.anime.title.localeCompare(b.anime.title))
+  if (anime.length === 0) return <p class={styles.nothing}>No show matches.</p>
+  return (
+    <div class={styles.scroll}>
+      <table class={styles.table}>
+        <thead>
+          <tr>
+            <th class={styles.show} scope="col">Show</th>
+            {people.map((p) => (
+              <th key={p.username} scope="col" class={styles.person}>
+                <span class={styles.personName}><Avatar src={p.avatarUrl} size={20} />{nickname.get(p.username)}</span>
+              </th>
+            ))}
+            <th scope="col" class={styles.person}>Together</th>
+            {admin && <th scope="col"><span class={styles.hidden}>Remove</span></th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ anime: a, together: t }) => (
+            <tr key={a.id}>
+              <th scope="row" class={styles.show}>
+                <a class={styles.showLink} href={`https://anilist.co/anime/${a.id}`} target="_blank" rel="noreferrer noopener">
+                  <Cover anime={a} size={44} />
+                  <span class={styles.titles}>
+                    <span class={styles.title}>{a.title}</span>
+                    {a.titleEnglish && a.titleEnglish !== a.title && <span class={styles.english}>{a.titleEnglish}</span>}
+                  </span>
+                </a>
+              </th>
+              {people.map((p) => (
+                <td key={p.username} class={styles.cell}>
+                  <ProgressCell episode={episodeOf(a.id, p.username)} episodes={a.episodes}
+                    editable={admin || p.username === self} label={`${nickname.get(p.username)} in ${a.title}`}
+                    onSave={(episode) => onProgress(a.id, p.username, episode)} />
+                </td>
+              ))}
+              <td class={styles.cell}><TogetherText together={t} nickname={(u) => nickname.get(u) ?? u} /></td>
+              {admin && (
+                <td class={styles.cell}>
+                  <Button variant="danger-ghost" size="sm" icon="trash" aria-label={`Remove ${a.title}`} title="Remove" onClick={() => onRemove(a)} />
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function TogetherText({ together: t, nickname }: { together: Together; nickname: (username: string) => string }) {
+  if (t.next === null) return <span class={styles.done}>Done</span>
+  const behind = t.behind.length === 0 ? '' : t.behind.length === 1
+    ? `${nickname(t.behind[0].username)} ${t.behind[0].by} behind`
+    : `${t.behind.length} behind`
+  return (
+    <span class={styles.together} title={t.behind.map((b) => `${nickname(b.username)}: ${b.by} behind`).join('\n') || undefined}>
+      <strong>Ep {t.next}</strong>
+      {t.started && behind && <span class={styles.behind}>{behind}</span>}
+    </span>
+  )
+}

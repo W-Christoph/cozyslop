@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"cozycast/internal/anilist"
 	"cozycast/internal/auth"
 	"cozycast/internal/config"
 	"cozycast/internal/docker"
@@ -218,6 +219,12 @@ func run(args []string, out io.Writer) error {
 	}
 	h := hub.New(db, filepath.Join(mediaDir, "chat"), rooms)
 	h.HibernateAfter = cfg.HibernateAfter
+	h.AniList = anilist.New()
+	settings, err := db.Settings(ctx)
+	if err != nil {
+		return err
+	}
+	h.SetWatchlog(settings.Watchlog)
 	if err := h.Start(ctx); err != nil {
 		return err
 	}
@@ -241,6 +248,7 @@ func run(args []string, out io.Writer) error {
 		MediaDir:    mediaDir,
 		MaxUploadMB: cfg.MaxUploadMB,
 		SourceURL:   cfg.SourceURL,
+		AniList:     h.AniList,
 	})
 	handler := api.Handler()
 

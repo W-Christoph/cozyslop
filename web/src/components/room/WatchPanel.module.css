@@ -1,0 +1,27 @@
+.playing { display: flex; align-items: center; gap: 6px; padding: 4px var(--space-3); color: var(--color-text-muted); font-size: 0.85em; }
+.playing svg { flex-shrink: 0; fill: currentColor; }
+.playingText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.playingText strong { color: var(--color-text); }
+.muted { color: var(--color-text-muted); }
+
+.card { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-2); padding: var(--space-3); border: 1px solid var(--color-accent); border-radius: var(--radius-md); background: var(--color-message-bg); box-shadow: var(--shadow-message); font-size: 0.9em; }
+.head { display: flex; align-items: flex-start; gap: var(--space-2); }
+.headText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.title { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; font-size: 1.05em; line-height: 1.25; }
+.episode { display: flex; align-items: center; gap: 4px; color: var(--color-text-muted); }
+.number { min-width: 1.5em; text-align: center; color: var(--color-text); font-weight: 700; font-variant-numeric: tabular-nums; }
+.step, .close { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--radius); background: var(--color-message-hover); color: var(--color-text); font: 700 1em var(--font-ui); cursor: pointer; }
+.step:disabled { opacity: 0.4; cursor: default; }
+.close { background: none; color: var(--color-text-muted); }
+.step:hover:not(:disabled), .close:hover { background: var(--color-accent); color: var(--color-text); }
+.file { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-muted); font-size: 0.85em; }
+.link { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--color-text-muted); font: inherit; font-size: 0.9em; text-decoration: underline; cursor: pointer; }
+.link:hover { color: var(--color-text); }
+.viewers { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.viewer { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; }
+.viewer input { accent-color: var(--color-orange); }
+.name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.save { padding: 4px 14px; border: 0; border-radius: var(--radius-sm); background: var(--color-orange); color: var(--color-on-orange); font: 600 1em var(--font-ui); cursor: pointer; }
+.save:hover:not(:disabled) { background: var(--color-orange-hover); }
+.save:disabled { opacity: 0.5; cursor: default; }

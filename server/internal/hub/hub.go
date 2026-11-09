@@ -14,8 +14,10 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"cozycast/internal/anilist"
 	"cozycast/internal/neko"
 	"cozycast/internal/store"
 )
@@ -26,6 +28,11 @@ type Hub struct {
 	// HibernateAfter is how long a room stays empty before the programs on
 	// its desktop are paused; 0 = never. Set before Start.
 	HibernateAfter time.Duration
+	// AniList finds the shows of the episodes played in rooms, for the
+	// watchlog; nil = none are recognised. Set before Start.
+	AniList *anilist.Client
+
+	watchlog atomic.Bool // the watchlog is on: rooms follow what is played
 
 	store    *store.Store
 	mediaDir string       // chat images and videos
@@ -53,6 +60,9 @@ type RoomConfig struct {
 	// the room has no such helper.
 	PlayURL   string
 	PlayToken string
+	// StatusURL says what the VLC the play helper started plays, for
+	// requests that carry PlayToken; "" if the room has no such helper.
+	StatusURL string
 	// HibernateURL pauses and continues the programs on the room's desktop
 	// (worker/hibernate.py), for requests that carry PlayToken; "" if the
 	// room has no such helper.
@@ -66,6 +76,11 @@ func New(s *store.Store, mediaDir string, rooms []RoomConfig) *Hub {
 	}
 	return h
 }
+
+// SetWatchlog turns following what is played in the rooms on or off (the
+// watchlog setting). Turned off, rooms forget their episode and suggestion
+// at their next poll.
+func (h *Hub) SetWatchlog(on bool) { h.watchlog.Store(on) }
 
 // Room returns the named room, or nil.
 func (h *Hub) Room(name string) *Room {
@@ -195,7 +210,7 @@ func (h *Hub) makeRoom(rc RoomConfig) *Room {
 	}
 	r.restart, r.defaultScreen, r.titleURL = rc.Restart, rc.DefaultScreen, rc.TitleURL
 	r.start, r.stop, r.running = rc.Start, rc.Stop, rc.Running
-	r.playURL, r.playToken = rc.PlayURL, rc.PlayToken
+	r.playURL, r.playToken, r.statusURL = rc.PlayURL, rc.PlayToken, rc.StatusURL
 	r.hibernateURL = rc.HibernateURL
 	return r
 }

@@ -57,6 +57,33 @@ export type KickReason = 'banned' | 'account' | 'verified' | 'invite' | 'kicked'
 
 export type DesktopState = 'online' | 'offline'
 
+// The watchlog: the episode VLC plays on the desktop, and the suggestion to
+// mark one watched once it ended (server/internal/hub/watch.go).
+export interface WatchPlaying {
+  animeId: number // 0: the show was not recognised
+  title: string
+  episode: number
+}
+
+export interface WatchViewer {
+  key: string // identity key
+  nickname: string
+  coverage: number // share of the episode they saw, 0 to 1
+  checked: boolean // gets the episode on save
+}
+
+export interface WatchProposal {
+  id: number
+  animeId: number // 0: no show; one must be picked before saving
+  title: string
+  coverUrl: string
+  episodes: number | null
+  episode: number
+  file: string
+  applyAt: number // unix ms it is saved by itself; 0 while there is no show
+  viewers: WatchViewer[]
+}
+
 export type ServerMessage =
   | {
       type: 'welcome'
@@ -70,6 +97,8 @@ export type ServerMessage =
       restart: boolean
       desktop: DesktopState
       windowTitle: string // of the window in front on the desktop; "" if unknown
+      playing?: WatchPlaying | null
+      watch?: WatchProposal | null
     }
   | { type: 'neko'; token: string; path: string }
   | { type: 'neko_unavailable'; message: string }
@@ -85,6 +114,8 @@ export type ServerMessage =
   | { type: 'room_settings'; settings: RoomSettings }
   | { type: 'remote'; holder: string | null }
   | { type: 'window_title'; title: string }
+  | { type: 'playing'; playing: WatchPlaying | null }
+  | { type: 'watch'; proposal: WatchProposal | null } // null: saved or dismissed
   // A small still of the desktop, answering preview; image "" when there is none.
   | { type: 'preview'; image: string; time?: number }
   | { type: 'restarting'; by: string }
@@ -105,3 +136,7 @@ export type ClientMessage =
   | { type: 'neko_token' }
   | { type: 'preview' } // a still of the desktop, for the chat view while paused
   | { type: 'file_delete' | 'file_play'; name: string } // a file in the desktop's Downloads
+  | { type: 'watch_check'; id: number; key: string; checked: boolean }
+  | { type: 'watch_episode'; id: number; episode: number }
+  | { type: 'watch_anime'; id: number; animeId: number } // AniList id
+  | { type: 'watch_save' | 'watch_dismiss'; id: number }

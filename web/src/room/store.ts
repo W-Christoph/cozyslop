@@ -6,7 +6,7 @@ import { batch, computed, signal } from '@preact/signals'
 import { refreshMe } from '../app/state'
 import { parseStream } from '../components/room/admin/streamOptions'
 import { NekoClient, type DesktopFile, type NekoStatus } from '../neko/client'
-import type { ChatMessage, KickReason, Rights, RoomSettings, ServerMessage, User } from './protocol'
+import type { ChatMessage, KickReason, Rights, RoomSettings, ServerMessage, User, WatchPlaying, WatchProposal } from './protocol'
 import { RoomSocket } from './socket'
 
 // Reconnecting the stream backs off from 1.5 s to 30 s; after a few failed
@@ -69,6 +69,8 @@ export class RoomStore {
   private welcomed = false
   readonly remoteHolder = signal<string | null>(null) // identity key
   readonly windowTitle = signal('') // of the window in front on the desktop
+  readonly watchPlaying = signal<WatchPlaying | null>(null) // the watchlog's episode playing
+  readonly watchProposal = signal<WatchProposal | null>(null) // to mark one watched
   readonly restartAvailable = signal(false)
   readonly restarting = signal<string | null>(null) // nickname
 
@@ -194,6 +196,24 @@ export class RoomStore {
 
   whisper(to: string, body: string) {
     this.socket.send({ type: 'whisper', to, body })
+  }
+
+  // The watchlog's suggestion: tick a viewer, change the episode or the show
+  // (an AniList id), save it now or drop it.
+  checkWatcher(id: number, key: string, checked: boolean) {
+    this.socket.send({ type: 'watch_check', id, key, checked })
+  }
+
+  setWatchEpisode(id: number, episode: number) {
+    this.socket.send({ type: 'watch_episode', id, episode })
+  }
+
+  setWatchAnime(id: number, animeId: number) {
+    this.socket.send({ type: 'watch_anime', id, animeId })
+  }
+
+  settleWatch(id: number, save: boolean) {
+    this.socket.send({ type: save ? 'watch_save' : 'watch_dismiss', id })
   }
 
   takeRemote() {
@@ -419,6 +439,8 @@ export class RoomStore {
           }
           this.remoteHolder.value = msg.remote
           this.windowTitle.value = msg.windowTitle ?? ''
+          this.watchPlaying.value = msg.playing ?? null
+          this.watchProposal.value = msg.watch ?? null
           this.restartAvailable.value = msg.restart
           this.desktopOffline.value = msg.desktop === 'offline'
           this.error.value = null
@@ -507,6 +529,12 @@ export class RoomStore {
         break
       case 'window_title':
         this.windowTitle.value = msg.title
+        break
+      case 'playing':
+        this.watchPlaying.value = msg.playing
+        break
+      case 'watch':
+        this.watchProposal.value = msg.proposal
         break
       case 'preview':
         // No picture this time (the desktop did not answer): keep the last one.

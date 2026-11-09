@@ -118,6 +118,7 @@ export const serverSettings = signal<ServerSettings>({
   message: '',
   registration: 'invite',
   sourceUrl: 'https://github.com/W-Christoph/cozyslop',
+  watchlog: false,
 })
 export const preferences = signal<Preferences>(loadPreferences())
 

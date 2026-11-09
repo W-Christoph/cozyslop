@@ -9,13 +9,15 @@ import { Section, ToggleRow } from '../../components/ui/Section'
 export function ServerSettingsTab() {
   const settings = serverSettings.value
   const [message, setMessage] = useState(settings.message),
-    [inviteOnly, setInviteOnly] = useState(settings.registration === 'invite')
+    [inviteOnly, setInviteOnly] = useState(settings.registration === 'invite'),
+    [watchlog, setWatchlog] = useState(settings.watchlog)
   const [error, setError] = useState(''),
     [status, setStatus] = useState(''),
     [busy, setBusy] = useState(false)
   useEffect(() => {
     setMessage(settings.message)
     setInviteOnly(settings.registration === 'invite')
+    setWatchlog(settings.watchlog)
   }, [settings])
   async function save() {
     setBusy(true)
@@ -24,7 +26,7 @@ export function ServerSettingsTab() {
     try {
       serverSettings.value = await api.put<ServerSettings>(
         '/api/admin/settings',
-        { message, registration: inviteOnly ? 'invite' : 'open' },
+        { message, registration: inviteOnly ? 'invite' : 'open', watchlog },
       )
       await refreshServerSettings()
       setStatus('Settings saved.')
@@ -55,6 +57,10 @@ export function ServerSettingsTab() {
         <Section title="Registration">
           <ToggleRow title="Invite required to register" description="Only people with an invite link can create an account."
             checked={inviteOnly} onChange={(value) => { setInviteOnly(value); setStatus('') }} />
+        </Section>
+        <Section title="Watchlog">
+          <ToggleRow title="Track anime" description="Keeps track of which episodes people have watched. Episodes played in VLC in a room are noticed and suggested."
+            checked={watchlog} onChange={(value) => { setWatchlog(value); setStatus('') }} />
         </Section>
         <FormActions error={error} message={status}>
           <Button variant="primary" type="submit" disabled={busy}>

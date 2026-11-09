@@ -67,7 +67,18 @@ func TestSettingsDefaultsAndSave(t *testing.T) {
 	if err := s.SaveSettings(ctx, Settings{Message: "hi", Registration: "open"}); err != nil {
 		t.Fatal(err)
 	}
-	if set, _ := s.Settings(ctx); set.Message != "hi" || set.Registration != "open" {
+	if set, _ := s.Settings(ctx); set.Message != "hi" || set.Registration != "open" || set.Watchlog {
+		t.Fatalf("saved: %+v", set)
+	}
+}
+
+func TestWatchlogSetting(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	if err := s.SaveSettings(ctx, Settings{Registration: "invite", Watchlog: true}); err != nil {
+		t.Fatal(err)
+	}
+	if set, _ := s.Settings(ctx); !set.Watchlog {
 		t.Fatalf("saved: %+v", set)
 	}
 }

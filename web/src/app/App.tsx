@@ -12,6 +12,7 @@ import { NotFoundPage } from '../pages/NotFoundPage'
 import { ResetPasswordPage } from '../pages/ResetPasswordPage'
 import { RegisterPage } from '../pages/RegisterPage'
 import { RoomRoute } from '../pages/RoomPage'
+import { WatchlogPage } from '../pages/WatchlogPage'
 import { SettingsDialog } from '../components/settings/SettingsDialog'
 import { meLoaded, pageTitle, refreshMe, refreshServerSettings, settingsOpen, type SettingsSection } from './state'
 import styles from './App.module.css'
@@ -70,6 +71,7 @@ function Shell() {
       <Route path="/profile" component={HomePage} />
       <Route path="/settings" component={HomePage} />
       <Route path="/admin/:tab?" component={AdminPage} />
+      <Route path="/watchlog" component={WatchlogPage} />
       <Route default component={NotFoundPage} />
     </Router>
   )

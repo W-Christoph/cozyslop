@@ -32,7 +32,7 @@ PATCH admin flags preserve omitted or null fields.
 |---|---|
 | Own account | `username`, `nickname`, `nameColor`, `avatarUrl`, `admin`, `verified` |
 | Admin account | Own account fields plus `disabled`, `createdAt`; excludes database ID and password hash |
-| Global settings | `message`, `registration` (`open` or `invite`) |
+| Global settings | `message`, `registration` (`open` or `invite`), `watchlog` (boolean, default `false`) |
 | Room settings | `name`, `access` (`public`, `account`, `verified`, `invite`), `hidden`, `remoteOwnership`, `defaultRemote`, `defaultImage`, `defaultUpload` |
 | Permission | `room`, `username`, `remote`, `image`, `upload`, `trusted`, `invited`, `inviteName`, `banned`, `bannedUntil` (seconds or null; null with `banned: true` means forever) |
 | Anonymous ban | `id`, `room`, `ip`, `bannedUntil` (seconds or null for forever); excludes anonymous cookie ID |
@@ -225,7 +225,23 @@ most recently joined live tab; a plain kick removes only the target identity.
 
 | Method and path | Caller | Request body | Response | Notable errors |
 |---|---|---|---|---|
-| `PUT /api/admin/settings` | Admin | `{"message":"…","registration":"open"}`; full replacement | 200 saved global settings | 400 message over 4096 characters or registration other than `open` / `invite` |
+| `PUT /api/admin/settings` | Admin | `{"message":"…","registration":"open","watchlog":false}`; full replacement (`watchlog` omitted = `false`) | 200 saved global settings; turning `watchlog` off makes rooms drop the episode they follow and any open suggestion at their next poll | 400 message over 4096 characters or registration other than `open` / `invite` |
+
+## Watchlog
+
+How far each account has watched which anime (see
+[architecture](architecture.md#watchlog)). Every endpoint needs an account
+(401 `"Please log in."`) and the `watchlog` setting on (404 `"The watchlog is
+off."`). Shows are `{"id":<AniList id>,"title":"…","titleEnglish":"…","episodes":28|null,"coverUrl":"…","addedAt":<unix s>}`;
+progress is `{"username":"…","animeId":…,"episode":5,"source":"manual"|"auto","updatedAt":<unix s>}`.
+
+| Method and path | Caller | Request body | Response | Notable errors |
+|---|---|---|---|---|
+| `GET /api/watchlog` | Account | None | 200 `{"anime":[…],"people":[{"username","nickname","nameColor","avatarUrl"}],"progress":[…]}`; shows by title; people are the enabled accounts with any progress | |
+| `GET /api/watchlog/search?q=<text>` | Account | None | 200 up to 10 shows from AniList, best match first, each with `year` (or `null`) | 400 `"Search for 2 to 100 characters."`; 429 more than 10 searches in a burst (one more every 2 seconds); 502 `"AniList did not answer. Try again."`; 503 AniList unavailable |
+| `POST /api/watchlog/anime` | Account | `{"id":<AniList id>}` | 200 the show, added or refreshed from AniList | 404 `"AniList has no such anime."`; 502 AniList unreachable |
+| `DELETE /api/watchlog/anime/{id}` | Admin | None | 204; removes the show, everyone's progress in it and the file names matched to it | 403 `"Admins only."`; 404 `"That show is not on the watchlog."` |
+| `PUT /api/watchlog/progress/{animeId}/{username}` | That account, or an admin | `{"episode":5}`; `0` clears it | 200 the progress; 204 when cleared | 400 `"The show has no such episode."` (negative, over the show's episode count, or over 9999); 403 `"You can only change your own progress."`; 404 unknown show or user |
 
 ## Invites
 
@@ -284,6 +300,22 @@ fullscreen); playing also needs the remote right, and with remote ownership
 nobody else may hold the remote. The tab that asked gets
 `{"type":"file_result","action":"delete"|"play","name":"<file>","error":"…"}`,
 with `error` `""` if it worked (see `docs/architecture.md`).
+With the `watchlog` setting on, `welcome.playing` is the episode VLC plays on
+the desktop (`{"animeId":…,"title":"…","episode":5}`, `animeId` `0` when the
+show was not recognised; `null` when nothing is) and `welcome.watch` the open
+suggestion to mark an episode watched (`null` when there is none);
+`{"type":"playing","playing":…}` and `{"type":"watch","proposal":…}` follow
+when they change, `proposal` `null` once it was saved or dismissed. A
+suggestion is `{"id","animeId","title","coverUrl","episodes","episode","file","applyAt","viewers":[{"key","nickname","coverage","checked"}]}`:
+`coverage` is the share of the episode that person saw (0 to 1), `applyAt`
+when it is saved by itself (unix ms; `0` while `animeId` is `0`). Accounts in
+the room send `{"type":"watch_check","id":…,"key":"<identity key>","checked":true}`,
+`{"type":"watch_episode","id":…,"episode":6}`,
+`{"type":"watch_anime","id":…,"animeId":<AniList id>}`,
+`{"type":"watch_save","id":…}` and `{"type":"watch_dismiss","id":…}`; each
+change but saving and dismissing restarts the wait before it saves by itself.
+Anonymous users get `error` "You are not allowed to do that.", a suggestion
+that is gone `error` "That suggestion is gone.".
 An unknown room upgrades successfully, sends
 `{"type":"kicked","reason":"not_found"}`, then closes with code 4000.
 Other `kicked.reason` values are `banned`, `account`, `verified`, `invite`,

@@ -71,6 +71,40 @@ export interface ServerSettings {
   message: string
   registration: 'open' | 'invite'
   sourceUrl: string // where to get this server's source code (AGPL)
+  watchlog: boolean // anime tracking is on
+}
+
+// ---- watchlog: who has watched how far in which anime ------------------------
+
+export interface WatchAnime {
+  id: number // AniList media id
+  title: string // romaji
+  titleEnglish: string // "" if none
+  episodes: number | null // null while unknown (airing)
+  coverUrl: string
+  year?: number | null // search results only
+}
+
+export interface WatchPerson { username: string; nickname: string; nameColor: string; avatarUrl: string }
+
+export interface WatchProgress {
+  username: string
+  animeId: number
+  episode: number
+  updatedAt: number // unix seconds
+  source: 'manual' | 'auto'
+}
+
+export interface Watchlog { anime: WatchAnime[]; people: WatchPerson[]; progress: WatchProgress[] }
+
+export const watchlog = {
+  get: () => api.get<Watchlog>('/api/watchlog'),
+  search: (q: string) => api.get<WatchAnime[]>(`/api/watchlog/search?q=${encodeURIComponent(q)}`),
+  add: (id: number) => api.post<WatchAnime>('/api/watchlog/anime', { id }),
+  remove: (id: number) => api.del<void>(`/api/watchlog/anime/${id}`),
+  // Episode 0 clears it (answered without a body).
+  setProgress: (animeId: number, username: string, episode: number) =>
+    api.put<WatchProgress | undefined>(`/api/watchlog/progress/${animeId}/${encodeURIComponent(username)}`, { episode }),
 }
 
 export interface RoomInfo {

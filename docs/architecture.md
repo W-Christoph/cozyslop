@@ -162,6 +162,12 @@ from both existing users and numeric account identity keys retained in chat.
 - `anon_bans`: room, anon_id, ip, banned_until.
 - `invites`: code, room, temporary, name, remote, image, upload, uses,
   max_uses, expires_at, created_at.
+- `anime`: id (the AniList id), title, title_english, episodes (NULL while
+  unknown), cover_url, added_at. Shows on the watchlog.
+- `anime_aliases`: alias (a file name's title, normalised), anime_id. File
+  names matched to a show before.
+- `watch_progress`: (user_id, anime_id) primary key, episode, source
+  (`manual` | `auto`), updated_at. Deleted with the account or the show.
 - `chat_messages`: id, room, identity key, user_id, nickname/colour snapshot,
   anonymous, type (`text` | `image` | `video`), body, media, edited,
   created_at. Kept for 1 hour, at most 1000 per room; media files are deleted
@@ -345,6 +351,41 @@ not published either, but pages open in the room's browser reach it, so
 every request must carry the room's neko admin token, which the server and
 the desktop's user know. It only plays plain files directly in Downloads. A
 room image from before the helper answers nothing, and the person is told.
+
+## Watchlog
+
+Off by default (global setting `watchlog`). It keeps one number per account
+and show: the last episode watched. Shows come from AniList
+(`internal/anilist`, `https://graphql.anilist.co`, no account needed), which
+the server must be able to reach; the web UI never talks to AniList itself,
+but shows its cover images.
+
+People set their own progress on the Watchlog page; admins may set anyone's
+and remove shows. Rooms also notice episodes (`hub/watch.go`):
+
+- The play helper starts VLC with its web interface on `127.0.0.1:8084`,
+  with a password made up for each VLC, and answers `GET /status` (same
+  token as `/play`) with VLC's state, time, length and file name. Only the
+  VLC the helper started is followed, not one opened by hand.
+- While the setting is on and someone is in the room, the server asks every
+  5 seconds. A file name with an episode number (`internal/episode`:
+  `[Group] Show - 05 (1080p).mkv`, `Show.S01E05…`, `Show Episode 5`) is an
+  episode; its show is the one the name was matched to before, or AniList's
+  best match for it.
+- The episode is split into 10-second parts. At each answer while VLC plays,
+  every account with a tab showing the stream (visible, not paused, not
+  sound only) is noted as having seen the current part. Anonymous people are
+  not followed.
+- The episode ends when VLC stops, plays another file, or the helper does not
+  answer three times. If anyone saw at least half of it, the room gets a
+  suggestion: everyone who saw at least 20% is listed, those with 80% ticked.
+  Accounts in the room may tick people, change the episode or pick another
+  show; it is saved two minutes after the last change, or at once with Save,
+  and only raises progress, never lowers it. Without a recognised show it
+  waits for one to be picked. Saving also remembers the file name's title
+  for that show, so the next episode is matched without asking AniList.
+- A new suggestion saves the previous one first. Turning the setting off
+  drops the open suggestion unsaved.
 
 ## Changes from CozyCast
 

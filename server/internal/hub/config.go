@@ -18,5 +18,6 @@ func BuildRoomConfig(name, nekoURL, token, defaultScreen string, dial neko.DialF
 	return RoomConfig{Name: name, Neko: nc, DefaultScreen: defaultScreen,
 		TitleURL: "http://" + net.JoinHostPort(host, "8081") + "/title",
 		PlayURL:  "http://" + net.JoinHostPort(host, "8082") + "/play", PlayToken: token,
+		StatusURL:    "http://" + net.JoinHostPort(host, "8082") + "/status",
 		HibernateURL: "http://" + net.JoinHostPort(host, "8083")}, nil
 }

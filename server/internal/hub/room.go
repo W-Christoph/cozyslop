@@ -83,6 +83,16 @@ type Room struct {
 
 	playURL, playToken string // the desktop's helper that plays files; set before run
 
+	// The watchlog (watch.go). statusURL asks the play helper what VLC
+	// plays; set before run. watch is the episode playing, proposal the
+	// open suggestion to mark one watched.
+	statusURL   string
+	watch       *watching
+	watchMisses int // only the polling goroutine uses it
+	proposal    *proposal
+	proposalSeq int64
+	showLimit   *ratelimit.Limiter // per person: shows picked, which may ask AniList
+
 	// The desktop's helper that pauses its programs (hibernate.go); set
 	// before run. sleep is one of the sleep constants; idleGen cancels a
 	// pending hibernation when the room empties again.
@@ -161,6 +171,7 @@ func newRoom(h *Hub, name string, nc *neko.Client) *Room {
 		inbound:      ratelimit.New(40, 200*time.Millisecond),
 		chatUser:     ratelimit.New(10, 500*time.Millisecond),
 		chatAnon:     ratelimit.New(5, time.Second),
+		showLimit:    ratelimit.New(5, 3*time.Second),
 		settings:     store.RoomSettings{Name: name, Access: "public"},
 		members:      make(map[string]*member),
 		clients:      make(map[string]*Client),
@@ -224,6 +235,10 @@ func (r *Room) run(ctx context.Context) {
 	if r.titleURL != "" {
 		work.Add(1)
 		go func() { defer work.Done(); r.watchTitle(ctx) }()
+	}
+	if r.statusURL != "" {
+		work.Add(1)
+		go func() { defer work.Done(); r.watchPlayback(ctx) }()
 	}
 	r.neko.WatchHost(ctx, func(init neko.Init) {
 		r.mu.Lock()
@@ -605,6 +620,8 @@ func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
 		Desktop:  r.desktopStateLocked(),
 
 		WindowTitle: r.title,
+		Playing:     r.watch.playing(),
+		Watch:       r.proposal.view(),
 	})
 	var resync []*Client
 	if isNew {

@@ -54,6 +54,47 @@ type welcomeMsg struct {
 	Desktop  string             `json:"desktop"` // "online" | "offline"
 	// Title of the window in front on the desktop; "" if unknown.
 	WindowTitle string `json:"windowTitle"`
+	// The watchlog's episode playing and its open suggestion; nil if none
+	// (or the watchlog is off).
+	Playing *WatchPlaying  `json:"playing"`
+	Watch   *WatchProposal `json:"watch"`
+}
+
+// WatchPlaying is the episode VLC plays on the desktop (watch.go).
+type WatchPlaying struct {
+	AnimeID int64  `json:"animeId"` // 0 = show not recognised
+	Title   string `json:"title"`
+	Episode int    `json:"episode"`
+}
+
+// WatchProposal suggests marking an episode watched for the ticked viewers.
+type WatchProposal struct {
+	ID       int64         `json:"id"`
+	AnimeID  int64         `json:"animeId"` // 0 = no show: one must be picked
+	Title    string        `json:"title"`
+	CoverURL string        `json:"coverUrl"`
+	Episodes *int          `json:"episodes"`
+	Episode  int           `json:"episode"`
+	File     string        `json:"file"`
+	ApplyAt  int64         `json:"applyAt"` // unix ms it is saved by itself; 0 = not without a show
+	Viewers  []WatchViewer `json:"viewers"`
+}
+
+type WatchViewer struct {
+	Key      string  `json:"key"`
+	Nickname string  `json:"nickname"`
+	Coverage float64 `json:"coverage"` // share of the episode seen, 0 to 1
+	Checked  bool    `json:"checked"`
+}
+
+type playingMsg struct {
+	Type    string        `json:"type"` // "playing"
+	Playing *WatchPlaying `json:"playing"`
+}
+
+type watchMsg struct {
+	Type     string         `json:"type"`     // "watch"
+	Proposal *WatchProposal `json:"proposal"` // nil = saved or dismissed
 }
 
 // desktopMsg says the room's desktop went offline or came back. Offline tabs
@@ -166,7 +207,7 @@ type errorMsg struct {
 type ClientMsg struct {
 	Type      string `json:"type"`
 	Body      string `json:"body"`      // chat_send, chat_edit, whisper
-	ID        int64  `json:"id"`        // chat_edit, chat_delete
+	ID        int64  `json:"id"`        // chat_edit, chat_delete, watch_*: the suggestion
 	Typing    bool   `json:"typing"`    // typing
 	Active    bool   `json:"active"`    // activity
 	Muted     bool   `json:"muted"`     // muted
@@ -174,4 +215,8 @@ type ClientMsg struct {
 	Listening bool   `json:"listening"` // muted: the sound without the picture (unmuted only)
 	To        string `json:"to"`        // whisper: identity key
 	Name      string `json:"name"`      // file_delete, file_play: a file in the desktop's Downloads
+	Key       string `json:"key"`       // watch_check: identity key
+	Checked   bool   `json:"checked"`   // watch_check
+	Episode   int    `json:"episode"`   // watch_episode
+	AnimeID   int64  `json:"animeId"`   // watch_anime: AniList id
 }

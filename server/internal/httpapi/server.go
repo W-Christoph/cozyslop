@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"cozycast/internal/anilist"
 	"cozycast/internal/auth"
 	"cozycast/internal/fwd"
 	"cozycast/internal/hub"
@@ -50,6 +51,8 @@ type Deps struct {
 	// Relay sends paired rooms' media to their viewers; nil when off, and
 	// viewers then connect to the forwarded ports themselves.
 	Relay *relay.Relay
+	// AniList finds shows for the watchlog; nil = searching is unavailable.
+	AniList *anilist.Client
 }
 
 type Server struct {
@@ -57,6 +60,7 @@ type Server struct {
 	tunnel         *tunnel.Tunnel
 	media          *fwd.Ports
 	relay          *relay.Relay
+	anilist        *anilist.Client
 	publicIP       netip.Addr
 	mediaPorts     [2]int
 	pairing        *pairing.Manager // nil when the tunnel is off
@@ -84,6 +88,7 @@ type Server struct {
 	resetLimit    *ratelimit.Limiter // per IP: reset link checks and redemptions
 	registerLimit *ratelimit.Limiter // per IP: account creations
 	pairLimit     *ratelimit.Limiter // per IP: pairing requests
+	searchLimit   *ratelimit.Limiter // per account: AniList searches
 }
 
 func New(d Deps) *Server {
@@ -108,6 +113,8 @@ func New(d Deps) *Server {
 		tunnel:         d.Tunnel,
 		media:          d.Media,
 		relay:          d.Relay,
+		anilist:        d.AniList,
+		searchLimit:    ratelimit.New(10, 2*time.Second),
 		publicIP:       d.PublicIP,
 		mediaPorts:     d.MediaPorts,
 		store:          d.Store,
@@ -182,6 +189,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/admin/invites/{code}", s.adminDeleteInvite)
 	mux.HandleFunc("GET /api/invites/{code}", s.checkInvite)
 	mux.HandleFunc("POST /api/invites/{code}/redeem", s.redeemInvite)
+
+	mux.HandleFunc("GET /api/watchlog", s.getWatchlog)
+	mux.HandleFunc("GET /api/watchlog/search", s.searchAnime)
+	mux.HandleFunc("POST /api/watchlog/anime", s.addAnime)
+	mux.HandleFunc("DELETE /api/watchlog/anime/{id}", s.deleteAnime)
+	mux.HandleFunc("PUT /api/watchlog/progress/{anime}/{username}", s.setProgress)
 
 	mux.HandleFunc("GET /api/rooms", s.listRooms)
 	mux.HandleFunc("GET /api/rooms/{room}/ws", s.roomSocket)

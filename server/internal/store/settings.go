@@ -9,6 +9,7 @@ import (
 type Settings struct {
 	Message      string `json:"message"`      // shown on the front page
 	Registration string `json:"registration"` // "open" or "invite"
+	Watchlog     bool   `json:"watchlog"`     // anime tracking (watchlog.go)
 }
 
 var defaultSettings = Settings{Registration: "invite"}
@@ -30,6 +31,8 @@ func (s *Store) Settings(ctx context.Context) (Settings, error) {
 			out.Message = v
 		case "registration":
 			out.Registration = v
+		case "watchlog":
+			out.Watchlog = v == "on"
 		}
 	}
 	return out, rows.Err()
@@ -37,7 +40,11 @@ func (s *Store) Settings(ctx context.Context) (Settings, error) {
 
 func (s *Store) SaveSettings(ctx context.Context, set Settings) error {
 	return s.tx(ctx, func(tx *sql.Tx) error {
-		for k, v := range map[string]string{"message": set.Message, "registration": set.Registration} {
+		watchlog := "off"
+		if set.Watchlog {
+			watchlog = "on"
+		}
+		for k, v := range map[string]string{"message": set.Message, "registration": set.Registration, "watchlog": watchlog} {
 			_, err := tx.ExecContext(ctx,
 				"INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", k, v)
 			if err != nil {

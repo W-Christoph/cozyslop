@@ -38,6 +38,16 @@ func (s *Server) watchlogUser(w http.ResponseWriter, r *http.Request) *store.Use
 	return u
 }
 
+// allowAniList limits how often an account makes the server ask AniList
+// (searches and added shows together), or answers 429.
+func (s *Server) allowAniList(w http.ResponseWriter, u *store.User) bool {
+	if s.searchLimit.Allow(strconv.FormatInt(u.ID, 10)) {
+		return true
+	}
+	writeError(w, http.StatusTooManyRequests, "Asking AniList too fast. Wait a moment.")
+	return false
+}
+
 func (s *Server) getWatchlog(w http.ResponseWriter, r *http.Request) {
 	if s.watchlogUser(w, r) == nil {
 		return
@@ -96,8 +106,7 @@ func (s *Server) searchAnime(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "AniList is not available.")
 		return
 	}
-	if !s.searchLimit.Allow(strconv.FormatInt(u.ID, 10)) {
-		writeError(w, http.StatusTooManyRequests, "Searching too fast. Wait a moment.")
+	if !s.allowAniList(w, u) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
@@ -121,7 +130,8 @@ func (s *Server) searchAnime(w http.ResponseWriter, r *http.Request) {
 
 // addAnime puts an AniList show on the watchlog, or refreshes it.
 func (s *Server) addAnime(w http.ResponseWriter, r *http.Request) {
-	if s.watchlogUser(w, r) == nil {
+	u := s.watchlogUser(w, r)
+	if u == nil {
 		return
 	}
 	var req struct {
@@ -132,6 +142,9 @@ func (s *Server) addAnime(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.anilist == nil {
 		writeError(w, http.StatusServiceUnavailable, "AniList is not available.")
+		return
+	}
+	if !s.allowAniList(w, u) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)

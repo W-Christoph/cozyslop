@@ -382,7 +382,8 @@ and remove shows. Rooms also notice episodes (`hub/watch.go`):
   Accounts in the room may tick people, change the episode or pick another
   show; it is saved two minutes after the last change, or at once with Save,
   and only raises progress, never lowers it. Without a recognised show it
-  waits for one to be picked. Saving also remembers the file name's title
+  waits for one to be picked, and with an episode past the show's last one
+  (a season matched by mistake) for it to be corrected. Saving also remembers the file name's title
   for that show, so the next episode is matched without asking AniList.
 - A new suggestion saves the previous one first. Turning the setting off
   drops the open suggestion unsaved.

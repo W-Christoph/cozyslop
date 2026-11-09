@@ -76,7 +76,7 @@ type WatchProposal struct {
 	Episodes *int          `json:"episodes"`
 	Episode  int           `json:"episode"`
 	File     string        `json:"file"`
-	ApplyAt  int64         `json:"applyAt"` // unix ms it is saved by itself; 0 = not without a show
+	ApplyAt  int64         `json:"applyAt"` // unix ms it is saved by itself; 0 = not without a show, or past its last episode
 	Viewers  []WatchViewer `json:"viewers"`
 }
 

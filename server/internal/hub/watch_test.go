@@ -54,6 +54,10 @@ func newWatchFixture(t *testing.T) (*fixture, *fakeDesktop) {
 			w.Write([]byte(`{"data":{"Media":{"id":2,"title":{"romaji":"Frieren 2"},"episodes":null,"coverImage":{"medium":""}}}}`))
 			return
 		}
+		if req.Variables["id"] == float64(4) {
+			w.Write([]byte(`{"data":{"Media":{"id":4,"title":{"romaji":"Frieren Mini"},"episodes":3,"coverImage":{"medium":""}}}}`))
+			return
+		}
 		w.Write([]byte(`{"errors":[{"message":"Not Found.","status":404}]}`))
 	}))
 	t.Cleanup(ani.Close)
@@ -134,6 +138,11 @@ func TestWatchSuggestsAndSaves(t *testing.T) {
 	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "The show has no such episode.")
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_episode", ID: p.ID, Episode: 6})
 	requireEqual(t, lastProposal(t, a).Episode, 6)
+	// A show without episode 6: not saved, by itself or by hand.
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_anime", ID: p.ID, AnimeID: 4})
+	requireEqual(t, lastProposal(t, a).ApplyAt, int64(0))
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_save", ID: p.ID})
+	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "The show has no such episode.")
 	// Another show, from AniList.
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_anime", ID: p.ID, AnimeID: 2})
 	changed := lastProposal(t, a)

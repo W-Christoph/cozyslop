@@ -11,7 +11,8 @@ export function WatchPanel() {
   const store = useRoomStore()
   const proposal = store.watchProposal.value
   const playing = store.watchPlaying.value
-  if (proposal) return <WatchCard proposal={proposal} />
+  // Keyed: a new suggestion starts without the last one's show search open.
+  if (proposal) return <WatchCard key={proposal.id} proposal={proposal} />
   if (!playing) return null
   return (
     <div class={styles.playing} role="status">
@@ -31,6 +32,7 @@ function WatchCard({ proposal: p }: { proposal: WatchProposal }) {
   const [picking, setPicking] = useState(false)
   const left = useCountdown(p.applyAt)
   const max = p.episodes ?? 9999
+  const fits = p.episode <= max // a file numbered past the show's end waits to be fixed
   return (
     <section class={styles.card} aria-label="Mark episode watched">
       <div class={styles.head}>
@@ -66,8 +68,8 @@ function WatchCard({ proposal: p }: { proposal: WatchProposal }) {
         ))}
       </ul>
       <div class={styles.foot}>
-        <span class={styles.muted}>{p.applyAt ? `Saves in ${left}` : 'Pick the show to save.'}</span>
-        {canEdit && <button type="button" class={styles.save} disabled={p.animeId === 0}
+        <span class={styles.muted}>{p.applyAt ? `Saves in ${left}` : p.animeId === 0 ? 'Pick the show to save.' : `The show has ${p.episodes} episodes.`}</span>
+        {canEdit && <button type="button" class={styles.save} disabled={p.animeId === 0 || !fits}
           onClick={() => store.settleWatch(p.id, true)}>Save</button>}
       </div>
     </section>

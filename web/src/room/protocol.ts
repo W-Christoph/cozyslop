@@ -80,7 +80,7 @@ export interface WatchProposal {
   episodes: number | null
   episode: number
   file: string
-  applyAt: number // unix ms it is saved by itself; 0 while there is no show
+  applyAt: number // unix ms it is saved by itself; 0 while there is no show or the episode is past its last
   viewers: WatchViewer[]
 }
 

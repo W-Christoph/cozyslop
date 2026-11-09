@@ -122,6 +122,12 @@ func (p *proposal) setAnime(a *store.Anime, title string) {
 	p.AnimeID, p.Title, p.CoverURL, p.Episodes = a.ID, a.Title, a.CoverURL, a.Episodes
 }
 
+// saveable: p has a show, and the episode is one it has. A file numbered
+// past the show's end (or a show picked later) waits to be corrected.
+func (p *proposal) saveable() bool {
+	return p.anime != nil && (p.Episodes == nil || p.Episode <= *p.Episodes)
+}
+
 // view is the proposal as sent; a copy, since sending may outlast the lock.
 func (p *proposal) view() *WatchProposal {
 	if p == nil {
@@ -310,15 +316,15 @@ func (r *Room) takeProposalLocked() *proposal {
 	return p
 }
 
-// scheduleLocked (re)starts the wait before p is saved by itself. Without a
-// show it waits for someone to pick one.
+// scheduleLocked (re)starts the wait before p is saved by itself. Until it
+// is saveable it waits for someone to pick the show or fix the episode.
 func (r *Room) scheduleLocked(p *proposal) {
 	if p.timer != nil {
 		p.timer.Stop()
 		p.timer = nil
 	}
 	p.ApplyAt = 0
-	if p.AnimeID == 0 {
+	if !p.saveable() {
 		return
 	}
 	p.ApplyAt = time.Now().Add(watchSaveAfter).UnixMilli()
@@ -337,9 +343,9 @@ func (r *Room) scheduleLocked(p *proposal) {
 }
 
 // saveProposal records the episode for the ticked viewers, and the show
-// for the file name's title.
+// for the file name's title. One that is not saveable is dropped.
 func (r *Room) saveProposal(ctx context.Context, p *proposal) error {
-	if p.anime == nil {
+	if !p.saveable() {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -397,6 +403,10 @@ func (r *Room) editProposal(ctx context.Context, c *Client, msg ClientMsg) error
 		if p.anime == nil {
 			r.mu.Unlock()
 			return &userError{"Pick the show first."}
+		}
+		if !p.saveable() {
+			r.mu.Unlock()
+			return &userError{"The show has no such episode."}
 		}
 		r.takeProposalLocked()
 		r.broadcastLocked(watchMsg{Type: "watch"}, nil)

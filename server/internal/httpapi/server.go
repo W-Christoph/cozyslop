@@ -88,7 +88,7 @@ type Server struct {
 	resetLimit    *ratelimit.Limiter // per IP: reset link checks and redemptions
 	registerLimit *ratelimit.Limiter // per IP: account creations
 	pairLimit     *ratelimit.Limiter // per IP: pairing requests
-	searchLimit   *ratelimit.Limiter // per account: AniList searches
+	searchLimit   *ratelimit.Limiter // per account: AniList searches and added shows
 }
 
 func New(d Deps) *Server {

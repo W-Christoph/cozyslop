@@ -238,8 +238,8 @@ progress is `{"username":"…","animeId":…,"episode":5,"source":"manual"|"auto
 | Method and path | Caller | Request body | Response | Notable errors |
 |---|---|---|---|---|
 | `GET /api/watchlog` | Account | None | 200 `{"anime":[…],"people":[{"username","nickname","nameColor","avatarUrl"}],"progress":[…]}`; shows by title; people are the enabled accounts with any progress | |
-| `GET /api/watchlog/search?q=<text>` | Account | None | 200 up to 10 shows from AniList, best match first, each with `year` (or `null`) | 400 `"Search for 2 to 100 characters."`; 429 more than 10 searches in a burst (one more every 2 seconds); 502 `"AniList did not answer. Try again."`; 503 AniList unavailable |
-| `POST /api/watchlog/anime` | Account | `{"id":<AniList id>}` | 200 the show, added or refreshed from AniList | 404 `"AniList has no such anime."`; 502 AniList unreachable |
+| `GET /api/watchlog/search?q=<text>` | Account | None | 200 up to 10 shows from AniList, best match first, each with `year` (or `null`) | 400 `"Search for 2 to 100 characters."`; 429 `"Asking AniList too fast. Wait a moment."` (searches and added shows together: 10 in a burst, then one more every 2 seconds); 502 `"AniList did not answer. Try again."`; 503 AniList unavailable |
+| `POST /api/watchlog/anime` | Account | `{"id":<AniList id>}` | 200 the show, added or refreshed from AniList | 404 `"AniList has no such anime."`; 429 as for search; 502 AniList unreachable |
 | `DELETE /api/watchlog/anime/{id}` | Admin | None | 204; removes the show, everyone's progress in it and the file names matched to it | 403 `"Admins only."`; 404 `"That show is not on the watchlog."` |
 | `PUT /api/watchlog/progress/{animeId}/{username}` | That account, or an admin | `{"episode":5}`; `0` clears it | 200 the progress; 204 when cleared | 400 `"The show has no such episode."` (negative, over the show's episode count, or over 9999); 403 `"You can only change your own progress."`; 404 unknown show or user |
 
@@ -308,7 +308,8 @@ suggestion to mark an episode watched (`null` when there is none);
 when they change, `proposal` `null` once it was saved or dismissed. A
 suggestion is `{"id","animeId","title","coverUrl","episodes","episode","file","applyAt","viewers":[{"key","nickname","coverage","checked"}]}`:
 `coverage` is the share of the episode that person saw (0 to 1), `applyAt`
-when it is saved by itself (unix ms; `0` while `animeId` is `0`). Accounts in
+when it is saved by itself (unix ms; `0` while `animeId` is `0` or `episode`
+is past the show's `episodes`, and `watch_save` then fails). Accounts in
 the room send `{"type":"watch_check","id":…,"key":"<identity key>","checked":true}`,
 `{"type":"watch_episode","id":…,"episode":6}`,
 `{"type":"watch_anime","id":…,"animeId":<AniList id>}`,

@@ -190,6 +190,11 @@ export class RoomStore {
     this.socket.send({ type: 'activity', active })
   }
 
+  // For the watchlog: the stream runs in this tab, with its picture.
+  setWatching(watching: boolean) {
+    this.socket.send({ type: 'watching', watching })
+  }
+
   setMuted(muted: boolean, paused: boolean, listening: boolean) {
     this.socket.send({ type: 'muted', muted, paused, listening })
   }

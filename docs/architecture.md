@@ -164,6 +164,8 @@ from both existing users and numeric account identity keys retained in chat.
   max_uses, expires_at, created_at.
 - `anime`: id (the AniList id), title, title_english, episodes (NULL while
   unknown), cover_url, added_at. Shows on the watchlog.
+- `watch_ignored`: (user_id, anime_id) primary key: someone who has stopped
+  following a show. Deleted with the account or the show.
 - `anime_aliases`: alias (a file name's title, normalised), anime_id. File
   names matched to a show before.
 - `watched_episodes`: (user_id, anime_id, episode) primary key, source
@@ -363,10 +365,21 @@ but shows its cover images.
 
 The Watchlog page shows how many episodes each person has watched of each
 show, and which they skipped; a click opens the episodes, to tick and untick:
-one's own, admins anyone's. Admins also remove shows. What a group can watch
-together is the first episode one of them has not watched. In a room the same view opens as a window over the stream
-(`WatchlogWindow`, from the toolbar or the "Watching" bar at the top of the chat),
-comparing the accounts in the room, with the show that plays first. Rooms also notice episodes (`hub/watch.go`):
+one's own, admins anyone's. Admins also remove shows.
+
+A show's group is who is in the middle of it: has watched some of it, has
+not finished it, and has not stopped following it (`watch_ignored`, set in
+the episodes window by the person or an admin). What a group can watch
+together is the first episode one of them has not watched. "Watch next"
+above the table lists the shows the people selected are in the middle of,
+each with the first episode one of them has not seen. A show waits for
+someone of its group who is not selected only if they have not seen that
+episode either.
+
+In a room the same view opens as a window over the stream
+(`WatchlogWindow`, from the toolbar or the "Watching" bar at the top of the
+chat): the people selected start out as the accounts who are there, and
+the show that plays comes first. Rooms also notice episodes (`hub/watch.go`):
 
 - The play helper starts VLC with its web interface on `127.0.0.1:8084`,
   with a password made up for each VLC, and answers `GET /status` (same
@@ -389,8 +402,12 @@ comparing the accounts in the room, with the show that plays first. Rooms also n
   episode; its show is the one the name was matched to before, or AniList's
   best match for it.
 - The episode is split into 10-second parts. At each answer while VLC plays,
-  every account with a tab showing the stream (visible, not paused, not
-  sound only) is noted as having seen the current part. Anonymous people are
+  every account with a tab where the stream runs is noted as having seen
+  the current part. The tab says so itself (`watching`, told to nobody
+  else): the stream is connected, not paused and has its picture, and the
+  browser has not opted out (the setting "Note what I watch", kept in the
+  browser). Being in the room with the stream paused is not watching. A
+  tab hidden for five minutes does not count either. Anonymous people are
   not followed.
 - The episode ends when VLC stops, plays another file, or the helper does not
   answer three times; in Firefox when the tab closes or plays another

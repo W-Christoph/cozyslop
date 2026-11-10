@@ -49,6 +49,11 @@ func (r *Room) Handle(ctx context.Context, c *Client, msg ClientMsg) {
 		r.setPresence(c, func() {
 			c.muted, c.paused, c.listening = msg.Muted, msg.Muted && msg.Paused, !msg.Muted && msg.Listening
 		})
+	case "watching":
+		// For the watchlog only: nobody else is told.
+		r.mu.Lock()
+		c.watching = msg.Watching
+		r.mu.Unlock()
 	case "whisper":
 		err = r.whisper(c, msg.To, msg.Body)
 	// What asks the desktop runs on its own: the desktop may be slow to

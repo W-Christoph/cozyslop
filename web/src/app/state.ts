@@ -31,6 +31,7 @@ export interface Preferences {
   showLeaveJoinMsg: boolean
   showMuted: boolean // mark others who are muted or paused
   shareMuted: boolean // tell others when this browser is
+  trackWatching: boolean // let the watchlog note the episodes watched in this browser
   titleNameInFront: boolean
   userlistOnLeft: boolean
   smallPfp: boolean
@@ -70,6 +71,7 @@ const defaultPreferences: Preferences = {
   showLeaveJoinMsg: true,
   showMuted: true,
   shareMuted: true,
+  trackWatching: true,
   titleNameInFront: false,
   userlistOnLeft: false,
   smallPfp: false,

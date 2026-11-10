@@ -6,3 +6,5 @@
 .done .of { color: inherit; opacity: 0.7; }
 .none { color: var(--text-muted); font-weight: 400; }
 .empty { visibility: hidden; }
+.ignored { opacity: 0.4; }
+.ignored .value { text-decoration: line-through; }

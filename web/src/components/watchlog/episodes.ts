@@ -10,6 +10,10 @@ export const countEpisodes = (watched: readonly WatchRange[]) => watched.reduce(
 // The first episode not watched: where to go on.
 export const firstMissing = (watched: readonly WatchRange[]) => (watched.length === 0 || watched[0][0] > 1 ? 1 : watched[0][1] + 1)
 
+// Every episode of a show of that length is watched: nothing left to watch
+// it with anybody.
+export const finished = (watched: readonly WatchRange[], episodes: number | null) => episodes !== null && firstMissing(watched) > episodes
+
 export const lastEpisode = (watched: readonly WatchRange[]) => (watched.length === 0 ? 0 : watched[watched.length - 1][1])
 
 // The episodes left out before the last one watched, as ranges.

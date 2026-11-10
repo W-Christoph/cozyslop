@@ -117,14 +117,17 @@ func lastProposal(t *testing.T, rec *recording) *WatchProposal {
 func TestWatchSuggestsAndSaves(t *testing.T) {
 	f, d := newWatchFixture(t)
 	alice, a := f.join(f.user("alice"))
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watching", Watching: true})
 	bob, _ := f.join(f.user("bob"))
+	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watching", Watching: true})
 	guest, g := f.join(anon("guest"))
 
-	// Bob looks away for the second half; the anonymous guest is not tracked.
+	// Bob pauses the stream for the second half; the anonymous guest is not
+	// tracked.
 	const file = "[SubsPlease] Sousou no Frieren - 05 (1080p) [ABCD1234].mkv"
 	f.play(d, file, func(s int) {
 		if s == 50 {
-			f.r.Handle(f.ctx, bob, ClientMsg{Type: "activity", Active: false})
+			f.r.Handle(f.ctx, bob, ClientMsg{Type: "watching", Watching: false})
 		}
 	})
 	playing := a.wait(t, "playing").(playingMsg).Playing
@@ -181,7 +184,7 @@ func TestWatchSuggestsAndSaves(t *testing.T) {
 	searches := d.searched()
 	watchSaveAfter = 50 * time.Millisecond
 	t.Cleanup(func() { watchSaveAfter = 2 * time.Minute })
-	f.r.Handle(f.ctx, bob, ClientMsg{Type: "activity", Active: true})
+	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watching", Watching: true})
 	f.play(d, "[SubsPlease] Sousou no Frieren - 03 (1080p).mkv", nil)
 	requireEqual(t, d.searched(), searches)
 	p = lastProposal(t, a)
@@ -196,7 +199,13 @@ func TestWatchSuggestsAndSaves(t *testing.T) {
 
 func TestWatchIgnoresWhatNobodySaw(t *testing.T) {
 	f, d := newWatchFixture(t)
-	_, a := f.join(f.user("alice"))
+	alice, a := f.join(f.user("alice"))
+
+	// In the room with the stream not running: not watching.
+	f.play(d, "Show - 09.mkv", nil)
+	requireEqual(t, a.count("watch"), 0)
+	requireEqual(t, a.count("playing"), 2)
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watching", Watching: true})
 
 	// Skipped through: a few parts only.
 	for _, s := range []int{0, 90} {
@@ -208,7 +217,7 @@ func TestWatchIgnoresWhatNobodySaw(t *testing.T) {
 	// Not an episode.
 	f.play(d, "holiday.mp4", nil)
 	requireEqual(t, a.count("watch"), 0)
-	requireEqual(t, a.count("playing"), 2) // Show 01 started and ended
+	requireEqual(t, a.count("playing"), 4) // Show 01 started and ended, too
 
 	// Turned off, the open suggestion and the episode are forgotten.
 	f.play(d, "Show - 02.mkv", nil)
@@ -227,6 +236,7 @@ func TestWatchIgnoresWhatNobodySaw(t *testing.T) {
 func TestWatchFollowsFirefox(t *testing.T) {
 	f, d := newWatchFixture(t)
 	alice, a := f.join(f.user("alice"))
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watching", Watching: true})
 
 	// A video with an episode but no show AniList knows is not followed.
 	page := playStatus{State: "playing", Source: "firefox", Length: 100, Title: "Some Podcast Episode 5 - Site", URL: "https://site.example/watch?v=abc"}

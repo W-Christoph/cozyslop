@@ -88,7 +88,12 @@ func (s *Server) getWatchlog(w http.ResponseWriter, r *http.Request) {
 			kept = append(kept, p)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"anime": anime, "people": people, "progress": kept})
+	ignored, err := s.store.ListIgnored(ctx)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"anime": anime, "people": people, "progress": kept, "ignored": ignored})
 }
 
 // searchAnime asks AniList for shows to add.
@@ -253,4 +258,41 @@ func (s *Server) setProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, store.Progress{Username: target.Username, AnimeID: a.ID, Watched: watched})
+}
+
+// setIgnored says that someone has stopped following a show, or follows it
+// again: yourself, or anyone as an admin. The others then do not wait for
+// them; what they watched stays.
+func (s *Server) setIgnored(w http.ResponseWriter, r *http.Request) {
+	u := s.watchlogUser(w, r)
+	if u == nil {
+		return
+	}
+	var req struct {
+		Ignored bool `json:"ignored"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	target := u
+	if name := strings.ToLower(r.PathValue("username")); name != u.Username {
+		if !u.Admin {
+			writeError(w, http.StatusForbidden, "You can only change your own progress.")
+			return
+		}
+		if target = s.userByPath(w, r); target == nil {
+			return
+		}
+	}
+	id, _ := strconv.ParseInt(r.PathValue("anime"), 10, 64)
+	err := s.store.SetIgnored(r.Context(), target.ID, id, req.Ignored)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "That show is not on the watchlog.")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

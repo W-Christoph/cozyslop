@@ -24,6 +24,15 @@ type Progress struct {
 	// Watched is the episodes as ranges, in order: 1 to 4 and 6 is
 	// [[1,4],[6,6]].
 	Watched [][2]int `json:"watched"`
+	// WatchedAt is when they watched one last (unix seconds).
+	WatchedAt int64 `json:"watchedAt"`
+}
+
+// Ignored is an account that is not following a show any more.
+type Ignored struct {
+	UserID   int64  `json:"-"`
+	Username string `json:"username"`
+	AnimeID  int64  `json:"animeId"`
 }
 
 const animeColumns = "id, title, title_english, episodes, cover_url, added_at"
@@ -111,7 +120,7 @@ func (s *Store) Watched(ctx context.Context, userID, animeID int64) ([][2]int, e
 
 func (s *Store) progress(ctx context.Context, where string, args ...any) ([]Progress, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT w.user_id, u.username, w.anime_id, w.episode
+		`SELECT w.user_id, u.username, w.anime_id, w.episode, w.watched_at
 		 FROM watched_episodes w JOIN users u ON u.id = w.user_id `+where+` ORDER BY w.anime_id, u.username, w.episode`, args...)
 	if err != nil {
 		return nil, err
@@ -121,7 +130,8 @@ func (s *Store) progress(ctx context.Context, where string, args ...any) ([]Prog
 	for rows.Next() {
 		var p Progress
 		var episode int
-		if err := rows.Scan(&p.UserID, &p.Username, &p.AnimeID, &episode); err != nil {
+		var at int64
+		if err := rows.Scan(&p.UserID, &p.Username, &p.AnimeID, &episode, &at); err != nil {
 			return nil, err
 		}
 		if n := len(out); n == 0 || out[n-1].UserID != p.UserID || out[n-1].AnimeID != p.AnimeID {
@@ -129,6 +139,7 @@ func (s *Store) progress(ctx context.Context, where string, args ...any) ([]Prog
 		}
 		// Episodes come in order: the next one lengthens the last range.
 		last := &out[len(out)-1]
+		last.WatchedAt = max(last.WatchedAt, at)
 		if n := len(last.Watched); n > 0 && last.Watched[n-1][1] == episode-1 {
 			last.Watched[n-1][1] = episode
 		} else {
@@ -196,4 +207,38 @@ func (s *Store) MarkWatched(ctx context.Context, userIDs []int64, animeID int64,
 		}
 		return nil
 	})
+}
+
+// SetIgnored says whether an account has stopped following a show.
+// ErrNotFound if the show is not on the watchlog.
+func (s *Store) SetIgnored(ctx context.Context, userID, animeID int64, ignored bool) error {
+	if !ignored {
+		_, err := s.db.ExecContext(ctx, "DELETE FROM watch_ignored WHERE user_id = ? AND anime_id = ?", userID, animeID)
+		return err
+	}
+	_, err := s.db.ExecContext(ctx,
+		"INSERT INTO watch_ignored (user_id, anime_id) VALUES (?, ?) ON CONFLICT (user_id, anime_id) DO NOTHING", userID, animeID)
+	if isForeignKeyViolation(err) {
+		return ErrNotFound
+	}
+	return err
+}
+
+// ListIgnored returns who has stopped following which show.
+func (s *Store) ListIgnored(ctx context.Context) ([]Ignored, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT i.user_id, u.username, i.anime_id FROM watch_ignored i JOIN users u ON u.id = i.user_id ORDER BY i.anime_id, u.username`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Ignored{}
+	for rows.Next() {
+		var i Ignored
+		if err := rows.Scan(&i.UserID, &i.Username, &i.AnimeID); err != nil {
+			return nil, err
+		}
+		out = append(out, i)
+	}
+	return out, rows.Err()
 }

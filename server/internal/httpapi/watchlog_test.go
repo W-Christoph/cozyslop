@@ -110,6 +110,24 @@ func TestWatchlog(t *testing.T) {
 		t.Fatalf("watchlog: %+v", log)
 	}
 
+	// Bob stopped following it: alice may not say so, bob and admins may.
+	a.error(alice, "PUT", "/api/watchlog/ignored/154587/bob", map[string]any{"ignored": true}, 403, "You can only change your own progress.")
+	a.error(admin, "PUT", "/api/watchlog/ignored/1/bob", map[string]any{"ignored": true}, 404, "That show is not on the watchlog.")
+	a.call(admin, "PUT", "/api/watchlog/ignored/154587/bob", map[string]any{"ignored": true}, 204, nil)
+	var ignoring struct {
+		Ignored  []store.Ignored
+		Progress []store.Progress
+	}
+	a.call(alice, "GET", "/api/watchlog", nil, 200, &ignoring)
+	if len(ignoring.Ignored) != 1 || ignoring.Ignored[0].Username != "bob" || ignoring.Ignored[0].AnimeID != 154587 || ignoring.Progress[0].WatchedAt == 0 {
+		t.Fatalf("ignored: %+v", ignoring)
+	}
+	a.call(admin, "PUT", "/api/watchlog/ignored/154587/bob", map[string]any{"ignored": false}, 204, nil)
+	a.call(alice, "GET", "/api/watchlog", nil, 200, &ignoring)
+	if len(ignoring.Ignored) != 0 {
+		t.Fatalf("ignored still: %+v", ignoring)
+	}
+
 	// Unticking past the show's end is fine; with everything unticked the
 	// account is no longer listed.
 	a.call(alice, "PUT", "/api/watchlog/progress/154587/alice", map[string]any{"from": 1, "to": 9999, "watched": false}, 200, &changed)

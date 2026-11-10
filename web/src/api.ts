@@ -94,9 +94,13 @@ export interface WatchProgress {
   username: string
   animeId: number
   watched: WatchRange[]
+  watchedAt: number // when they watched one last, unix seconds
 }
 
-export interface Watchlog { anime: WatchAnime[]; people: WatchPerson[]; progress: WatchProgress[] }
+// Someone who is not following a show any more: the others do not wait.
+export interface WatchIgnored { username: string; animeId: number }
+
+export interface Watchlog { anime: WatchAnime[]; people: WatchPerson[]; progress: WatchProgress[]; ignored: WatchIgnored[] }
 
 export const watchlog = {
   get: () => api.get<Watchlog>('/api/watchlog'),
@@ -107,6 +111,8 @@ export const watchlog = {
   // watched now.
   setWatched: (animeId: number, username: string, from: number, to: number, watched: boolean) =>
     api.put<WatchProgress>(`/api/watchlog/progress/${animeId}/${encodeURIComponent(username)}`, { from, to, watched }),
+  setIgnored: (animeId: number, username: string, ignored: boolean) =>
+    api.put<void>(`/api/watchlog/ignored/${animeId}/${encodeURIComponent(username)}`, { ignored }),
 }
 
 export interface RoomInfo {

@@ -51,6 +51,15 @@ export function useRoomPresence() {
       const value = `${listeningOff} ${paused} ${listening}`
       if (value !== sentMuted) { sentMuted = value; store.setMuted(listeningOff, paused, listening) }
     })
+    // For the watchlog, and told to nobody else: whether the stream runs
+    // here, with its picture. Being in the room with it paused is not
+    // watching; nor is anything in a browser that opted out.
+    let sentWatching: boolean | null = null
+    const stopWatching = effect(() => {
+      const watching = preferences.value.trackWatching && store.video.value === 'connected' && !store.paused.value && !store.audioOnly.value
+      if (store.server.value !== 'connected' || !store.selfKey.value) { sentWatching = null; return }
+      if (watching !== sentWatching) { sentWatching = watching; store.setWatching(watching) }
+    })
     const stopChat = effect(() => {
       const messages = store.chat.value
       const self = store.selfKey.value
@@ -68,7 +77,7 @@ export function useRoomPresence() {
       previous = ids
     })
     return () => {
-      stopTitle(); stopActivity(); stopMuted(); stopChat()
+      stopTitle(); stopActivity(); stopMuted(); stopWatching(); stopChat()
       document.removeEventListener('visibilitychange', visibility)
       window.clearTimeout(awayTimer)
       favicon.dispose()

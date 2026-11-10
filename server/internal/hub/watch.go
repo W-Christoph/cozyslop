@@ -167,10 +167,13 @@ func (p *proposal) view() *WatchProposal {
 	return &v
 }
 
-// seesStreamLocked: a tab of m shows the stream, playing.
+// seesStreamLocked: a tab of m shows the stream, playing. The tab says so
+// itself ("watching"): being in the room with the stream paused, without
+// its picture or not connected is not watching, whether or not the tab
+// tells the others that it is paused.
 func seesStreamLocked(m *member) bool {
 	for _, c := range m.clients {
-		if c.active && !c.paused && !c.listening {
+		if c.active && c.watching {
 			return true
 		}
 	}

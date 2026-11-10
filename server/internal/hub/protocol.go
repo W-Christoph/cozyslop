@@ -213,6 +213,7 @@ type ClientMsg struct {
 	Muted     bool   `json:"muted"`     // muted
 	Paused    bool   `json:"paused"`    // muted: because the stream is paused
 	Listening bool   `json:"listening"` // muted: the sound without the picture (unmuted only)
+	Watching  bool   `json:"watching"`  // watching: the stream runs in this tab, with its picture
 	To        string `json:"to"`        // whisper: identity key
 	Name      string `json:"name"`      // file_delete, file_play: a file in the desktop's Downloads
 	Key       string `json:"key"`       // watch_check: identity key

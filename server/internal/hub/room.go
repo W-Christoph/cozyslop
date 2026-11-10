@@ -144,6 +144,7 @@ type Client struct {
 	muted     bool
 	paused    bool
 	listening bool      // sound without the picture; never while muted
+	watching  bool      // the stream runs in this tab, with its picture; for the watchlog, told to nobody
 	typing    time.Time // last typing broadcast, for throttling
 
 	nekoToken   string                 // the tab's current neko session token

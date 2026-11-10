@@ -1,4 +1,4 @@
-import { preferences, updatePreferences } from '../../app/state'
+import { me, preferences, serverSettings, updatePreferences } from '../../app/state'
 import type { RoomStore } from '../../room/store'
 import { RestartButton } from '../room/RestartButton'
 import { RadioCards } from '../ui/RadioCards'
@@ -43,6 +43,12 @@ export function RoomSection({ room }: { room: RoomStore | null }) {
       <ToggleRow title="Show others when I am" description="Others see an icon on your picture while you have the sound off, the stream paused, or only the sound on."
         checked={prefs.shareMuted} onChange={(shareMuted) => updatePreferences({ shareMuted })} />
     </Section>
+    {serverSettings.value.watchlog && me.value && (
+      <Section title="Watchlog" description="Rooms notice the anime episodes played on their desktop and suggest marking them watched for the people who saw them.">
+        <ToggleRow title="Note what I watch" description="Counts you in while the stream is running here, with its picture. Off: rooms never suggest an episode for you in this browser; you can still tick episodes yourself."
+          checked={prefs.trackWatching} onChange={(trackWatching) => updatePreferences({ trackWatching })} />
+      </Section>
+    )}
     <Section title="While paused" description="Pausing stops the video and sound, and with them almost all the data the room uses.">
       <ToggleRow title="Chat takes the stream's place" description="The room becomes a chat, with a bar at the top to listen (sound only) or watch. Also with Sound only, and while the room's desktop is offline. Not in fullscreen."
         checked={prefs.chatViewOnPause} onChange={(chatViewOnPause) => updatePreferences({ chatViewOnPause })} />

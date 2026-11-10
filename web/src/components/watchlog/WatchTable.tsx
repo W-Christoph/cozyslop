@@ -3,23 +3,33 @@ import { Button } from '../Button'
 import { Avatar } from '../ui/Avatar'
 import { Cover } from './AnimeSearch'
 import { ProgressCell } from './ProgressCell'
+import { finished } from './episodes'
 import { together, type Together } from './together'
 import styles from './WatchTable.module.css'
 
 // The shows as rows and the people as columns, with what they can watch
 // together last. Shows the group can go on with come first.
-export function WatchTable({ anime, people, self, admin, playing, watchedOf, onOpen, onRemove }: {
+export function WatchTable({ anime, people, self, admin, playing, watchedOf, ignoredOf, onOpen, onRemove }: {
   anime: WatchAnime[]
   people: WatchPerson[]
   self: string // my username
   admin: boolean
   playing?: number // the anime being watched right now: first, and marked
   watchedOf: (animeId: number, username: string) => readonly WatchRange[]
+  ignoredOf: (animeId: number, username: string) => boolean // not following it any more: left out of Together
   onOpen: (anime: WatchAnime, person: WatchPerson) => void // someone's episodes of a show
   onRemove: (anime: WatchAnime) => void
 }) {
   const nickname = new Map(people.map((p) => [p.username, p.username === self ? 'You' : p.nickname]))
-  const rows = anime.map((a) => ({ anime: a, together: together(a, people.map((p) => p.username), (u) => watchedOf(a.id, u)) }))
+  // Together is about those in the middle of a show: who has watched some
+  // of it, and has not finished it or stopped following it. With nobody in
+  // the middle of it, it is the first episode of those who have yet to
+  // start; done once everyone has finished.
+  const rows = anime.map((a) => {
+    const open = people.map((p) => p.username).filter((u) => !finished(watchedOf(a.id, u), a.episodes))
+    const following = open.filter((u) => watchedOf(a.id, u).length > 0 && !ignoredOf(a.id, u))
+    return { anime: a, together: together(a, following.length ? following : open, (u) => watchedOf(a.id, u)) }
+  })
   const going = (t: Together) => t.started && t.next !== null
   rows.sort((a, b) => Number(b.anime.id === playing) - Number(a.anime.id === playing) || Number(going(b.together)) - Number(going(a.together)) || a.anime.title.localeCompare(b.anime.title))
   if (anime.length === 0) return <p class={styles.nothing}>No show matches.</p>
@@ -53,7 +63,7 @@ export function WatchTable({ anime, people, self, admin, playing, watchedOf, onO
               </th>
               {people.map((p) => (
                 <td key={p.username} class={styles.cell}>
-                  <ProgressCell watched={watchedOf(a.id, p.username)} episodes={a.episodes}
+                  <ProgressCell watched={watchedOf(a.id, p.username)} episodes={a.episodes} ignored={ignoredOf(a.id, p.username)}
                     label={`${nickname.get(p.username)} in ${a.title}`} onOpen={() => onOpen(a, p)} />
                 </td>
               ))}

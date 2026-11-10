@@ -10,6 +10,7 @@ import { AnimeSearch } from './AnimeSearch'
 import { EpisodesDialog } from './EpisodesDialog'
 import { withRange } from './episodes'
 import { WatchTable } from './WatchTable'
+import { WatchTonight } from './WatchTonight'
 import styles from './WatchlogView.module.css'
 
 const PEOPLE_KEY = 'cozycast-watchlog-people'
@@ -71,6 +72,9 @@ export function WatchlogView({ user, present, playing, version }: {
   const selected = people.filter((p) => !chosen || chosen.includes(p.username))
   const progress = useMemo(() => new Map(data?.progress.map((p) => [key(p.animeId, p.username), p.watched])), [data])
   const watchedOf = (animeId: number, username: string) => progress.get(key(animeId, username)) ?? none
+  const ignored = useMemo(() => new Set(data?.ignored.map((i) => key(i.animeId, i.username))), [data])
+  const ignoredOf = (animeId: number, username: string) => ignored.has(key(animeId, username))
+  const mayChange = (username: string) => user.admin || username === user.username
 
   function choose(username: string) {
     const current = selected.map((p) => p.username)
@@ -98,11 +102,25 @@ export function WatchlogView({ user, present, playing, version }: {
     setData((d) => d && {
       ...d,
       progress: [...d.progress.filter((p) => p.animeId !== animeId || p.username !== username),
-        { animeId, username, watched: withRange(d.progress.find((p) => p.animeId === animeId && p.username === username)?.watched ?? [], from, to, watched) }],
+        { animeId, username, watchedAt: Date.now() / 1000, watched: withRange(d.progress.find((p) => p.animeId === animeId && p.username === username)?.watched ?? [], from, to, watched) }],
     })
     setError('')
     try {
       await watchlog.setWatched(animeId, username, from, to, watched)
+    } catch (e) {
+      fail(e)
+      watchlog.get().then(setData).catch(() => {})
+    }
+  }
+
+  async function setIgnored(animeId: number, username: string, ignored: boolean) {
+    setData((d) => d && {
+      ...d,
+      ignored: [...d.ignored.filter((i) => i.animeId !== animeId || i.username !== username), ...(ignored ? [{ animeId, username }] : [])],
+    })
+    setError('')
+    try {
+      await watchlog.setIgnored(animeId, username, ignored)
     } catch (e) {
       fail(e)
       watchlog.get().then(setData).catch(() => {})
@@ -143,17 +161,20 @@ export function WatchlogView({ user, present, playing, version }: {
       <EmptyState icon="monitor" title="No shows yet">Search AniList above to add the first one.</EmptyState>
     )}
     {data && data.anime.length > 0 && <>
+      <WatchTonight anime={data.anime} here={selected} people={people} progress={data.progress} ignoredOf={ignoredOf}
+        onOpen={(anime, person) => setDetail({ animeId: anime.id, username: person.username })} />
       {data.anime.length > 8 && (
         <input class={styles.filter} type="search" placeholder="Filter shows…" aria-label="Filter shows" value={filter}
           onInput={(e) => setFilter(e.currentTarget.value)} />
       )}
       <WatchTable anime={shown} people={selected} self={user.username} admin={user.admin} playing={playing}
-        watchedOf={watchedOf} onOpen={(anime, person) => setDetail({ animeId: anime.id, username: person.username })}
+        watchedOf={watchedOf} ignoredOf={ignoredOf} onOpen={(anime, person) => setDetail({ animeId: anime.id, username: person.username })}
         onRemove={setRemoving} />
     </>}
     {detailAnime && detailPerson && (
       <EpisodesDialog anime={detailAnime} person={detailPerson} self={detailPerson.username === user.username}
-        watched={watchedOf(detailAnime.id, detailPerson.username)} editable={user.admin || detailPerson.username === user.username}
+        watched={watchedOf(detailAnime.id, detailPerson.username)} editable={mayChange(detailPerson.username)}
+        ignored={ignoredOf(detailAnime.id, detailPerson.username)} onIgnore={(value) => { void setIgnored(detailAnime.id, detailPerson.username, value) }}
         onSet={(from, to, watched) => { void setWatched(detailAnime.id, detailPerson.username, from, to, watched) }}
         onClose={() => setDetail(null)} />
     )}

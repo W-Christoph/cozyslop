@@ -13,13 +13,15 @@ const MORE = 24 // episodes offered at a time while a show's length is unknown
 // The episodes of one show for one person, each to tick and untick: by the
 // person and by admins; everyone else sees them. Nothing in it moves when
 // an episode is ticked: the buttons stay, switched off when they do nothing.
-export function EpisodesDialog({ anime, person, self, watched, editable, onSet, onClose }: {
+export function EpisodesDialog({ anime, person, self, watched, editable, ignored, onSet, onIgnore, onClose }: {
   anime: WatchAnime
   person: WatchPerson
   self: boolean // the person is me
   watched: readonly WatchRange[]
   editable: boolean
+  ignored: boolean // not following the show any more: the others do not wait
   onSet: (from: number, to: number, watched: boolean) => void
+  onIgnore: (ignored: boolean) => void
   onClose: () => void
 }) {
   const last = lastEpisode(watched), count = countEpisodes(watched), gaps = skipped(watched)
@@ -41,7 +43,7 @@ export function EpisodesDialog({ anime, person, self, watched, editable, onSet, 
         </div>
       </div>
       <EpisodeBar class={styles.bar} watched={watched} episodes={anime.episodes} />
-      <p class={styles.skipped}>{gaps.length > 0 ? `Skipped ${gaps.map(rangeText).join(', ')}` : count > 0 ? 'Nothing skipped' : '\u00a0'}</p>
+      <p class={`${styles.skipped} ${gaps.length > 0 ? styles.gaps : ''}`}>{gaps.length > 0 ? `Skipped ${gaps.map(rangeText).join(', ')}` : count > 0 ? 'Nothing skipped' : '\u00a0'}</p>
       <div class={styles.toolbar}>
         <span class={styles.label}>Episodes</span>
         {editable && <>
@@ -61,6 +63,15 @@ export function EpisodesDialog({ anime, person, self, watched, editable, onSet, 
         <span>{editable ? 'Click an episode to tick or untick it.' : `Only ${person.nickname} and admins can change this.`}</span>
         {anime.episodes === null && <Button size="sm" variant="ghost" onClick={() => setShown(total + MORE)}>More episodes</Button>}
       </div>
+      {(editable || ignored) && (
+        <div class={styles.following}>
+          <div class={styles.followingText}>
+            <strong>{ignored ? 'Not following any more' : 'Following this show'}</strong>
+            <span>{ignored ? `The others do not wait for ${self ? 'you' : person.nickname}. What was watched stays.` : `The others wait for ${self ? 'you' : person.nickname} before they watch on.`}</span>
+          </div>
+          {editable && <Button size="sm" variant="secondary" onClick={() => onIgnore(!ignored)}>{ignored ? 'Follow again' : 'Stop following'}</Button>}
+        </div>
+      )}
     </Modal>
   )
 }

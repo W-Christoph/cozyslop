@@ -33,6 +33,36 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestParsePage(t *testing.T) {
+	for _, c := range []struct {
+		title, address string
+		want           Name
+	}{
+		{"The Magic That Started Everything", "https://www.miruro.cx/watch/GSmujr7tGD1U1muXEcm5kH9_QSSiAUOI/witch-hat-atelier?ep=1", Name{"witch hat atelier", 0, 1}},
+		{"Watch Sousou no Frieren Episode 5 English Subbed at Site", "https://site.example/sousou-no-frieren-episode-5", Name{"Sousou no Frieren", 0, 5}},
+		{"Frieren: Beyond Journey's End Season 2 Episode 3 - A Title - Site", "https://site.example/watch/G9DUE0QW7", Name{"Frieren: Beyond Journey's End", 2, 3}},
+		{"Spy x Family (Dub) E12 - Penguin Park | Site", "", Name{"Spy x Family", 0, 12}},
+		{"Episode 7", "https://site.example/anime/dandadan-season-2/ep-7", Name{"dandadan", 2, 7}},
+		{"Some title", "https://site.example/watch/kaiju-no-8-19145/episode-4.html", Name{"kaiju no 8", 0, 4}},
+		{"Vinland Saga S02E12", "https://site.example/v/abc", Name{"Vinland Saga", 2, 12}},
+	} {
+		got, ok := ParsePage(c.title, c.address)
+		if !ok || got != c.want {
+			t.Errorf("%q %q: got %+v %v, want %+v", c.title, c.address, got, ok, c.want)
+		}
+	}
+	for _, c := range [][2]string{
+		{"Watch Frieren English Sub/Dub online Free on Site", "https://site.example/watch/frieren-18542?ep=107257"},
+		{"Top 10 Anime of 2024 - YouTube", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+		{"Episode 5", "https://site.example/watch/AbC123"},
+		{"Lofi beats - 24 hours", ""},
+	} {
+		if got, ok := ParsePage(c[0], c[1]); ok {
+			t.Errorf("%q %q: got %+v", c[0], c[1], got)
+		}
+	}
+}
+
 func TestAliasAndQuery(t *testing.T) {
 	n := Name{Title: "Kaiju No. 8", Season: 2, Episode: 1}
 	if n.Alias() != "kaiju no 8 s2" || n.Query() != "Kaiju No. 8 2" {

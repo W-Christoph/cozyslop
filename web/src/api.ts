@@ -74,7 +74,7 @@ export interface ServerSettings {
   watchlog: boolean // anime tracking is on
 }
 
-// ---- watchlog: who has watched how far in which anime ------------------------
+// ---- watchlog: who has watched which episodes of which anime -----------------
 
 export interface WatchAnime {
   id: number // AniList media id
@@ -87,12 +87,13 @@ export interface WatchAnime {
 
 export interface WatchPerson { username: string; nickname: string; nameColor: string; avatarUrl: string }
 
+// Episodes as ranges, in order: 1 to 4 and 6 is [[1, 4], [6, 6]].
+export type WatchRange = [number, number]
+
 export interface WatchProgress {
   username: string
   animeId: number
-  episode: number
-  updatedAt: number // unix seconds
-  source: 'manual' | 'auto'
+  watched: WatchRange[]
 }
 
 export interface Watchlog { anime: WatchAnime[]; people: WatchPerson[]; progress: WatchProgress[] }
@@ -102,9 +103,10 @@ export const watchlog = {
   search: (q: string) => api.get<WatchAnime[]>(`/api/watchlog/search?q=${encodeURIComponent(q)}`),
   add: (id: number) => api.post<WatchAnime>('/api/watchlog/anime', { id }),
   remove: (id: number) => api.del<void>(`/api/watchlog/anime/${id}`),
-  // Episode 0 clears it (answered without a body).
-  setProgress: (animeId: number, username: string, episode: number) =>
-    api.put<WatchProgress | undefined>(`/api/watchlog/progress/${animeId}/${encodeURIComponent(username)}`, { episode }),
+  // Marks the episodes from..to as watched, or as not; answers what is
+  // watched now.
+  setWatched: (animeId: number, username: string, from: number, to: number, watched: boolean) =>
+    api.put<WatchProgress>(`/api/watchlog/progress/${animeId}/${encodeURIComponent(username)}`, { from, to, watched }),
 }
 
 export interface RoomInfo {

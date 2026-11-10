@@ -15,6 +15,7 @@ interface Props {
   chatView: boolean // chat has the stream's place and cannot be hidden
   unreadChat: number
   window: RoomWindow | null
+  watchlog: boolean // the watchlog's window is offered
   onToggleUsers: () => void
   onPersonalSettings: () => void
   onChat: (open: boolean) => void
@@ -22,7 +23,7 @@ interface Props {
   onFullscreen: () => void
 }
 
-export function Controls({ fullscreen, userlistHidden, chatOpen, chatView, unreadChat, window, onToggleUsers, onPersonalSettings, onChat, onWindow, onFullscreen }: Props) {
+export function Controls({ fullscreen, userlistHidden, chatOpen, chatView, unreadChat, window, watchlog, onToggleUsers, onPersonalSettings, onChat, onWindow, onFullscreen }: Props) {
   const store = useRoomStore()
   const host = store.isHost.value
   const holder = store.remoteHolder.value
@@ -45,6 +46,8 @@ export function Controls({ fullscreen, userlistHidden, chatOpen, chatView, unrea
         {store.rights.value.upload && <IconButton class={`${styles.quiet} ${window === 'files' ? styles.on : uploading ? styles.uploading : ''}`} icon="folder" label="Files of the desktop"
           tooltip={uploading ? upload.message : undefined} style={uploading ? { '--fill': `${Math.round(upload.progress * 100)}%` } : undefined}
           aria-haspopup="dialog" onClick={() => onWindow('files')} />}
+        {watchlog && <IconButton class={`${styles.quiet} ${window === 'watchlog' ? styles.on : ''}`} icon="watchlog" label="Watchlog"
+          aria-haspopup="dialog" onClick={() => onWindow('watchlog')} />}
         {store.rights.value.admin && <IconButton class={`${styles.quiet} ${window === 'settings' ? styles.on : ''}`} icon="room-settings" label="Room settings"
           aria-haspopup="dialog" onClick={() => onWindow('settings')} />}
       </div>}
@@ -76,7 +79,7 @@ export function Controls({ fullscreen, userlistHidden, chatOpen, chatView, unrea
         <IconButton shortcut="chat" icon="message-circle" label={chatOpen ? 'Hide chat' : `Show chat${unreadChat ? `, ${unreadChat} new messages` : ''}`}
           tooltip={chatView ? 'The chat stays open in the chat view' : undefined} disabled={chatView}
           class={`${styles.quiet} ${chatOpen ? styles.on : ''} ${chatView ? styles.held : ''}`} aria-pressed={chatOpen} badge={chatOpen || chatView ? 0 : unreadChat} onClick={() => onChat(!chatOpen)} />
-        {!fullscreen && <MoreMenu userlistHidden={userlistHidden} onToggleUsers={onToggleUsers} onPersonalSettings={onPersonalSettings} onWindow={onWindow} />}
+        {!fullscreen && <MoreMenu watchlog={watchlog} userlistHidden={userlistHidden} onToggleUsers={onToggleUsers} onPersonalSettings={onPersonalSettings} onWindow={onWindow} />}
       </div>}
     </div>
   )

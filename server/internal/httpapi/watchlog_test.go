@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -82,12 +83,20 @@ func TestWatchlog(t *testing.T) {
 	a.error(alice, "POST", "/api/watchlog/anime", map[string]any{"id": 1}, 404, "AniList has no such anime.")
 	a.call(alice, "POST", "/api/watchlog/anime", map[string]any{"id": 154587}, 200, nil)
 
-	a.call(alice, "PUT", "/api/watchlog/progress/154587/alice", map[string]any{"episode": 5}, 200, nil)
-	a.error(alice, "PUT", "/api/watchlog/progress/154587/alice", map[string]any{"episode": 29}, 400, "The show has no such episode.")
-	a.error(alice, "PUT", "/api/watchlog/progress/154587/bob", map[string]any{"episode": 1}, 403, "You can only change your own progress.")
-	a.error(alice, "PUT", "/api/watchlog/progress/1/alice", map[string]any{"episode": 1}, 404, "That show is not on the watchlog.")
-	a.call(admin, "PUT", "/api/watchlog/progress/154587/bob", map[string]any{"episode": 2}, 200, nil)
-	a.error(admin, "PUT", "/api/watchlog/progress/154587/nobody", map[string]any{"episode": 2}, 404, "Unknown user.")
+	// Alice watched 1 to 5 but not 3.
+	var changed store.Progress
+	a.call(alice, "PUT", "/api/watchlog/progress/154587/alice", map[string]any{"from": 1, "to": 5, "watched": true}, 200, nil)
+	a.call(alice, "PUT", "/api/watchlog/progress/154587/alice", map[string]any{"from": 3, "watched": false}, 200, &changed)
+	if changed.Username != "alice" || changed.AnimeID != 154587 || !reflect.DeepEqual(changed.Watched, [][2]int{{1, 2}, {4, 5}}) {
+		t.Fatalf("changed: %+v", changed)
+	}
+	for _, bad := range []map[string]any{{"from": 29, "watched": true}, {"from": 0, "watched": true}, {"from": 5, "to": 4, "watched": true}, {"from": 1, "to": 10000, "watched": false}} {
+		a.error(alice, "PUT", "/api/watchlog/progress/154587/alice", bad, 400, "The show has no such episode.")
+	}
+	a.error(alice, "PUT", "/api/watchlog/progress/154587/bob", map[string]any{"from": 1, "watched": true}, 403, "You can only change your own progress.")
+	a.error(alice, "PUT", "/api/watchlog/progress/1/alice", map[string]any{"from": 1, "watched": true}, 404, "That show is not on the watchlog.")
+	a.call(admin, "PUT", "/api/watchlog/progress/154587/bob", map[string]any{"from": 2, "watched": true}, 200, nil)
+	a.error(admin, "PUT", "/api/watchlog/progress/154587/nobody", map[string]any{"from": 2, "watched": true}, 404, "Unknown user.")
 
 	var log struct {
 		Anime    []store.Anime
@@ -96,11 +105,17 @@ func TestWatchlog(t *testing.T) {
 	}
 	a.call(alice, "GET", "/api/watchlog", nil, 200, &log)
 	if len(log.Anime) != 1 || log.Anime[0].Title != "Sousou no Frieren" || len(log.People) != 2 ||
-		log.People[0].Username != "alice" || len(log.Progress) != 2 || log.Progress[1].Username != "bob" || log.Progress[1].Episode != 2 {
+		log.People[0].Username != "alice" || len(log.Progress) != 2 || log.Progress[1].Username != "bob" ||
+		!reflect.DeepEqual(log.Progress[1].Watched, [][2]int{{2, 2}}) {
 		t.Fatalf("watchlog: %+v", log)
 	}
 
-	a.call(alice, "PUT", "/api/watchlog/progress/154587/alice", map[string]any{"episode": 0}, 204, nil)
+	// Unticking past the show's end is fine; with everything unticked the
+	// account is no longer listed.
+	a.call(alice, "PUT", "/api/watchlog/progress/154587/alice", map[string]any{"from": 1, "to": 9999, "watched": false}, 200, &changed)
+	if len(changed.Watched) != 0 {
+		t.Fatalf("cleared: %+v", changed)
+	}
 	a.error(alice, "DELETE", "/api/watchlog/anime/154587", nil, 403, "Admins only.")
 	a.call(admin, "DELETE", "/api/watchlog/anime/154587", nil, 204, nil)
 	a.call(alice, "GET", "/api/watchlog", nil, 200, &log)

@@ -4,7 +4,8 @@ import { useRoomStore } from './RoomContext'
 import type { RoomWindow } from '../../pages/RoomPage'
 import styles from './MoreMenu.module.css'
 
-export function MoreMenu({ userlistHidden, onToggleUsers, onPersonalSettings, onWindow }: {
+export function MoreMenu({ watchlog, userlistHidden, onToggleUsers, onPersonalSettings, onWindow }: {
+  watchlog: boolean
   userlistHidden: boolean
   onToggleUsers: () => void
   onPersonalSettings: () => void
@@ -45,6 +46,7 @@ export function MoreMenu({ userlistHidden, onToggleUsers, onPersonalSettings, on
     { icon: 'users', label: userlistHidden ? 'Show users' : 'Hide users', action: onToggleUsers },
     { icon: 'settings', label: 'Personal settings', action: onPersonalSettings },
     ...(store.rights.value.upload ? [{ icon: 'folder', label: 'Files of the desktop', action: () => onWindow('files') }] : []),
+    ...(watchlog ? [{ icon: 'watchlog', label: 'Watchlog', action: () => onWindow('watchlog') }] : []),
     ...(store.rights.value.admin ? [{ icon: 'room-settings', label: 'Room settings', action: () => onWindow('settings') }] : []),
     { icon: 'home', label: 'Home', href: '/' },
   ]

@@ -57,8 +57,8 @@ export type KickReason = 'banned' | 'account' | 'verified' | 'invite' | 'kicked'
 
 export type DesktopState = 'online' | 'offline'
 
-// The watchlog: the episode VLC plays on the desktop, and the suggestion to
-// mark one watched once it ended (server/internal/hub/watch.go).
+// The watchlog: the episode VLC or Firefox plays on the desktop, and the
+// suggestion to mark one watched once it ended (server/internal/hub/watch.go).
 export interface WatchPlaying {
   animeId: number // 0: the show was not recognised
   title: string

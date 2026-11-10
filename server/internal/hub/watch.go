@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,8 +18,8 @@ import (
 )
 
 // The watchlog (docs/architecture.md, "Watchlog"). While it is on, the room
-// follows what the VLC started by the play helper plays, and notes which
-// part of an episode each person in the room saw. When the episode ends it
+// follows what the VLC started by the play helper plays, or else Firefox,
+// and notes which part of an episode each person in the room saw. When the episode ends it
 // suggests marking it watched for those who saw most of it; the people in
 // the room can change the suggestion before it is saved.
 
@@ -31,7 +32,10 @@ const (
 	watchListed  = 0.2
 	watchChecked = 0.8
 	watchWorth   = 0.5
-	maxEpisode   = 9999
+	// A web page keeps a video that is over, paused at its end; one paused
+	// this far in, during the credits, counts as over too.
+	watchEnding = 0.9
+	maxEpisode  = 9999
 )
 
 // watchSaveAfter is how long a suggestion waits before it is saved by
@@ -44,11 +48,36 @@ type playStatus struct {
 	Time   int    `json:"time"`  // seconds
 	Length int    `json:"length"`
 	File   string `json:"file"`
+	// Firefox instead of VLC ("firefox"): the page's title and address
+	// instead of a file.
+	Source string `json:"source"`
+	Title  string `json:"title"`
+	URL    string `json:"url"`
 }
 
-// watching is the file VLC is playing.
+// played is what the status names: the file, or for a web page its address
+// and what that and its title say. key tells one episode from the next. A
+// page's texts may change while it plays, so its key is the episode they
+// name; pages that name none are all one.
+func (st playStatus) played() (file, key string, name episode.Name, known bool) {
+	if st.Source != "firefox" {
+		name, known = episode.Parse(st.File)
+		return st.File, "file:" + st.File, name, known
+	}
+	file = st.URL
+	if file == "" {
+		file = st.Title
+	}
+	if name, known = episode.ParsePage(st.Title, st.URL); !known {
+		return file, "page", name, false
+	}
+	return file, "page:" + name.Alias() + "#" + strconv.Itoa(name.Episode), name, true
+}
+
+// watching is the file VLC is playing, or the page Firefox is.
 type watching struct {
 	file   string
+	key    string
 	name   episode.Name
 	known  bool         // the name has an episode number
 	anime  *store.Anime // nil if not recognised
@@ -182,19 +211,24 @@ func (r *Room) checkPlayback(ctx context.Context) {
 		return
 	}
 	r.watchMisses = 0
-	switch {
-	case st.State == "paused":
-		return
-	case st.State != "playing" || st.File == "":
-		r.endWatching(ctx)
-		return
-	}
+	file, key, name, known := st.played()
 	r.mu.Lock()
 	w := r.watch
 	r.mu.Unlock()
-	if w == nil || w.file != st.File {
+	switch {
+	case st.State == "paused":
+		if w != nil && w.key == key && st.Source == "firefox" && st.Length > 0 &&
+			float64(st.Time) >= watchEnding*float64(st.Length) {
+			r.endWatching(ctx)
+		}
+		return
+	case st.State != "playing" || file == "":
 		r.endWatching(ctx)
-		w = r.startWatching(ctx, st.File)
+		return
+	}
+	if w == nil || w.key != key {
+		r.endWatching(ctx)
+		w = r.startWatching(ctx, file, key, name, known, st.Source == "firefox")
 	}
 	if !w.known {
 		return
@@ -219,11 +253,13 @@ func (r *Room) checkPlayback(ctx context.Context) {
 	}
 }
 
-func (r *Room) startWatching(ctx context.Context, file string) *watching {
-	w := &watching{file: file, seen: make(map[string]*viewer)}
-	w.name, w.known = episode.Parse(file)
+// startWatching follows a new file or page. A page counts only with a show
+// AniList or an earlier episode knows: other videos have episodes too.
+func (r *Room) startWatching(ctx context.Context, file, key string, name episode.Name, known, page bool) *watching {
+	w := &watching{file: file, key: key, name: name, known: known, seen: make(map[string]*viewer)}
 	if w.known {
 		w.anime = r.findAnime(ctx, w.name)
+		w.known = w.anime != nil || !page
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -361,7 +397,7 @@ func (r *Room) saveProposal(ctx context.Context, p *proposal) error {
 				ids = append(ids, p.users[v.Key])
 			}
 		}
-		err = r.hub.store.RaiseProgress(ctx, ids, p.anime.ID, p.Episode)
+		err = r.hub.store.MarkWatched(ctx, ids, p.anime.ID, p.Episode)
 	}
 	if err != nil {
 		r.log.Error("save watched episode", "err", err)
@@ -372,8 +408,8 @@ func (r *Room) saveProposal(ctx context.Context, p *proposal) error {
 var errProposalGone = &userError{"That suggestion is gone."}
 
 // editProposal handles watch_check, watch_episode, watch_save and
-// watch_dismiss: anyone in the room with an account may change or settle
-// the suggestion.
+// watch_dismiss: anyone in the room with an account may correct or settle
+// the suggestion, but tick only themselves; admins anyone.
 func (r *Room) editProposal(ctx context.Context, c *Client, msg ClientMsg) error {
 	r.mu.Lock()
 	if c.m.user == nil {
@@ -391,6 +427,11 @@ func (r *Room) editProposal(ctx context.Context, c *Client, msg ClientMsg) error
 		if i < 0 {
 			r.mu.Unlock()
 			return &userError{"That person is not in the suggestion."}
+		}
+		// Whether someone watched it is theirs to say, or an admin's.
+		if msg.Key != c.m.key && !c.m.rights.Admin {
+			r.mu.Unlock()
+			return ErrNotAllowed
 		}
 		p.Viewers[i].Checked = msg.Checked
 	case "watch_episode":

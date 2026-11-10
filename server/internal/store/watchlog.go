@@ -16,14 +16,14 @@ type Anime struct {
 	AddedAt      int64  `json:"addedAt"`
 }
 
-// Progress is the last episode of a show an account has watched.
+// Progress is the episodes of a show an account has watched.
 type Progress struct {
-	UserID    int64  `json:"-"`
-	Username  string `json:"username"`
-	AnimeID   int64  `json:"animeId"`
-	Episode   int    `json:"episode"`
-	Source    string `json:"source"` // manual | auto
-	UpdatedAt int64  `json:"updatedAt"`
+	UserID   int64  `json:"-"`
+	Username string `json:"username"`
+	AnimeID  int64  `json:"animeId"`
+	// Watched is the episodes as ranges, in order: 1 to 4 and 6 is
+	// [[1,4],[6,6]].
+	Watched [][2]int `json:"watched"`
 }
 
 const animeColumns = "id, title, title_english, episodes, cover_url, added_at"
@@ -94,11 +94,25 @@ func (s *Store) SaveAlias(ctx context.Context, alias string, animeID int64) erro
 	return err
 }
 
-// ListProgress returns everyone's progress.
+// ListProgress returns what everyone has watched, by show and username.
 func (s *Store) ListProgress(ctx context.Context) ([]Progress, error) {
+	return s.progress(ctx, "")
+}
+
+// Watched returns the episodes of a show an account has watched, as
+// ranges; none if nothing.
+func (s *Store) Watched(ctx context.Context, userID, animeID int64) ([][2]int, error) {
+	list, err := s.progress(ctx, "WHERE w.user_id = ? AND w.anime_id = ?", userID, animeID)
+	if err != nil || len(list) == 0 {
+		return [][2]int{}, err
+	}
+	return list[0].Watched, nil
+}
+
+func (s *Store) progress(ctx context.Context, where string, args ...any) ([]Progress, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT p.user_id, u.username, p.anime_id, p.episode, p.source, p.updated_at
-		 FROM watch_progress p JOIN users u ON u.id = p.user_id ORDER BY p.anime_id, u.username`)
+		`SELECT w.user_id, u.username, w.anime_id, w.episode
+		 FROM watched_episodes w JOIN users u ON u.id = w.user_id `+where+` ORDER BY w.anime_id, u.username, w.episode`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -106,10 +120,20 @@ func (s *Store) ListProgress(ctx context.Context) ([]Progress, error) {
 	out := []Progress{}
 	for rows.Next() {
 		var p Progress
-		if err := rows.Scan(&p.UserID, &p.Username, &p.AnimeID, &p.Episode, &p.Source, &p.UpdatedAt); err != nil {
+		var episode int
+		if err := rows.Scan(&p.UserID, &p.Username, &p.AnimeID, &episode); err != nil {
 			return nil, err
 		}
-		out = append(out, p)
+		if n := len(out); n == 0 || out[n-1].UserID != p.UserID || out[n-1].AnimeID != p.AnimeID {
+			out = append(out, p)
+		}
+		// Episodes come in order: the next one lengthens the last range.
+		last := &out[len(out)-1]
+		if n := len(last.Watched); n > 0 && last.Watched[n-1][1] == episode-1 {
+			last.Watched[n-1][1] = episode
+		} else {
+			last.Watched = append(last.Watched, [2]int{episode, episode})
+		}
 	}
 	return out, rows.Err()
 }
@@ -117,7 +141,7 @@ func (s *Store) ListProgress(ctx context.Context) ([]Progress, error) {
 // WatchlogUsers returns the accounts with any progress, by username.
 func (s *Store) WatchlogUsers(ctx context.Context) ([]*User, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT "+userColumns+" FROM users WHERE id IN (SELECT user_id FROM watch_progress) ORDER BY username")
+		"SELECT "+userColumns+" FROM users WHERE id IN (SELECT user_id FROM watched_episodes) ORDER BY username")
 	if err != nil {
 		return nil, err
 	}
@@ -133,34 +157,35 @@ func (s *Store) WatchlogUsers(ctx context.Context) ([]*User, error) {
 	return out, rows.Err()
 }
 
-// SetProgress sets how far an account has watched a show; episode 0
-// removes it. ErrNotFound if the show is not on the watchlog.
-func (s *Store) SetProgress(ctx context.Context, userID, animeID int64, episode int, source string) (*Progress, error) {
-	if episode <= 0 {
-		_, err := s.db.ExecContext(ctx, "DELETE FROM watch_progress WHERE user_id = ? AND anime_id = ?", userID, animeID)
-		return nil, err
+// SetWatched marks the episodes from first to last of a show as watched
+// by an account, or as not. ErrNotFound if the show is not on the watchlog.
+func (s *Store) SetWatched(ctx context.Context, userID, animeID int64, first, last int, watched bool, source string) error {
+	if !watched {
+		_, err := s.db.ExecContext(ctx,
+			"DELETE FROM watched_episodes WHERE user_id = ? AND anime_id = ? AND episode BETWEEN ? AND ?", userID, animeID, first, last)
+		return err
 	}
-	p := &Progress{UserID: userID, AnimeID: animeID, Episode: episode, Source: source, UpdatedAt: s.unix()}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO watch_progress (user_id, anime_id, episode, source, updated_at) VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT (user_id, anime_id) DO UPDATE SET episode = excluded.episode, source = excluded.source, updated_at = excluded.updated_at`,
-		userID, animeID, episode, source, p.UpdatedAt)
+		`WITH RECURSIVE numbers(n) AS (SELECT ? UNION ALL SELECT n + 1 FROM numbers WHERE n < ?)
+		 INSERT INTO watched_episodes (user_id, anime_id, episode, source, watched_at)
+		 SELECT ?, ?, n, ?, ? FROM numbers WHERE true
+		 ON CONFLICT (user_id, anime_id, episode) DO NOTHING`,
+		first, last, userID, animeID, source, s.unix())
 	if isForeignKeyViolation(err) {
-		return nil, ErrNotFound
+		return ErrNotFound
 	}
-	return p, err
+	return err
 }
 
-// RaiseProgress records that the accounts watched episode of a show, for
-// those who were not further along already. It never lowers progress.
-func (s *Store) RaiseProgress(ctx context.Context, userIDs []int64, animeID int64, episode int) error {
+// MarkWatched records that the accounts watched an episode of a show in a
+// room. What they had watched before stays as it is.
+func (s *Store) MarkWatched(ctx context.Context, userIDs []int64, animeID int64, episode int) error {
 	now := s.unix()
 	return s.tx(ctx, func(tx *sql.Tx) error {
 		for _, id := range userIDs {
 			_, err := tx.ExecContext(ctx,
-				`INSERT INTO watch_progress (user_id, anime_id, episode, source, updated_at) VALUES (?, ?, ?, 'auto', ?)
-				 ON CONFLICT (user_id, anime_id) DO UPDATE SET episode = excluded.episode, source = 'auto', updated_at = excluded.updated_at
-				 WHERE excluded.episode > watch_progress.episode`,
+				`INSERT INTO watched_episodes (user_id, anime_id, episode, source, watched_at) VALUES (?, ?, ?, 'auto', ?)
+				 ON CONFLICT (user_id, anime_id, episode) DO NOTHING`,
 				id, animeID, episode, now)
 			if isForeignKeyViolation(err) {
 				continue // the account was deleted meanwhile

@@ -2,33 +2,49 @@ import { useEffect, useState } from 'preact/hooks'
 import type { WatchProposal } from '../../room/protocol'
 import { AnimeSearch, Cover } from '../watchlog/AnimeSearch'
 import { Icon } from '../ui/Icon'
-import { useRoomStore } from './RoomContext'
+import { useRoomStore, watchlogWanted } from './RoomContext'
 import styles from './WatchPanel.module.css'
 
-// The watchlog in the room, above the chat input: the episode VLC plays, and
-// once it ended the suggestion to mark it watched for those who saw it.
+// The episode VLC or Firefox plays, as a bar at the top of the chat: the
+// show's whole name, on two lines if it needs them. Accounts get to the
+// watchlog from it.
+export function WatchPlayingBar() {
+  const store = useRoomStore()
+  const playing = store.watchPlaying.value
+  if (!playing) return null
+  const line = <>
+    <Icon name="play" size={14} />
+    <span class={styles.playingText}>
+      <span class={styles.label}>Watching{playing.animeId === 0 && ' (not recognised)'}</span>
+      <strong class={styles.show} title={playing.title}>{playing.title}</strong>
+    </span>
+    <span class={styles.ep}>Ep {playing.episode}</span>
+  </>
+  return (
+    <div role="status">
+      {store.self.value?.anonymous === false
+        ? <button type="button" class={`${styles.playing} ${styles.open}`} title="Open the watchlog" onClick={() => { watchlogWanted.value = true }}>{line}</button>
+        : <div class={styles.playing}>{line}</div>}
+    </div>
+  )
+}
+
+// The watchlog's suggestion above the chat input, once an episode ended: to
+// mark it watched for those who saw it.
 export function WatchPanel() {
   const store = useRoomStore()
   const proposal = store.watchProposal.value
-  const playing = store.watchPlaying.value
   // Keyed: a new suggestion starts without the last one's show search open.
-  if (proposal) return <WatchCard key={proposal.id} proposal={proposal} />
-  if (!playing) return null
-  return (
-    <div class={styles.playing} role="status">
-      <Icon name="play" size={12} />
-      <span class={styles.playingText}>
-        Watching <strong>{playing.title}</strong> · Ep {playing.episode}
-        {playing.animeId === 0 && <span class={styles.muted}> (not recognised)</span>}
-      </span>
-    </div>
-  )
+  return proposal ? <WatchCard key={proposal.id} proposal={proposal} /> : null
 }
 
 function WatchCard({ proposal: p }: { proposal: WatchProposal }) {
   const store = useRoomStore()
   // Only accounts may change it; others see it.
-  const canEdit = store.self.value?.anonymous === false
+  const self = store.self.value
+  const canEdit = self?.anonymous === false
+  // Whether someone watched it is theirs to say, or an admin's.
+  const canCheck = (key: string) => canEdit && (key === self?.key || store.rights.value.admin)
   const [picking, setPicking] = useState(false)
   const left = useCountdown(p.applyAt)
   const max = p.episodes ?? 9999
@@ -59,7 +75,7 @@ function WatchCard({ proposal: p }: { proposal: WatchProposal }) {
         {p.viewers.map((v) => (
           <li key={v.key}>
             <label class={styles.viewer}>
-              <input type="checkbox" checked={v.checked} disabled={!canEdit}
+              <input type="checkbox" checked={v.checked} disabled={!canCheck(v.key)}
                 onChange={(e) => store.checkWatcher(p.id, v.key, e.currentTarget.checked)} />
               <span class={styles.name}>{v.nickname}</span>
               <span class={styles.muted}>{Math.round(v.coverage * 100)}%</span>

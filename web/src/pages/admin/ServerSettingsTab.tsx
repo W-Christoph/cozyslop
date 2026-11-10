@@ -59,7 +59,7 @@ export function ServerSettingsTab() {
             checked={inviteOnly} onChange={(value) => { setInviteOnly(value); setStatus('') }} />
         </Section>
         <Section title="Watchlog">
-          <ToggleRow title="Track anime" description="Keeps track of which episodes people have watched. Episodes played in VLC in a room are noticed and suggested."
+          <ToggleRow title="Track anime" description="Keeps track of which episodes people have watched. Episodes played in VLC or Firefox in a room are noticed and suggested."
             checked={watchlog} onChange={(value) => { setWatchlog(value); setStatus('') }} />
         </Section>
         <FormActions error={error} message={status}>

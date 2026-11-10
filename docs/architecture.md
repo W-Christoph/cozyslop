@@ -166,8 +166,9 @@ from both existing users and numeric account identity keys retained in chat.
   unknown), cover_url, added_at. Shows on the watchlog.
 - `anime_aliases`: alias (a file name's title, normalised), anime_id. File
   names matched to a show before.
-- `watch_progress`: (user_id, anime_id) primary key, episode, source
-  (`manual` | `auto`), updated_at. Deleted with the account or the show.
+- `watched_episodes`: (user_id, anime_id, episode) primary key, source
+  (`manual` | `auto`), watched_at: one row for each episode someone has
+  watched. Deleted with the account or the show.
 - `chat_messages`: id, room, identity key, user_id, nickname/colour snapshot,
   anonymous, type (`text` | `image` | `video`), body, media, edited,
   created_at. Kept for 1 hour, at most 1000 per room; media files are deleted
@@ -354,19 +355,34 @@ room image from before the helper answers nothing, and the person is told.
 
 ## Watchlog
 
-Off by default (global setting `watchlog`). It keeps one number per account
-and show: the last episode watched. Shows come from AniList
+Off by default (global setting `watchlog`). It keeps which episodes of
+which show each account has watched. Shows come from AniList
 (`internal/anilist`, `https://graphql.anilist.co`, no account needed), which
 the server must be able to reach; the web UI never talks to AniList itself,
 but shows its cover images.
 
-People set their own progress on the Watchlog page; admins may set anyone's
-and remove shows. Rooms also notice episodes (`hub/watch.go`):
+The Watchlog page shows how many episodes each person has watched of each
+show, and which they skipped; a click opens the episodes, to tick and untick:
+one's own, admins anyone's. Admins also remove shows. What a group can watch
+together is the first episode one of them has not watched. In a room the same view opens as a window over the stream
+(`WatchlogWindow`, from the toolbar or the "Watching" bar at the top of the chat),
+comparing the accounts in the room, with the show that plays first. Rooms also notice episodes (`hub/watch.go`):
 
 - The play helper starts VLC with its web interface on `127.0.0.1:8084`,
   with a password made up for each VLC, and answers `GET /status` (same
   token as `/play`) with VLC's state, time, length and file name. Only the
   VLC the helper started is followed, not one opened by hand.
+- While that VLC plays nothing, `/status` says what Firefox plays, as
+  Firefox tells the desktop's media keys (MPRIS on the session bus, read
+  with `dbus-send`): state, time, length, and the page's title and address
+  (`source: "firefox"`). The show and the episode come from those
+  (`episode.ParsePage`): a title like `Watch Show Episode 5 English Sub -
+  Site`, or an address like `/watch/<id>/show-name?ep=5` or
+  `/show-name-episode-5`. Only a spelled-out episode counts, and only a show
+  that AniList or an earlier episode knows: other videos have episodes too.
+  A site that names the episode in neither (only an id of its own) is not
+  followed. The texts may change while the video plays; the episode is the
+  same while they name the same one.
 - While the setting is on and someone is in the room, the server asks every
   5 seconds. A file name with an episode number (`internal/episode`:
   `[Group] Show - 05 (1080p).mkv`, `Show.S01E05…`, `Show Episode 5`) is an
@@ -377,11 +393,14 @@ and remove shows. Rooms also notice episodes (`hub/watch.go`):
   sound only) is noted as having seen the current part. Anonymous people are
   not followed.
 - The episode ends when VLC stops, plays another file, or the helper does not
-  answer three times. If anyone saw at least half of it, the room gets a
+  answer three times; in Firefox when the tab closes or plays another
+  episode, or is paused in the last tenth of the video (a page keeps a
+  video that is over, paused). If anyone saw at least half of it, the room gets a
   suggestion: everyone who saw at least 20% is listed, those with 80% ticked.
-  Accounts in the room may tick people, change the episode or pick another
-  show; it is saved two minutes after the last change, or at once with Save,
-  and only raises progress, never lowers it. Without a recognised show it
+  Accounts in the room may change the episode or pick another show, and
+  tick themselves (admins anyone); it is saved two minutes after the last change, or at once with Save,
+  and adds that one episode for those ticked: nothing else they have
+  watched changes. Without a recognised show it
   waits for one to be picked, and with an episode past the show's last one
   (a season matched by mistake) for it to be corrected. Saving also remembers the file name's title
   for that show, so the next episode is matched without asking AniList.

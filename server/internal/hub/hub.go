@@ -60,8 +60,8 @@ type RoomConfig struct {
 	// the room has no such helper.
 	PlayURL   string
 	PlayToken string
-	// StatusURL says what the VLC the play helper started plays, for
-	// requests that carry PlayToken; "" if the room has no such helper.
+	// StatusURL says what the VLC the play helper started plays, or Firefox,
+	// for requests that carry PlayToken; "" if the room has no such helper.
 	StatusURL string
 	// HibernateURL pauses and continues the programs on the room's desktop
 	// (worker/hibernate.py), for requests that carry PlayToken; "" if the

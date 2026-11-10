@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { useRoute } from 'preact-iso'
-import { preferences, settingsOpen } from '../app/state'
+import { me, preferences, serverSettings, settingsOpen } from '../app/state'
 import { useChatEvents } from '../components/chat/useChatEvents'
 import { ChatStage } from '../components/room/ChatStage'
 import { ChatViewActions, ChatViewBar } from '../components/room/ChatViewBar'
 import { Controls } from '../components/room/Controls'
 import { FilesWindow } from '../components/room/FilesWindow'
+import { WatchlogWindow } from '../components/room/WatchlogWindow'
 import { KickedScreen } from '../components/room/KickedScreen'
-import { RoomContext, useRoomStore } from '../components/room/RoomContext'
+import { RoomContext, useRoomStore, watchlogWanted } from '../components/room/RoomContext'
 import { Sidebar } from '../components/room/Sidebar'
 import { PeoplePanel } from '../components/room/PeoplePanel'
 import { RoomSettingsWindow } from '../components/room/admin/RoomSettingsWindow'
@@ -31,7 +32,7 @@ export function RoomRoute() {
   return <RoomContext.Provider value={store}><RoomPage key={`${params.room}:${query.access ?? ''}`} /></RoomContext.Provider>
 }
 
-export type RoomWindow = 'files' | 'settings'
+export type RoomWindow = 'files' | 'settings' | 'watchlog'
 
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(() => window.matchMedia(query).matches)
@@ -51,7 +52,8 @@ export function RoomPage() {
   const { fullscreen, idle, wake, toggle, error } = useRoomFullscreen(page)
   const [chatOpen, setChatOpen] = useState(true)
   const [userlistHidden, setUserlistHidden] = useState(false)
-  // Windows over the room: the desktop's files and the room's settings.
+  // Windows over the room: the desktop's files, the room's settings and the
+  // watchlog.
   const [roomWindow, setRoomWindow] = useState<RoomWindow | null>(null)
   const personalSettings = settingsOpen.value !== null
   const [hover, setHover] = useState<HoverName | null>(null)
@@ -71,6 +73,8 @@ export function RoomPage() {
   useRoomPresence()
   useAwayLine()
   const files = store.rights.value.upload
+  // For accounts, while the server keeps one.
+  const watchlog = serverSettings.value.watchlog && store.self.value?.anonymous === false && me.value !== null
   const { audioOnly, chatWidth, chatViewOnPause, streamBuffer, tcpOnly } = preferences.value
   // Chat view: with no picture (paused, or sound only), chat takes the
   // stream's place. Not in fullscreen, which is for watching.
@@ -83,8 +87,14 @@ export function RoomPage() {
   const chatShown = chatOpen || chatView
   const unreadChat = useUnreadChat(chatShown)
   useEffect(() => {
-    if ((!admin && roomWindow === 'settings') || (!files && roomWindow === 'files')) setRoomWindow(null)
-  }, [admin, files, roomWindow])
+    if ((!admin && roomWindow === 'settings') || (!files && roomWindow === 'files') || (!watchlog && roomWindow === 'watchlog')) setRoomWindow(null)
+  }, [admin, files, watchlog, roomWindow])
+  const wanted = watchlogWanted.value
+  useEffect(() => {
+    if (!wanted) return
+    watchlogWanted.value = false
+    if (watchlog) setRoomWindow('watchlog')
+  }, [wanted, watchlog])
   useEffect(() => { store.setAudioOnly(audioOnly) }, [store, audioOnly])
   useEffect(() => { store.neko.setStreamBuffer(streamBuffer) }, [store, streamBuffer])
   useEffect(() => { store.neko.setTcpOnly(tcpOnly) }, [store, tcpOnly])
@@ -122,7 +132,7 @@ export function RoomPage() {
         {stage ? <ChatStage lines={lines} actions={!chatOpen} /> : chatView && <ChatViewBar preview />}
         <VideoArea hidden={chatView} disconnected={!connected && wasConnected.current} error={error} fullscreen={fullscreen} />
         <div class={styles.toolbar} data-remote-passthrough={fullscreen || undefined}>
-          <Controls fullscreen={fullscreen} userlistHidden={userlistHidden} chatOpen={chatOpen} chatView={chatView} unreadChat={unreadChat} window={roomWindow}
+          <Controls fullscreen={fullscreen} userlistHidden={userlistHidden} chatOpen={chatOpen} chatView={chatView} unreadChat={unreadChat} window={roomWindow} watchlog={watchlog}
             onToggleUsers={() => setUserlistHidden((value) => !value)} onPersonalSettings={() => { settingsOpen.value = 'appearance' }}
             onChat={setChatOpen} onWindow={setRoomWindow} onFullscreen={() => { void toggle() }} />
           {!userlistHidden && !left && <UserStrip left={false} fullscreen={false} folded={stage} hover={hover} onHover={setHover} />}
@@ -133,6 +143,7 @@ export function RoomPage() {
       {personalSettings && <SettingsDialog onClose={wake} />}
       {roomWindow === 'files' && files && <FilesWindow onClose={closeWindow} />}
       {roomWindow === 'settings' && admin && <RoomSettingsWindow onClose={closeWindow} />}
+      {roomWindow === 'watchlog' && watchlog && <WatchlogWindow onClose={closeWindow} />}
       <UserCard hover={hover} />
     </div>
   )

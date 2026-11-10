@@ -7,14 +7,16 @@ export function PageLayout({
   subtitle,
   children,
   narrow = false,
+  wide = false,
 }: {
   title?: string
   subtitle?: ComponentChildren
   children: ComponentChildren
   narrow?: boolean // text pages
+  wide?: boolean // tables with many columns
 }) {
   return (
-    <main class={`${styles.page} ${narrow ? styles.narrow : ''}`}>
+    <main class={`${styles.page} ${narrow ? styles.narrow : ''} ${wide ? styles.wide : ''}`}>
       {title && (
         <div class={styles.head}>
           <div class={styles.headText}>

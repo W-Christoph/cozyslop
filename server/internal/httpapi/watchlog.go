@@ -13,7 +13,7 @@ import (
 	"cozycast/internal/store"
 )
 
-// The watchlog: how far each account has watched which anime
+// The watchlog: which episodes of which anime each account has watched
 // (docs/architecture.md, "Watchlog"). Every endpoint needs an account and
 // the watchlog setting on.
 
@@ -190,18 +190,24 @@ func (s *Server) deleteAnime(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// setProgress sets how far someone has watched a show: your own, or
-// anyone's as an admin. Episode 0 clears it.
+// setProgress marks episodes of a show as watched, or as not: your own, or
+// anyone's as an admin. The episodes from "from" to "to"; "to" may be left
+// out for one episode.
 func (s *Server) setProgress(w http.ResponseWriter, r *http.Request) {
 	u := s.watchlogUser(w, r)
 	if u == nil {
 		return
 	}
 	var req struct {
-		Episode int `json:"episode"`
+		From    int  `json:"from"`
+		To      int  `json:"to"`
+		Watched bool `json:"watched"`
 	}
 	if !readJSON(w, r, &req) {
 		return
+	}
+	if req.To == 0 {
+		req.To = req.From
 	}
 	target := u
 	if name := strings.ToLower(r.PathValue("username")); name != u.Username {
@@ -223,11 +229,16 @@ func (s *Server) setProgress(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
-	if req.Episode < 0 || req.Episode > maxEpisode || a.Episodes != nil && req.Episode > *a.Episodes {
+	// Unticking may reach past the show's end: its length can have changed.
+	last := maxEpisode
+	if req.Watched && a.Episodes != nil {
+		last = *a.Episodes
+	}
+	if req.From < 1 || req.To < req.From || req.To > last {
 		writeError(w, http.StatusBadRequest, "The show has no such episode.")
 		return
 	}
-	p, err := s.store.SetProgress(r.Context(), target.ID, a.ID, req.Episode, "manual")
+	err = s.store.SetWatched(r.Context(), target.ID, a.ID, req.From, req.To, req.Watched, "manual")
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "That show is not on the watchlog.")
 		return
@@ -236,10 +247,10 @@ func (s *Server) setProgress(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
-	if p == nil {
-		w.WriteHeader(http.StatusNoContent)
+	watched, err := s.store.Watched(r.Context(), target.ID, a.ID)
+	if err != nil {
+		s.internalError(w, r, err)
 		return
 	}
-	p.Username = target.Username
-	writeJSON(w, http.StatusOK, p)
+	writeJSON(w, http.StatusOK, store.Progress{Username: target.Username, AnimeID: a.ID, Watched: watched})
 }

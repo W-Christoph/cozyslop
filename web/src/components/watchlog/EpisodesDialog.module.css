@@ -1,0 +1,28 @@
+.head { display: flex; align-items: center; gap: var(--space-4); }
+.about { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.show { font-size: var(--text-xl); font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
+.person { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); font-weight: 600; }
+.count { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: flex-end; column-gap: 4px; max-width: 120px; color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: right; }
+.count strong { color: var(--text); font-size: var(--text-6xl); font-weight: 700; line-height: 1; }
+.count small { width: 100%; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; }
+.bar { height: 8px !important; margin-top: var(--space-4); border-radius: 4px !important; }
+.skipped { min-height: 1.4em; margin: var(--space-2) 0 0; color: var(--warning-text); font-size: var(--text-sm); line-height: 1.4; }
+.toolbar { display: flex; align-items: center; gap: var(--space-1); min-height: 32px; margin: var(--space-4) 0 var(--space-2); padding-top: var(--space-4); border-top: 1px solid var(--border); }
+.label { flex: 1; color: var(--text-muted); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 6px; }
+.episode {
+  height: 36px;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font: 600 var(--text-sm) var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.episode:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+.episode[aria-pressed='true'] { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.episode:disabled { cursor: default; }
+.episode:disabled:not([aria-pressed='true']) { opacity: 0.55; }
+.foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 32px; margin-top: var(--space-3); color: var(--text-muted); font-size: var(--text-sm); }

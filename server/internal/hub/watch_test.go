@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -47,6 +48,10 @@ func newWatchFixture(t *testing.T) (*fixture, *fakeDesktop) {
 			d.mu.Lock()
 			d.searches++
 			d.mu.Unlock()
+			if search, _ := req.Variables["q"].(string); strings.Contains(search, "Podcast") {
+				w.Write([]byte(`{"data":{"Page":{"media":[]}}}`))
+				return
+			}
 			w.Write([]byte(`{"data":{"Page":{"media":[{"id":1,"title":{"romaji":"Sousou no Frieren"},"episodes":28,"coverImage":{"medium":"f.jpg"}}]}}}`))
 			return
 		}
@@ -84,13 +89,22 @@ func (f *fixture) play(d *fakeDesktop, file string, during func(second int)) {
 	f.r.checkPlayback(f.ctx)
 }
 
-func (f *fixture) progress() map[string]int {
+// progress is the episodes each account has watched, as "3 6" or "1-4".
+func (f *fixture) progress() map[string]string {
 	f.t.Helper()
 	list, err := f.s.ListProgress(f.ctx)
 	requireOK(f.t, err)
-	out := map[string]int{}
+	out := map[string]string{}
 	for _, p := range list {
-		out[p.Username] = p.Episode
+		var parts []string
+		for _, r := range p.Watched {
+			if r[0] == r[1] {
+				parts = append(parts, strconv.Itoa(r[0]))
+			} else {
+				parts = append(parts, strconv.Itoa(r[0])+"-"+strconv.Itoa(r[1]))
+			}
+		}
+		out[p.Username] = strings.Join(parts, " ")
 	}
 	return out
 }
@@ -132,7 +146,10 @@ func TestWatchSuggestsAndSaves(t *testing.T) {
 	f.r.Handle(f.ctx, guest, ClientMsg{Type: "watch_check", ID: p.ID, Key: bob.m.key, Checked: true})
 	requireEqual(t, g.wait(t, "error").(errorMsg).Message, "You are not allowed to do that.")
 
+	// Only bob, or an admin, says that bob watched it.
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_check", ID: p.ID, Key: bob.m.key, Checked: true})
+	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "You are not allowed to do that.")
+	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watch_check", ID: p.ID, Key: bob.m.key, Checked: true})
 	requireEqual(t, lastProposal(t, a).Viewers[1].Checked, true)
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_episode", ID: p.ID, Episode: 29})
 	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "The show has no such episode.")
@@ -154,8 +171,8 @@ func TestWatchSuggestsAndSaves(t *testing.T) {
 
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_save", ID: p.ID})
 	requireEqual(t, lastProposal(t, a) == nil, true)
-	requireEqual(t, f.progress()["alice"], 6)
-	requireEqual(t, f.progress()["bob"], 6)
+	requireEqual(t, f.progress()["alice"], "6")
+	requireEqual(t, f.progress()["bob"], "6")
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_save", ID: p.ID})
 	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "That suggestion is gone.")
 
@@ -170,8 +187,11 @@ func TestWatchSuggestsAndSaves(t *testing.T) {
 	p = lastProposal(t, a)
 	requireEqual(t, p.AnimeID, int64(2))
 	requireEqual(t, len(p.Viewers), 2)
-	requireEqual(t, lastProposal(t, a) == nil, true) // saved
-	requireEqual(t, f.progress()["alice"], 6)
+	requireEqual(t, lastProposal(t, a) == nil, true) // being saved
+	for i := 0; i < 100 && f.progress()["alice"] == "6"; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	requireEqual(t, f.progress()["alice"], "3 6")
 }
 
 func TestWatchIgnoresWhatNobodySaw(t *testing.T) {
@@ -202,4 +222,55 @@ func TestWatchIgnoresWhatNobodySaw(t *testing.T) {
 	requireEqual(t, f.r.watch == nil && f.r.proposal == nil, true)
 	f.r.mu.Unlock()
 	requireEqual(t, len(f.progress()), 0)
+}
+
+func TestWatchFollowsFirefox(t *testing.T) {
+	f, d := newWatchFixture(t)
+	alice, a := f.join(f.user("alice"))
+
+	// A video with an episode but no show AniList knows is not followed.
+	page := playStatus{State: "playing", Source: "firefox", Length: 100, Title: "Some Podcast Episode 5 - Site", URL: "https://site.example/watch?v=abc"}
+	for page.Time = 0; page.Time < 100; page.Time += watchBucket {
+		d.set(page)
+		f.r.checkPlayback(f.ctx)
+	}
+	requireEqual(t, a.count("playing"), 0)
+
+	// The show and the episode are in the address; the title, the page's
+	// to change, does not start the episode over.
+	page.URL = "https://site.example/watch/AbCdEf_123/sousou-no-frieren?ep=5"
+	for page.Time = 0; page.Time < 100; page.Time += watchBucket {
+		page.Title = "An Episode's Title"
+		if page.Time >= 50 {
+			page.Title = "(1) An Episode's Title"
+		}
+		d.set(page)
+		f.r.checkPlayback(f.ctx)
+	}
+	requireEqual(t, a.count("watch"), 0) // the podcast was no episode
+	requireEqual(t, *a.wait(t, "playing").(playingMsg).Playing, WatchPlaying{AnimeID: 1, Title: "Sousou no Frieren", Episode: 5})
+	// Paused in the middle it waits; paused at its end it is over.
+	page.State, page.Time = "paused", 50
+	d.set(page)
+	f.r.checkPlayback(f.ctx)
+	requireEqual(t, a.count("watch"), 0)
+	page.Time = 95
+	d.set(page)
+	f.r.checkPlayback(f.ctx)
+	p := lastProposal(t, a)
+	requireEqual(t, p.Episode, 5)
+	requireEqual(t, p.File, page.URL)
+	requireEqual(t, p.Viewers[0], WatchViewer{Key: alice.m.key, Nickname: "alice nick", Coverage: 1, Checked: true})
+	f.r.checkPlayback(f.ctx) // still paused there: not another one
+	requireEqual(t, a.count("watch"), 1)
+
+	// Saved, the address's title is known for the show: the next episode
+	// needs no AniList.
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_save", ID: p.ID})
+	searches := d.searched()
+	page.State, page.Time, page.URL = "playing", 0, "https://site.example/watch/AbCdEf_123/sousou-no-frieren?ep=6"
+	d.set(page)
+	f.r.checkPlayback(f.ctx)
+	requireEqual(t, d.searched(), searches)
+	requireEqual(t, f.progress()["alice"], "5")
 }

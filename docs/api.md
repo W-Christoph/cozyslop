@@ -233,15 +233,15 @@ How far each account has watched which anime (see
 [architecture](architecture.md#watchlog)). Every endpoint needs an account
 (401 `"Please log in."`) and the `watchlog` setting on (404 `"The watchlog is
 off."`). Shows are `{"id":<AniList id>,"title":"…","titleEnglish":"…","episodes":28|null,"coverUrl":"…","addedAt":<unix s>}`;
-progress is `{"username":"…","animeId":…,"episode":5,"source":"manual"|"auto","updatedAt":<unix s>}`.
+progress is `{"username":"…","animeId":…,"watched":[[1,4],[6,6]]}`: the episodes someone has watched of a show, as ranges in order.
 
 | Method and path | Caller | Request body | Response | Notable errors |
 |---|---|---|---|---|
-| `GET /api/watchlog` | Account | None | 200 `{"anime":[…],"people":[{"username","nickname","nameColor","avatarUrl"}],"progress":[…]}`; shows by title; people are the enabled accounts with any progress | |
+| `GET /api/watchlog` | Account | None | 200 `{"anime":[…],"people":[{"username","nickname","nameColor","avatarUrl"}],"progress":[{"username","animeId","watched":[[1,4],[6,6]]}]}`; shows by title; `watched` is the episodes as ranges, in order; people are the enabled accounts with any progress | |
 | `GET /api/watchlog/search?q=<text>` | Account | None | 200 up to 10 shows from AniList, best match first, each with `year` (or `null`) | 400 `"Search for 2 to 100 characters."`; 429 `"Asking AniList too fast. Wait a moment."` (searches and added shows together: 10 in a burst, then one more every 2 seconds); 502 `"AniList did not answer. Try again."`; 503 AniList unavailable |
 | `POST /api/watchlog/anime` | Account | `{"id":<AniList id>}` | 200 the show, added or refreshed from AniList | 404 `"AniList has no such anime."`; 429 as for search; 502 AniList unreachable |
 | `DELETE /api/watchlog/anime/{id}` | Admin | None | 204; removes the show, everyone's progress in it and the file names matched to it | 403 `"Admins only."`; 404 `"That show is not on the watchlog."` |
-| `PUT /api/watchlog/progress/{animeId}/{username}` | That account, or an admin | `{"episode":5}`; `0` clears it | 200 the progress; 204 when cleared | 400 `"The show has no such episode."` (negative, over the show's episode count, or over 9999); 403 `"You can only change your own progress."`; 404 unknown show or user |
+| `PUT /api/watchlog/progress/{animeId}/{username}` | That account, or an admin | `{"from":3,"to":5,"watched":true}`: the episodes 3 to 5 are watched, or with `false` are not; `to` may be left out for one episode | 200 `{"username","animeId","watched":[[1,5]]}`: what is watched now | 400 `"The show has no such episode."` (below 1, `to` below `from`, over 9999, or ticking past the show's episode count); 403 `"You can only change your own progress."`; 404 unknown show or user |
 
 ## Invites
 
@@ -300,8 +300,8 @@ fullscreen); playing also needs the remote right, and with remote ownership
 nobody else may hold the remote. The tab that asked gets
 `{"type":"file_result","action":"delete"|"play","name":"<file>","error":"…"}`,
 with `error` `""` if it worked (see `docs/architecture.md`).
-With the `watchlog` setting on, `welcome.playing` is the episode VLC plays on
-the desktop (`{"animeId":…,"title":"…","episode":5}`, `animeId` `0` when the
+With the `watchlog` setting on, `welcome.playing` is the episode VLC or Firefox
+plays on the desktop (`{"animeId":…,"title":"…","episode":5}`, `animeId` `0` when the
 show was not recognised; `null` when nothing is) and `welcome.watch` the open
 suggestion to mark an episode watched (`null` when there is none);
 `{"type":"playing","playing":…}` and `{"type":"watch","proposal":…}` follow
@@ -315,7 +315,8 @@ the room send `{"type":"watch_check","id":…,"key":"<identity key>","checked":t
 `{"type":"watch_anime","id":…,"animeId":<AniList id>}`,
 `{"type":"watch_save","id":…}` and `{"type":"watch_dismiss","id":…}`; each
 change but saving and dismissing restarts the wait before it saves by itself.
-Anonymous users get `error` "You are not allowed to do that.", a suggestion
+Anonymous users get `error` "You are not allowed to do that.", and so does
+`watch_check` for someone else's `key` unless an admin sends it; a suggestion
 that is gone `error` "That suggestion is gone.".
 An unknown room upgrades successfully, sends
 `{"type":"kicked","reason":"not_found"}`, then closes with code 4000.

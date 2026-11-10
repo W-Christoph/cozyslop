@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 )
 
@@ -17,7 +18,7 @@ func TestWatchlog(t *testing.T) {
 		}
 	}
 
-	if _, err := s.SetProgress(ctx, alice.ID, 1, 3, "manual"); !errors.Is(err, ErrNotFound) {
+	if err := s.SetWatched(ctx, alice.ID, 1, 1, 3, true, "manual"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("progress for an unknown show: %v", err)
 	}
 	twelve := 12
@@ -34,28 +35,40 @@ func TestWatchlog(t *testing.T) {
 		t.Fatalf("updated: %v %+v", err, got)
 	}
 
-	if _, err := s.SetProgress(ctx, alice.ID, 1, 5, "manual"); err != nil {
+	// Alice watched 1 to 5 and unticks 2; a room then saw 4 (which she has)
+	// and 7, with Bob.
+	if err := s.SetWatched(ctx, alice.ID, 1, 1, 5, true, "manual"); err != nil {
 		t.Fatal(err)
 	}
-	// Raising never lowers: Alice stays at 5, Bob gets 4.
-	if err := s.RaiseProgress(ctx, []int64{alice.ID, bob.ID, 999}, 1, 4); err != nil {
+	if err := s.SetWatched(ctx, alice.ID, 1, 2, 2, false, "manual"); err != nil {
 		t.Fatal(err)
+	}
+	for _, episode := range []int{4, 7} {
+		if err := s.MarkWatched(ctx, []int64{alice.ID, bob.ID, 999}, 1, episode); err != nil {
+			t.Fatal(err)
+		}
 	}
 	list, err := s.ListProgress(ctx)
-	if err != nil || len(list) != 2 || list[0].Username != "alice" || list[0].Episode != 5 || list[0].Source != "manual" ||
-		list[1].Username != "bob" || list[1].Episode != 4 || list[1].Source != "auto" {
+	if err != nil || len(list) != 2 || list[0].Username != "alice" || !reflect.DeepEqual(list[0].Watched, [][2]int{{1, 1}, {3, 5}, {7, 7}}) ||
+		list[1].Username != "bob" || !reflect.DeepEqual(list[1].Watched, [][2]int{{4, 4}, {7, 7}}) {
 		t.Fatalf("progress: %v %+v", err, list)
+	}
+	if got, err := s.Watched(ctx, bob.ID, 1); err != nil || !reflect.DeepEqual(got, [][2]int{{4, 4}, {7, 7}}) {
+		t.Fatalf("watched: %v %+v", err, got)
 	}
 	users, err := s.WatchlogUsers(ctx)
 	if err != nil || len(users) != 2 {
 		t.Fatalf("users: %v %+v", err, users)
 	}
 
-	if _, err := s.SetProgress(ctx, bob.ID, 1, 0, "manual"); err != nil {
+	if err := s.SetWatched(ctx, bob.ID, 1, 1, 9999, false, "manual"); err != nil {
 		t.Fatal(err)
 	}
 	if list, _ := s.ListProgress(ctx); len(list) != 1 {
 		t.Fatalf("after clearing: %+v", list)
+	}
+	if got, err := s.Watched(ctx, bob.ID, 1); err != nil || len(got) != 0 {
+		t.Fatalf("cleared: %v %+v", err, got)
 	}
 
 	if err := s.SaveAlias(ctx, "sousou no frieren", 1); err != nil {

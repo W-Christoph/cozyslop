@@ -1,4 +1,4 @@
-import type { WatchAnime, WatchPerson } from '../../api'
+import type { WatchAnime, WatchPerson, WatchRange } from '../../api'
 import { Button } from '../Button'
 import { Avatar } from '../ui/Avatar'
 import { Cover } from './AnimeSearch'
@@ -8,19 +8,20 @@ import styles from './WatchTable.module.css'
 
 // The shows as rows and the people as columns, with what they can watch
 // together last. Shows the group can go on with come first.
-export function WatchTable({ anime, people, self, admin, episodeOf, onProgress, onRemove }: {
+export function WatchTable({ anime, people, self, admin, playing, watchedOf, onOpen, onRemove }: {
   anime: WatchAnime[]
   people: WatchPerson[]
   self: string // my username
   admin: boolean
-  episodeOf: (animeId: number, username: string) => number
-  onProgress: (animeId: number, username: string, episode: number) => void
+  playing?: number // the anime being watched right now: first, and marked
+  watchedOf: (animeId: number, username: string) => readonly WatchRange[]
+  onOpen: (anime: WatchAnime, person: WatchPerson) => void // someone's episodes of a show
   onRemove: (anime: WatchAnime) => void
 }) {
   const nickname = new Map(people.map((p) => [p.username, p.username === self ? 'You' : p.nickname]))
-  const rows = anime.map((a) => ({ anime: a, together: together(a, people.map((p) => p.username), (u) => episodeOf(a.id, u)) }))
+  const rows = anime.map((a) => ({ anime: a, together: together(a, people.map((p) => p.username), (u) => watchedOf(a.id, u)) }))
   const going = (t: Together) => t.started && t.next !== null
-  rows.sort((a, b) => Number(going(b.together)) - Number(going(a.together)) || a.anime.title.localeCompare(b.anime.title))
+  rows.sort((a, b) => Number(b.anime.id === playing) - Number(a.anime.id === playing) || Number(going(b.together)) - Number(going(a.together)) || a.anime.title.localeCompare(b.anime.title))
   if (anime.length === 0) return <p class={styles.nothing}>No show matches.</p>
   return (
     <div class={styles.scroll}>
@@ -39,21 +40,21 @@ export function WatchTable({ anime, people, self, admin, episodeOf, onProgress, 
         </thead>
         <tbody>
           {rows.map(({ anime: a, together: t }) => (
-            <tr key={a.id}>
+            <tr key={a.id} class={a.id === playing ? styles.playing : undefined}>
               <th scope="row" class={styles.show}>
                 <a class={styles.showLink} href={`https://anilist.co/anime/${a.id}`} target="_blank" rel="noreferrer noopener">
                   <Cover anime={a} size={44} />
                   <span class={styles.titles}>
                     <span class={styles.title}>{a.title}</span>
+                    {a.id === playing && <span class={styles.now}>Watching now</span>}
                     {a.titleEnglish && a.titleEnglish !== a.title && <span class={styles.english}>{a.titleEnglish}</span>}
                   </span>
                 </a>
               </th>
               {people.map((p) => (
                 <td key={p.username} class={styles.cell}>
-                  <ProgressCell episode={episodeOf(a.id, p.username)} episodes={a.episodes}
-                    editable={admin || p.username === self} label={`${nickname.get(p.username)} in ${a.title}`}
-                    onSave={(episode) => onProgress(a.id, p.username, episode)} />
+                  <ProgressCell watched={watchedOf(a.id, p.username)} episodes={a.episodes}
+                    label={`${nickname.get(p.username)} in ${a.title}`} onOpen={() => onOpen(a, p)} />
                 </td>
               ))}
               <td class={styles.cell}><TogetherText together={t} nickname={(u) => nickname.get(u) ?? u} /></td>

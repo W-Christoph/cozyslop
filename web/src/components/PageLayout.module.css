@@ -1,5 +1,6 @@
 .page { width: 100%; max-width: 1040px; margin: 0 auto; padding: var(--space-7) var(--space-5); }
 .narrow { max-width: 720px; }
+.wide { max-width: 1400px; }
 .head { display: flex; align-items: flex-end; gap: var(--space-4); margin-bottom: var(--space-5); }
 .headText { flex: 1; min-width: 0; }
 .title { margin: 0; font-size: var(--text-6xl); font-weight: 700; letter-spacing: -0.02em; }

@@ -5,7 +5,9 @@ The CozyCast server asks (POST /play?name=<file>) on behalf of someone in
 the room who may use the remote; a file played before is closed first.
 GET /status says what that VLC is playing and how far it is, from VLC's own
 web interface, which only listens on this machine and wants a password made
-up for each VLC.
+up for each VLC. While that VLC plays nothing it says what Firefox plays
+instead, as Firefox tells the desktop's media keys (MPRIS, on the session
+bus): the page's title and address, not a file.
 
 supervisord runs this as the desktop's user: VLC has to open on their
 desktop, and whoever holds the remote can start it by hand anyway. Every
@@ -17,6 +19,7 @@ import base64
 import hmac
 import json
 import os
+import re
 import secrets
 import subprocess
 import threading
@@ -67,6 +70,17 @@ def play(path):
 
 
 def status():
+    """What plays on the desktop: the VLC started last, or else Firefox."""
+    vlc = vlc_status()
+    if vlc["state"] in ("playing", "unknown"):
+        return vlc
+    page = firefox_status()
+    if page and (page["state"] == "playing" or vlc["state"] == "stopped"):
+        return page
+    return vlc
+
+
+def vlc_status():
     """What the VLC started last plays: state (playing, paused or stopped),
     time and length in seconds, and the file's name."""
     with lock:
@@ -84,6 +98,71 @@ def status():
     meta = (vlc.get("information") or {}).get("category", {}).get("meta", {})
     return {"state": vlc.get("state", "stopped"), "time": vlc.get("time", 0),
             "length": vlc.get("length", 0), "file": meta.get("filename", "")}
+
+
+def buses():
+    """The session buses a Firefox of the desktop's user may be on: None for
+    the one found through the display, where supervisord's Firefox is, and
+    the address a Firefox opened from the desktop's menu was given."""
+    found = {None}
+    for pid in os.listdir("/proc"):
+        try:
+            with open(f"/proc/{pid}/comm") as f:
+                if not f.read().startswith("firefox"):
+                    continue
+            with open(f"/proc/{pid}/environ", "rb") as f:
+                env = f.read().split(b"\0")
+        except (OSError, ValueError):
+            continue  # gone, or not ours
+        for var in env:
+            if var.startswith(b"DBUS_SESSION_BUS_ADDRESS="):
+                found.add(var.split(b"=", 1)[1].decode(errors="replace"))
+    return found
+
+
+def dbus(bus, dest, path, method, *args):
+    """dbus-send's printed reply, or "" if there was none."""
+    env = dict(os.environ)
+    env.pop("DBUS_SESSION_BUS_ADDRESS", None)
+    if bus:
+        env["DBUS_SESSION_BUS_ADDRESS"] = bus
+    try:
+        result = subprocess.run(
+            ["dbus-send", "--session", "--print-reply", "--reply-timeout=1000", "--dest=" + dest, path, method, *args],
+            env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=2)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return result.stdout.decode(errors="replace") if result.returncode == 0 else ""
+
+
+def firefox_status():
+    """What Firefox plays, or None: state, time and length in seconds, and
+    the title and address of the page. A playing Firefox wins over a paused
+    one. Both texts are the page's to choose."""
+    best = None
+    for bus in buses():
+        names = dbus(bus, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus.ListNames")
+        for name in re.findall(r'"(org\.mpris\.MediaPlayer2\.firefox[^"]*)"', names):
+            reply = dbus(bus, name, "/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties.GetAll",
+                         "string:org.mpris.MediaPlayer2.Player")
+
+            def value(key, kind):
+                m = re.search(r'string "%s"\s+variant\s+%s (.*)' % (re.escape(key), kind), reply)
+                return m.group(1) if m else ""
+
+            def seconds(key):
+                v = value(key, "int64")
+                return int(v) // 1000000 if v.isdigit() else 0
+
+            state = value("PlaybackStatus", "string").strip('"').lower()
+            if state not in ("playing", "paused"):
+                continue
+            found = {"state": state, "source": "firefox", "time": seconds("Position"), "length": seconds("mpris:length"),
+                     "title": value("xesam:title", "string")[1:-1][:300], "url": value("xesam:url", "string")[1:-1][:500]}
+            if state == "playing":
+                return found
+            best = best or found
+    return best
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -89,6 +89,13 @@ func (s *Store) DeleteAnime(ctx context.Context, id int64) error {
 	return s.execOne(ctx, "DELETE FROM anime WHERE id = ?", id)
 }
 
+// AnimeWatched reports whether anyone has watched an episode of a show.
+func (s *Store) AnimeWatched(ctx context.Context, id int64) (bool, error) {
+	var watched bool
+	err := s.db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM watched_episodes WHERE anime_id = ?)", id).Scan(&watched)
+	return watched, err
+}
+
 // AnimeByAlias returns the show a file name's title was matched to before.
 func (s *Store) AnimeByAlias(ctx context.Context, alias string) (*Anime, error) {
 	return scanAnime(s.db.QueryRowContext(ctx,

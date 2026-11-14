@@ -82,6 +82,7 @@ export interface WatchAnime {
   titleEnglish: string // "" if none
   episodes: number | null // null while unknown (airing)
   coverUrl: string
+  addedAt?: number // unix seconds; not in search results
   year?: number | null // search results only
 }
 

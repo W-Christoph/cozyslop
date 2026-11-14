@@ -1,1 +1,4 @@
 .login { margin-top: var(--space-4); }
+/* Room for the scrollbar also while the page is short: a tab with less in it
+   does not shift the page sideways. */
+:global(html):has(.page) { scrollbar-gutter: stable; }

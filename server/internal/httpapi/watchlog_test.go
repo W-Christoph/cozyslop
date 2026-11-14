@@ -134,10 +134,14 @@ func TestWatchlog(t *testing.T) {
 	if len(changed.Watched) != 0 {
 		t.Fatalf("cleared: %+v", changed)
 	}
-	a.error(alice, "DELETE", "/api/watchlog/anime/154587", nil, 403, "Admins only.")
+	// Bob has watched some of it: only an admin removes it.
+	a.error(alice, "DELETE", "/api/watchlog/anime/154587", nil, 403, "Someone has watched this show: only admins can remove it.")
 	a.call(admin, "DELETE", "/api/watchlog/anime/154587", nil, 204, nil)
 	a.call(alice, "GET", "/api/watchlog", nil, 200, &log)
 	if len(log.Anime) != 0 || len(log.Progress) != 0 {
 		t.Fatalf("after delete: %+v", log)
 	}
+	// A show nobody has watched is anyone's to remove.
+	a.call(alice, "POST", "/api/watchlog/anime", map[string]any{"id": 154587}, 200, nil)
+	a.call(alice, "DELETE", "/api/watchlog/anime/154587", nil, 204, nil)
 }

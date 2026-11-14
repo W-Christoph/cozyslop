@@ -1,0 +1,18 @@
+.head { display: flex; align-items: center; gap: var(--space-4); }
+.about { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.title { font-size: var(--text-xl); font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
+.english { color: var(--text-muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.length { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-size: var(--text-sm); }
+.label { margin: var(--space-5) 0 var(--space-2); padding-top: var(--space-4); border-top: 1px solid var(--border); color: var(--text-muted); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.people { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.person { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-2) 0; }
+.person + .person { border-top: 1px solid var(--border); }
+.progress { flex: 1; min-width: 150px; display: flex; flex-direction: column; gap: 4px; }
+.name { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-sm); font-weight: 600; }
+.count { color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.dropped .progress > :not(.name) { opacity: 0.45; }
+/* As wide for everyone, so that the bars line up. */
+.actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-1); min-width: min(100%, 300px); }
+.manage { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.remove { margin-left: auto; }
+.note { margin: var(--space-2) 0 0; color: var(--text-muted); font-size: var(--text-sm); }

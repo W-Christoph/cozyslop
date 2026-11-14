@@ -6,7 +6,7 @@
 .show { position: sticky; left: 0; z-index: 1; min-width: 220px; text-align: left !important; background: var(--bg-surface); }
 .person { width: 104px; min-width: 104px; }
 .personName { display: inline-flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; font-size: var(--text-sm); color: var(--text-secondary); }
-.showLink { display: flex; align-items: center; gap: var(--space-3); color: inherit; text-decoration: none; }
+.showLink { display: flex; align-items: center; gap: var(--space-3); width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .showLink:hover .title { text-decoration: underline; }
 .titles { display: flex; flex-direction: column; min-width: 0; }
 .title { font-weight: 600; color: var(--text); }
@@ -18,7 +18,14 @@
 .behind { color: var(--warning-text); font-size: var(--text-xs); }
 .done { color: var(--success-text); font-weight: 600; }
 .nothing { color: var(--text-muted); }
-.hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.status { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-surface); }
+.status button { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 3px 10px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-secondary); font: 600 var(--text-sm) var(--font-ui); cursor: pointer; }
+.status button:hover { color: var(--text); }
+.status button[aria-pressed='true'] { background: var(--accent-soft); color: var(--text); }
+.count { color: var(--text-muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.filter { flex: 1; min-width: 160px; max-width: 320px; min-height: 36px; padding: 4px 10px; border: 1px solid var(--border-control); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text); font: var(--text-sm)/1.3 var(--font-ui); }
+.hint { margin: var(--space-2) 0 var(--space-3); color: var(--text-muted); font-size: var(--text-sm); }
 @media (max-width: 560px) {
   .show { min-width: 160px; }
   .table th, .table td { padding: var(--space-2); }

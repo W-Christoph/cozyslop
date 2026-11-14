@@ -3,17 +3,35 @@ import { watchlog, type Me, type WatchAnime, type WatchPerson, type WatchRange, 
 import { Button } from '../Button'
 import { Modal } from '../Modal'
 import { Avatar } from '../ui/Avatar'
+import { Icon } from '../ui/Icon'
 import { EmptyState } from '../ui/EmptyState'
 import { Notice } from '../ui/Notice'
 import { Spinner } from '../ui/Spinner'
 import { AnimeSearch } from './AnimeSearch'
 import { EpisodesDialog } from './EpisodesDialog'
-import { withRange } from './episodes'
+import { hasEpisode, withRange } from './episodes'
+import { ShowDialog } from './ShowDialog'
+import { WatchNext } from './WatchNext'
 import { WatchTable } from './WatchTable'
-import { WatchTonight } from './WatchTonight'
 import styles from './WatchlogView.module.css'
 
 const PEOPLE_KEY = 'cozycast-watchlog-people'
+const TAB_KEY = 'cozycast-watchlog-tab'
+
+// The watchlog's two views: what to watch now, and who has watched what.
+type Tab = 'next' | 'progress'
+const tabs: { id: Tab; icon: 'play' | 'users'; label: string; about: string }[] = [
+  { id: 'next', icon: 'play', label: 'Watch next', about: 'What can we watch now?' },
+  { id: 'progress', icon: 'users', label: 'Progress', about: 'Who has watched what' },
+]
+
+function loadTab(): Tab {
+  try {
+    return localStorage.getItem(TAB_KEY) === 'progress' ? 'progress' : 'next'
+  } catch {
+    return 'next'
+  }
+}
 
 // Who the table compares, remembered in this browser; null: everyone.
 function loadPeople(): string[] | null {
@@ -37,9 +55,11 @@ function savePeople(people: string[] | null) {
 const none: readonly WatchRange[] = []
 const key = (animeId: number, username: string) => `${animeId}:${username}`
 
-// The watchlog itself: the shows, who has watched how far, and adding one.
-// In a room (present is given) it starts out comparing the people who are
-// there, with the show that plays first; and asks again when version changes.
+// The watchlog itself, as two tabs: what the people selected can watch now
+// (WatchNext), and who has watched how far (WatchTable). A show opens with
+// everything to do about it (ShowDialog). In a room (present is given) it
+// starts out on what to watch, with the people who are there and the show
+// that plays first; and asks again when version changes.
 export function WatchlogView({ user, present, playing, version }: {
   user: Me
   present?: WatchPerson[] // the accounts in the room
@@ -51,8 +71,13 @@ export function WatchlogView({ user, present, playing, version }: {
   // The room's choice is for this visit; the page's is remembered.
   const [chosen, setChosen] = useState(() => present ? [user.username, ...present.map((p) => p.username)] : loadPeople())
   const keep = (people: string[] | null) => { if (!present) savePeople(people) }
-  const [filter, setFilter] = useState('')
+  const [tab, setTab] = useState<Tab>(() => (present ? 'next' : loadTab()))
+  const [adding, setAdding] = useState(false)
+  const [show, setShow] = useState<number | null>(null) // the show that is open
+  const [refreshing, setRefreshing] = useState(false)
   const [removing, setRemoving] = useState<WatchAnime | null>(null)
+  // What was just ticked from a card, to take back.
+  const [marked, setMarked] = useState<{ anime: WatchAnime; episode: number; usernames: string[] } | null>(null)
   // Whose episodes of which show are open.
   const [detail, setDetail] = useState<{ animeId: number; username: string } | null>(null)
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : 'Something went wrong.')
@@ -84,17 +109,54 @@ export function WatchlogView({ user, present, playing, version }: {
     keep(all)
   }
 
-  async function add(anime: WatchAnime) {
-    setError('')
+  function open(next: Tab) {
+    setTab(next)
+    setMarked(null)
+    if (present) return
     try {
-      const added = await watchlog.add(anime.id)
+      localStorage.setItem(TAB_KEY, next)
+    } catch {
+      // Not remembered, then.
+    }
+  }
+
+  // Adds a show, or brings one up to date from AniList; and opens it.
+  async function add(id: number) {
+    setError('')
+    setRefreshing(true)
+    try {
+      const added = await watchlog.add(id)
       setData((d) => d && {
         ...d,
         anime: [...d.anime.filter((a) => a.id !== added.id), added].sort((a, b) => a.title.localeCompare(b.title)),
       })
+      setShow(added.id)
     } catch (e) {
       fail(e)
+    } finally {
+      setRefreshing(false)
     }
+  }
+
+  // Ticks an episode for those who have not seen it, to be taken back.
+  function mark(anime: WatchAnime, episode: number, usernames: string[]) {
+    const fresh = usernames.filter((u) => !hasEpisode(watchedOf(anime.id, u), episode))
+    if (fresh.length === 0) return
+    setMarked({ anime, episode, usernames: fresh })
+    for (const u of fresh) void setWatched(anime.id, u, episode, episode, true)
+  }
+
+  // The offer to take it back goes by itself.
+  useEffect(() => {
+    if (!marked) return
+    const timer = window.setTimeout(() => setMarked(null), 10000)
+    return () => window.clearTimeout(timer)
+  }, [marked])
+
+  function unmark() {
+    if (!marked) return
+    for (const u of marked.usernames) void setWatched(marked.anime.id, u, marked.episode, marked.episode, false)
+    setMarked(null)
   }
 
   // Shown at once; asked again if the server says no.
@@ -129,10 +191,15 @@ export function WatchlogView({ user, present, playing, version }: {
 
   async function remove(anime: WatchAnime) {
     setRemoving(null)
+    setShow(null)
+    setMarked(null)
     setError('')
     try {
       await watchlog.remove(anime.id)
-      setData((d) => d && { ...d, anime: d.anime.filter((a) => a.id !== anime.id), progress: d.progress.filter((p) => p.animeId !== anime.id) })
+      setData((d) => d && {
+        ...d, anime: d.anime.filter((a) => a.id !== anime.id), progress: d.progress.filter((p) => p.animeId !== anime.id),
+        ignored: d.ignored.filter((i) => i.animeId !== anime.id),
+      })
     } catch (e) {
       fail(e)
     }
@@ -140,37 +207,75 @@ export function WatchlogView({ user, present, playing, version }: {
 
   const detailAnime = detail && data?.anime.find((a) => a.id === detail.animeId)
   const detailPerson = detail && people.find((p) => p.username === detail.username)
-  const words = filter.trim().toLowerCase()
-  const shown = (data?.anime ?? []).filter((a) => !words || `${a.title} ${a.titleEnglish}`.toLowerCase().includes(words))
+  const shown = show !== null && data?.anime.find((a) => a.id === show)
+  const name = (username: string) => (username === user.username ? 'you' : people.find((p) => p.username === username)?.nickname ?? username)
+  const episodesOf = (anime: WatchAnime, person: WatchPerson) => setDetail({ animeId: anime.id, username: person.username })
   return <>
-    <div class={styles.tools}>
-      <AnimeSearch onPick={(anime) => { void add(anime) }} placeholder="Add a show: search AniList…" />
-      <div class={styles.people} role="group" aria-label="People to compare">
-        {people.map((p) => (
-          <button key={p.username} type="button" class={styles.chip} aria-pressed={selected.includes(p)} onClick={() => choose(p.username)}>
-            <Avatar src={p.avatarUrl} size={20} />
-            <span style={{ color: p.nameColor }}>{p.username === user.username ? 'Me' : p.nickname}</span>
+    <div class={styles.top}>
+      <div class={styles.tabs} role="tablist" aria-label="Watchlog">
+        {tabs.map((t) => (
+          <button key={t.id} type="button" role="tab" id={`watchlog-tab-${t.id}`} class={styles.tab} aria-selected={tab === t.id} onClick={() => open(t.id)}>
+            <Icon name={t.icon} size={18} />
+            <span class={styles.tabText}><strong>{t.label}</strong><span>{t.about}</span></span>
           </button>
         ))}
-        {chosen && <button type="button" class={styles.everyone} onClick={() => { setChosen(null); keep(null) }}>Everyone</button>}
       </div>
+      <Button variant="primary" icon="plus" onClick={() => setAdding(true)}>Add show</Button>
     </div>
-    {error && <Notice tone="error">{error}</Notice>}
+    {error && <Notice tone="error" class={styles.notice}>{error}</Notice>}
+    {marked && (
+      <div key={`${marked.anime.id}:${marked.episode}`} class={styles.undo} role="status">
+        <Icon name="check" size={16} />
+        <span>Marked episode {marked.episode} of <strong>{marked.anime.title}</strong> as watched for {marked.usernames.map(name).join(', ')}.</span>
+        <Button size="sm" onClick={unmark}>Undo</Button>
+        <Button size="sm" variant="ghost" icon="x" aria-label="Dismiss" onClick={() => setMarked(null)} />
+      </div>
+    )}
     {!data && !error && <Spinner label="Loading the watchlog…" />}
     {data && data.anime.length === 0 && (
-      <EmptyState icon="monitor" title="No shows yet">Search AniList above to add the first one.</EmptyState>
+      <EmptyState icon="monitor" title="No shows yet">
+        <p class={styles.confirm}>Add the shows you watch together. The watchlog then keeps track of who has seen which episode.</p>
+        <Button variant="primary" icon="plus" class={styles.first} onClick={() => setAdding(true)}>Add the first show</Button>
+      </EmptyState>
     )}
-    {data && data.anime.length > 0 && <>
-      <WatchTonight anime={data.anime} here={selected} people={people} progress={data.progress} ignoredOf={ignoredOf}
-        onOpen={(anime, person) => setDetail({ animeId: anime.id, username: person.username })} />
-      {data.anime.length > 8 && (
-        <input class={styles.filter} type="search" placeholder="Filter shows…" aria-label="Filter shows" value={filter}
-          onInput={(e) => setFilter(e.currentTarget.value)} />
-      )}
-      <WatchTable anime={shown} people={selected} self={user.username} admin={user.admin} playing={playing}
-        watchedOf={watchedOf} ignoredOf={ignoredOf} onOpen={(anime, person) => setDetail({ animeId: anime.id, username: person.username })}
-        onRemove={setRemoving} />
-    </>}
+    {data && data.anime.length > 0 && (
+      <div class={styles.panel} role="tabpanel" aria-labelledby={`watchlog-tab-${tab}`}>
+        <div class={styles.people} role="group" aria-label={tab === 'next' ? 'Who is watching' : 'People to compare'}>
+          <span class={styles.peopleLabel}>{tab === 'next' ? 'Who is watching?' : 'Compare'}</span>
+          {people.map((p) => (
+            <button key={p.username} type="button" class={styles.chip} aria-pressed={selected.includes(p)} onClick={() => choose(p.username)}>
+              <Avatar src={p.avatarUrl} size={20} />
+              <span style={{ color: p.nameColor }}>{p.username === user.username ? 'You' : p.nickname}</span>
+            </button>
+          ))}
+          <button type="button" class={styles.everyone} disabled={!chosen} onClick={() => { setChosen(null); keep(null) }}>Everyone</button>
+        </div>
+        {tab === 'next' ? (
+          <WatchNext anime={data.anime} here={selected} people={people} progress={data.progress} self={user.username} admin={user.admin}
+            playing={playing} ignoredOf={ignoredOf} onShow={(anime) => setShow(anime.id)} onOpen={episodesOf} onMark={mark} />
+        ) : (
+          <WatchTable anime={data.anime} people={selected} self={user.username} playing={playing}
+            watchedOf={watchedOf} ignoredOf={ignoredOf} onOpen={episodesOf} onShow={(anime) => setShow(anime.id)} />
+        )}
+      </div>
+    )}
+    {adding && (
+      <Modal title="Add a show" size="md" onClose={() => setAdding(false)}>
+        <p class={styles.confirm}>Search AniList and pick the show. It is added for everyone; afterwards you can tick what you have already seen.</p>
+        <div class={styles.adding}>
+          <AnimeSearch autoFocus placeholder="Type a title, e.g. Frieren…" onPick={(anime) => { setAdding(false); void add(anime.id) }} />
+        </div>
+      </Modal>
+    )}
+    {shown && data && (
+      <ShowDialog anime={shown} self={user.username} playing={shown.id === playing} busy={refreshing}
+        people={people.filter((p) => p.username === user.username || selected.includes(p) || watchedOf(shown.id, p.username).length > 0)}
+        watchedOf={(u) => watchedOf(shown.id, u)} ignoredOf={(u) => ignoredOf(shown.id, u)} mayChange={mayChange}
+        mayRemove={user.admin || !data.progress.some((p) => p.animeId === shown.id && p.watched.length > 0)}
+        onEpisodes={(person) => episodesOf(shown, person)} onSet={(u, episode) => { void setWatched(shown.id, u, episode, episode, true) }}
+        onIgnore={(u, value) => { void setIgnored(shown.id, u, value) }} onRefresh={() => { void add(shown.id) }}
+        onRemove={() => setRemoving(shown)} onClose={() => setShow(null)} />
+    )}
     {detailAnime && detailPerson && (
       <EpisodesDialog anime={detailAnime} person={detailPerson} self={detailPerson.username === user.username}
         watched={watchedOf(detailAnime.id, detailPerson.username)} editable={mayChange(detailPerson.username)}
@@ -183,7 +288,7 @@ export function WatchlogView({ user, present, playing, version }: {
         <Button variant="ghost" onClick={() => setRemoving(null)}>Cancel</Button>
         <Button variant="danger" onClick={() => { void remove(removing) }}>Remove</Button>
       </>}>
-        <p class={styles.confirm}>Remove <strong>{removing.title}</strong> and everyone’s progress in it from the watchlog?</p>
+        <p class={styles.confirm}>Remove <strong>{removing.title}</strong> and everyone’s progress in it from the watchlog? This cannot be undone.</p>
       </Modal>
     )}
   </>

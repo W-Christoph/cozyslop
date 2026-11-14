@@ -27,6 +27,7 @@ export function EpisodesDialog({ anime, person, self, watched, editable, ignored
   const last = lastEpisode(watched), count = countEpisodes(watched), gaps = skipped(watched)
   // A show still airing has no length: some episodes past the last one
   // watched when this opened, and more on request.
+  const [sure, setSure] = useState(false) // "Untick all" was clicked once
   const [shown, setShown] = useState(() => anime.episodes ?? Math.ceil((last + 1) / MORE) * MORE)
   const total = Math.max(shown, last)
   return (
@@ -49,7 +50,9 @@ export function EpisodesDialog({ anime, person, self, watched, editable, ignored
         {editable && <>
           <Button size="sm" variant="ghost" disabled={gaps.length === 0} title="Tick every episode before the last one watched" onClick={() => onSet(1, last, true)}>Fill gaps</Button>
           {anime.episodes !== null && <Button size="sm" variant="ghost" disabled={count >= anime.episodes} onClick={() => onSet(1, anime.episodes!, true)}>Tick all</Button>}
-          <Button size="sm" variant="ghost" disabled={count === 0} onClick={() => onSet(1, 9999, false)}>Untick all</Button>
+          {sure && count > 0
+            ? <Button size="sm" variant="danger" onClick={() => { setSure(false); onSet(1, 9999, false) }}>Really untick all {count}?</Button>
+            : <Button size="sm" variant="ghost" disabled={count === 0} onClick={() => (count > 3 ? setSure(true) : onSet(1, 9999, false))}>Untick all</Button>}
         </>}
       </div>
       <div class={styles.grid} role="group" aria-label="Episodes">
@@ -66,10 +69,10 @@ export function EpisodesDialog({ anime, person, self, watched, editable, ignored
       {(editable || ignored) && (
         <div class={styles.following}>
           <div class={styles.followingText}>
-            <strong>{ignored ? 'Not following any more' : 'Following this show'}</strong>
+            <strong>{ignored ? 'Dropped' : 'Watching this show'}</strong>
             <span>{ignored ? `The others do not wait for ${self ? 'you' : person.nickname}. What was watched stays.` : `The others wait for ${self ? 'you' : person.nickname} before they watch on.`}</span>
           </div>
-          {editable && <Button size="sm" variant="secondary" onClick={() => onIgnore(!ignored)}>{ignored ? 'Follow again' : 'Stop following'}</Button>}
+          {editable && <Button size="sm" variant="secondary" onClick={() => onIgnore(!ignored)}>{ignored ? 'Pick up again' : 'Drop'}</Button>}
         </div>
       )}
     </Modal>

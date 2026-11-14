@@ -30,6 +30,8 @@ export function Button({ variant, size, icon, block, class: className, type = 'b
 export function ButtonLink({ variant, size, icon, block, class: className, children, ...props }: Look & {
   href: string
   download?: string
+  target?: string
+  rel?: string
   title?: string
   'aria-label'?: string
   class?: string

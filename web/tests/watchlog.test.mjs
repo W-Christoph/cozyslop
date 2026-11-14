@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import { createServer } from 'vite'
 
 const server = await createServer({ configFile: false, server: { middlewareMode: true } })
-let episodes, together, watchNext
+let episodes, together, watchNext, watchOptions
 try {
   episodes = await server.ssrLoadModule('/src/components/watchlog/episodes.ts')
-  ; ({ together, watchNext } = await server.ssrLoadModule('/src/components/watchlog/together.ts'))
+  ; ({ together, watchNext, watchOptions } = await server.ssrLoadModule('/src/components/watchlog/together.ts'))
 } finally { await server.close() }
 
 test('ticking and unticking episodes keeps the ranges in order and joined', () => {
@@ -39,7 +39,7 @@ test('what is watched, where to go on and what was skipped', () => {
 test('together goes on at the first episode someone has not watched', () => {
   const anime = { id: 1, title: 'Show', titleEnglish: '', episodes: 12, coverUrl: '' }
   const of = { a: [[1, 5]], b: [[1, 2], [5, 5]], c: [[1, 12]] }
-  assert.deepEqual(together(anime, ['a', 'b'], (u) => of[u]), { next: 3, started: true, behind: [{ username: 'b', by: 2 }] })
+  assert.deepEqual(together(anime, ['a', 'b'], (u) => of[u]), { next: 3, started: true, behind: [{ username: 'b', by: 3 }] })
   assert.equal(together(anime, ['c'], (u) => of[u]).next, null)
   assert.deepEqual(together(anime, ['a', 'd'], (u) => of[u] ?? []), { next: 1, started: true, behind: [{ username: 'd', by: 5 }] })
   assert.deepEqual(together(anime, [], () => []), { next: null, started: false, behind: [] })
@@ -57,4 +57,33 @@ test('a show waits only for someone away who has not seen the next episode', () 
   assert.deepEqual(next(['me', 'behind'], ['me', 'behind']), { next: 3, behind: [{ username: 'behind', by: 2 }], waiting: [] })
   assert.equal(next(['me', 'ahead'], ['other']), null)
   assert.equal(next(['done', 'me'], ['done']), null)
+})
+
+test('what to watch is sorted into ready, catching up, waiting and not started', () => {
+  const show = (id, title) => ({ id, title, titleEnglish: '', episodes: 12, coverUrl: '', addedAt: id })
+  const anime = [show(1, 'Ready'), show(2, 'Catchup'), show(3, 'Waiting'), show(4, 'New'), show(5, 'Finished'), show(6, 'Dropped'), show(7, 'Newer'), show(8, 'Solo')]
+  const row = (animeId, username, watched) => ({ animeId, username, watched, watchedAt: animeId })
+  const progress = [
+    row(1, 'me', [[1, 4]]), row(1, 'bob', [[1, 4]]),
+    row(2, 'me', [[1, 4]]), row(2, 'bob', [[1, 2]]),
+    row(3, 'me', [[1, 4]]), row(3, 'away', [[1, 2]]),
+    row(5, 'me', [[1, 12]]),
+    row(6, 'away', [[1, 3]]),
+    row(8, 'bob', [[1, 3]]),
+  ]
+  const ignored = (animeId, username) => animeId === 6 && username === 'bob'
+  const options = watchOptions(anime, ['me', 'bob'], progress, ignored)
+  assert.deepEqual(options.map((o) => [o.anime.title, o.state, o.next]),
+    [['Ready', 'ready', 5], ['Catchup', 'catchup', 3], ['Waiting', 'waiting', 5], ['Solo', 'solo', 4], ['Newer', 'new', 1], ['Dropped', 'new', 1], ['New', 'new', 1]])
+  const by = Object.fromEntries(options.map((o) => [o.anime.title, o]))
+  assert.deepEqual([...by.Ready.needs].sort(), ['bob', 'me'])
+  assert.deepEqual(by.Catchup.needs, ['bob'])
+  assert.deepEqual(by.Waiting.waiting, ['away'])
+  assert.deepEqual(by.Waiting.unstarted, ['bob'])
+  // Bob dropped it before starting: it would be new for me alone.
+  assert.deepEqual(by.Dropped.needs, ['me'])
+  assert.deepEqual(by.Dropped.group, ['away'])
+  // Alone, what one watches is simply ready.
+  assert.equal(watchOptions(anime, ['bob'], progress, ignored).find((o) => o.anime.title === 'Solo').state, 'ready')
+  assert.deepEqual(watchOptions(anime, [], progress, ignored), [])
 })

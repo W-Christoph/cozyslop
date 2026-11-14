@@ -363,18 +363,30 @@ which show each account has watched. Shows come from AniList
 the server must be able to reach; the web UI never talks to AniList itself,
 but shows its cover images.
 
-The Watchlog page shows how many episodes each person has watched of each
-show, and which they skipped; a click opens the episodes, to tick and untick:
-one's own, admins anyone's. Admins also remove shows.
+The Watchlog page has two tabs. "Watch next" answers what the people
+selected can watch now; "Progress" is a table of how many episodes each
+person has watched of each show, and which they skipped. A click on a number
+opens the episodes, to tick and untick: one's own, admins anyone's. A click
+on a show opens it (`ShowDialog`): everyone's progress with the next episode
+to tick, dropping the show, bringing it up to date from AniList and removing
+it. Admins remove any show; anyone removes one nobody has watched (added by
+mistake). "Add show" searches AniList.
 
 A show's group is who is in the middle of it: has watched some of it, has
 not finished it, and has not stopped following it (`watch_ignored`, set in
 the episodes window by the person or an admin). What a group can watch
 together is the first episode one of them has not watched. "Watch next"
-above the table lists the shows the people selected are in the middle of,
-each with the first episode one of them has not seen. A show waits for
-someone of its group who is not selected only if they have not seen that
-episode either.
+lists the shows the people selected are in the middle of, each with the
+first episode one of them has not seen, in sections (`together.ts`,
+`watchOptions`): ready, someone has to catch up, waiting, shows only one of
+several selected watches, and not started yet (on the list, none of them has
+watched any). A show waits for someone of its group who is not selected only
+if they have not seen that episode either. A card shows the people as chips
+whose look says where each stands (seen up to an episode, behind, finished,
+not started, not selected), and ticks its next episode for
+oneself, or as an admin for everyone it is new to; that can be taken back
+for some seconds. A show keeps its section until other people are selected,
+so that ticking moves nothing.
 
 In a room the same view opens as a window over the stream
 (`WatchlogWindow`, from the toolbar or the "Watching" bar at the top of the

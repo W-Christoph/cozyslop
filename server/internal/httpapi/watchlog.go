@@ -172,17 +172,26 @@ func (s *Server) addAnime(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a)
 }
 
-// deleteAnime takes a show off the watchlog with everyone's progress.
+// deleteAnime takes a show off the watchlog with everyone's progress: an
+// admin, or anyone while nobody has watched any of it.
 func (s *Server) deleteAnime(w http.ResponseWriter, r *http.Request) {
 	u := s.watchlogUser(w, r)
 	if u == nil {
 		return
 	}
-	if !u.Admin {
-		writeError(w, http.StatusForbidden, "Admins only.")
-		return
-	}
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	// A show nobody has watched was added by mistake: anyone takes it off.
+	if !u.Admin {
+		watched, err := s.store.AnimeWatched(r.Context(), id)
+		if err != nil {
+			s.internalError(w, r, err)
+			return
+		}
+		if watched {
+			writeError(w, http.StatusForbidden, "Someone has watched this show: only admins can remove it.")
+			return
+		}
+	}
 	err := s.store.DeleteAnime(r.Context(), id)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "That show is not on the watchlog.")

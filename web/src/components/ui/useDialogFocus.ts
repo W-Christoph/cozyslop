@@ -18,7 +18,9 @@ export function useDialogFocus(id: string, onClose: () => void) {
         !all.some((other) => other.getAttribute('name') === element.getAttribute('name') && other.getAttribute('type') === 'radio' && (other as HTMLInputElement).checked) ||
         (element as HTMLInputElement).checked)
     }
-    const first = elements()[0]
+    // A field that asks for the focus gets it; else the first control.
+    const controls = elements()
+    const first = controls.find((element) => element.getAttribute('autofocus') != null) ?? controls[0]
     if (first) first.focus()
     else dialog.current?.focus()
     const keydown = (e: KeyboardEvent) => {

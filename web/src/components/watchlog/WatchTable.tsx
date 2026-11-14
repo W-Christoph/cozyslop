@@ -1,5 +1,5 @@
+import { useState } from 'preact/hooks'
 import type { WatchAnime, WatchPerson, WatchRange } from '../../api'
-import { Button } from '../Button'
 import { Avatar } from '../ui/Avatar'
 import { Cover } from './AnimeSearch'
 import { ProgressCell } from './ProgressCell'
@@ -7,33 +7,64 @@ import { finished } from './episodes'
 import { together, type Together } from './together'
 import styles from './WatchTable.module.css'
 
+type Status = 'all' | 'going' | 'new' | 'done'
+const statuses: { id: Status; label: string }[] = [
+  { id: 'all', label: 'All' }, { id: 'going', label: 'In progress' }, { id: 'new', label: 'Not started' }, { id: 'done', label: 'Finished' },
+]
+
 // The shows as rows and the people as columns, with what they can watch
-// together last. Shows the group can go on with come first.
-export function WatchTable({ anime, people, self, admin, playing, watchedOf, ignoredOf, onOpen, onRemove }: {
+// together last. Shows the group can go on with come first. A number opens
+// that person's episodes, a show's name the show.
+export function WatchTable({ anime, people, self, playing, watchedOf, ignoredOf, onOpen, onShow }: {
   anime: WatchAnime[]
   people: WatchPerson[]
   self: string // my username
-  admin: boolean
   playing?: number // the anime being watched right now: first, and marked
   watchedOf: (animeId: number, username: string) => readonly WatchRange[]
   ignoredOf: (animeId: number, username: string) => boolean // not following it any more: left out of Together
   onOpen: (anime: WatchAnime, person: WatchPerson) => void // someone's episodes of a show
-  onRemove: (anime: WatchAnime) => void
+  onShow: (anime: WatchAnime) => void
 }) {
+  const [status, setStatus] = useState<Status>('all')
+  const [filter, setFilter] = useState('')
   const nickname = new Map(people.map((p) => [p.username, p.username === self ? 'You' : p.nickname]))
   // Together is about those in the middle of a show: who has watched some
   // of it, and has not finished it or stopped following it. With nobody in
   // the middle of it, it is the first episode of those who have yet to
-  // start; done once everyone has finished.
+  // start; done once all who started it have finished or dropped it.
   const rows = anime.map((a) => {
     const open = people.map((p) => p.username).filter((u) => !finished(watchedOf(a.id, u), a.episodes))
     const following = open.filter((u) => watchedOf(a.id, u).length > 0 && !ignoredOf(a.id, u))
-    return { anime: a, together: together(a, following.length ? following : open, (u) => watchedOf(a.id, u)) }
+    const started = people.some((p) => watchedOf(a.id, p.username).length > 0)
+    return {
+      anime: a, going: following.length > 0, started,
+      // Once all who started it have finished or dropped it, it is done.
+      together: together(a, following.length ? following : started ? [] : open, (u) => watchedOf(a.id, u)),
+    }
   })
-  const going = (t: Together) => t.started && t.next !== null
-  rows.sort((a, b) => Number(b.anime.id === playing) - Number(a.anime.id === playing) || Number(going(b.together)) - Number(going(a.together)) || a.anime.title.localeCompare(b.anime.title))
-  if (anime.length === 0) return <p class={styles.nothing}>No show matches.</p>
-  return (
+  rows.sort((a, b) => Number(b.anime.id === playing) - Number(a.anime.id === playing) || Number(b.going) - Number(a.going) || a.anime.title.localeCompare(b.anime.title))
+  // In progress while someone is in the middle of it; finished once all who
+  // started it have finished or dropped it.
+  const statusOf = (r: typeof rows[number]): Status => (r.going ? 'going' : r.started ? 'done' : 'new')
+  const words = filter.trim().toLowerCase()
+  const shown = rows.filter((r) => (status === 'all' || statusOf(r) === status)
+    && (!words || `${r.anime.title} ${r.anime.titleEnglish}`.toLowerCase().includes(words)))
+  return <>
+    <div class={styles.tools}>
+      <div class={styles.status} role="group" aria-label="Shows to list">
+        {statuses.map((s) => (
+          <button key={s.id} type="button" aria-pressed={status === s.id} onClick={() => setStatus(s.id)}>
+            {s.label}<span class={styles.count}>{s.id === 'all' ? rows.length : rows.filter((r) => statusOf(r) === s.id).length}</span>
+          </button>
+        ))}
+      </div>
+      {anime.length > 8 && (
+        <input class={styles.filter} type="search" placeholder="Filter shows…" aria-label="Filter shows" value={filter}
+          onInput={(e) => setFilter(e.currentTarget.value)} onKeyDown={(e) => e.stopPropagation()} />
+      )}
+    </div>
+    <p class={styles.hint}>Click someone’s progress to tick episodes. Click a show for details.</p>
+    {shown.length === 0 ? <p class={styles.nothing}>No show matches.</p> : (
     <div class={styles.scroll}>
       <table class={styles.table}>
         <thead>
@@ -44,22 +75,21 @@ export function WatchTable({ anime, people, self, admin, playing, watchedOf, ign
                 <span class={styles.personName}><Avatar src={p.avatarUrl} size={20} />{nickname.get(p.username)}</span>
               </th>
             ))}
-            <th scope="col" class={styles.person}>Together</th>
-            {admin && <th scope="col"><span class={styles.hidden}>Remove</span></th>}
+            <th scope="col" class={styles.person}>Next together</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ anime: a, together: t }) => (
+          {shown.map(({ anime: a, together: t }) => (
             <tr key={a.id} class={a.id === playing ? styles.playing : undefined}>
               <th scope="row" class={styles.show}>
-                <a class={styles.showLink} href={`https://anilist.co/anime/${a.id}`} target="_blank" rel="noreferrer noopener">
+                <button type="button" class={styles.showLink} title="Show details and manage" onClick={() => onShow(a)}>
                   <Cover anime={a} size={44} />
                   <span class={styles.titles}>
                     <span class={styles.title}>{a.title}</span>
                     {a.id === playing && <span class={styles.now}>Watching now</span>}
                     {a.titleEnglish && a.titleEnglish !== a.title && <span class={styles.english}>{a.titleEnglish}</span>}
                   </span>
-                </a>
+                </button>
               </th>
               {people.map((p) => (
                 <td key={p.username} class={styles.cell}>
@@ -68,17 +98,13 @@ export function WatchTable({ anime, people, self, admin, playing, watchedOf, ign
                 </td>
               ))}
               <td class={styles.cell}><TogetherText together={t} nickname={(u) => nickname.get(u) ?? u} /></td>
-              {admin && (
-                <td class={styles.cell}>
-                  <Button variant="danger-ghost" size="sm" icon="trash" aria-label={`Remove ${a.title}`} title="Remove" onClick={() => onRemove(a)} />
-                </td>
-              )}
             </tr>
           ))}
         </tbody>
       </table>
     </div>
-  )
+    )}
+  </>
 }
 
 function TogetherText({ together: t, nickname }: { together: Together; nickname: (username: string) => string }) {

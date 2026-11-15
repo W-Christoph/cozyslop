@@ -59,7 +59,7 @@ test('a show waits only for someone away who has not seen the next episode', () 
   assert.equal(next(['done', 'me'], ['done']), null)
 })
 
-test('what to watch is sorted into ready, catching up, waiting and not started', () => {
+test('what to watch is sorted into together, some of us, waiting and not started', () => {
   const show = (id, title) => ({ id, title, titleEnglish: '', episodes: 12, coverUrl: '', addedAt: id })
   const anime = [show(1, 'Ready'), show(2, 'Catchup'), show(3, 'Waiting'), show(4, 'New'), show(5, 'Finished'), show(6, 'Dropped'), show(7, 'Newer'), show(8, 'Solo')]
   const row = (animeId, username, watched) => ({ animeId, username, watched, watchedAt: animeId })
@@ -74,7 +74,7 @@ test('what to watch is sorted into ready, catching up, waiting and not started',
   const ignored = (animeId, username) => animeId === 6 && username === 'bob'
   const options = watchOptions(anime, ['me', 'bob'], progress, ignored)
   assert.deepEqual(options.map((o) => [o.anime.title, o.state, o.next]),
-    [['Ready', 'ready', 5], ['Catchup', 'catchup', 3], ['Waiting', 'waiting', 5], ['Solo', 'solo', 4], ['Newer', 'new', 1], ['Dropped', 'new', 1], ['New', 'new', 1]])
+    [['Ready', 'together', 5], ['Catchup', 'together', 3], ['Solo', 'some', 4], ['Waiting', 'waiting', 5], ['Newer', 'new', 1], ['Dropped', 'new', 1], ['New', 'new', 1]])
   const by = Object.fromEntries(options.map((o) => [o.anime.title, o]))
   assert.deepEqual([...by.Ready.needs].sort(), ['bob', 'me'])
   assert.deepEqual(by.Catchup.needs, ['bob'])
@@ -83,7 +83,7 @@ test('what to watch is sorted into ready, catching up, waiting and not started',
   // Bob dropped it before starting: it would be new for me alone.
   assert.deepEqual(by.Dropped.needs, ['me'])
   assert.deepEqual(by.Dropped.group, ['away'])
-  // Alone, what one watches is simply ready.
-  assert.equal(watchOptions(anime, ['bob'], progress, ignored).find((o) => o.anime.title === 'Solo').state, 'ready')
+  // Alone, what one watches is for everyone here.
+  assert.equal(watchOptions(anime, ['bob'], progress, ignored).find((o) => o.anime.title === 'Solo').state, 'together')
   assert.deepEqual(watchOptions(anime, [], progress, ignored), [])
 })

@@ -11,8 +11,12 @@
 .name { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-sm); font-weight: 600; }
 .count { color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .dropped .progress > :not(.name) { opacity: 0.45; }
-/* As wide for everyone, so that the bars line up. */
-.actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-1); min-width: min(100%, 300px); }
+.drop { margin-left: auto; min-height: 24px; padding: 2px 6px; border-radius: var(--radius-sm); border: 0; background: none; color: var(--text-muted); font: inherit; font-size: var(--text-xs); font-weight: 400; cursor: pointer; }
+.drop:hover { color: var(--text); text-decoration: underline; }
+/* As wide for everyone, and as wide whatever the next episode is, so that
+   the bars line up and ticking moves nothing. */
+.actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-1); min-width: min(100%, 260px); }
+.watched { min-width: calc(15ch + 42px); }
 .manage { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .remove { margin-left: auto; }
 .note { margin: var(--space-2) 0 0; color: var(--text-muted); font-size: var(--text-sm); }

@@ -74,6 +74,9 @@ export function WatchlogView({ user, present, playing, version }: {
   const [tab, setTab] = useState<Tab>(() => (present ? 'next' : loadTab()))
   const [adding, setAdding] = useState(false)
   const [show, setShow] = useState<number | null>(null) // the show that is open
+  // Bumped to sort Watch next's shows into their sections again (WatchNext).
+  const [layout, setLayout] = useState(0)
+  const relayout = () => setLayout((n) => n + 1)
   const [refreshing, setRefreshing] = useState(false)
   const [removing, setRemoving] = useState<WatchAnime | null>(null)
   // What was just ticked from a card, to take back.
@@ -176,6 +179,7 @@ export function WatchlogView({ user, present, playing, version }: {
   }
 
   async function setIgnored(animeId: number, username: string, ignored: boolean) {
+    relayout()
     setData((d) => d && {
       ...d,
       ignored: [...d.ignored.filter((i) => i.animeId !== animeId || i.username !== username), ...(ignored ? [{ animeId, username }] : [])],
@@ -214,7 +218,15 @@ export function WatchlogView({ user, present, playing, version }: {
     <div class={styles.top}>
       <div class={styles.tabs} role="tablist" aria-label="Watchlog">
         {tabs.map((t) => (
-          <button key={t.id} type="button" role="tab" id={`watchlog-tab-${t.id}`} class={styles.tab} aria-selected={tab === t.id} onClick={() => open(t.id)}>
+          <button key={t.id} type="button" role="tab" id={`watchlog-tab-${t.id}`} class={styles.tab} aria-selected={tab === t.id} aria-controls="watchlog-panel"
+            tabIndex={tab === t.id ? 0 : -1} onClick={() => open(t.id)} onKeyDown={(e) => {
+              // Arrow keys move between the tabs (the ARIA tabs pattern).
+              if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+              e.preventDefault()
+              const to = tabs[(tabs.findIndex((x) => x.id === t.id) + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length].id
+              open(to)
+              document.getElementById(`watchlog-tab-${to}`)?.focus()
+            }}>
             <Icon name={t.icon} size={18} />
             <span class={styles.tabText}><strong>{t.label}</strong><span>{t.about}</span></span>
           </button>
@@ -239,20 +251,20 @@ export function WatchlogView({ user, present, playing, version }: {
       </EmptyState>
     )}
     {data && data.anime.length > 0 && (
-      <div class={styles.panel} role="tabpanel" aria-labelledby={`watchlog-tab-${tab}`}>
+      <div id="watchlog-panel" class={styles.panel} role="tabpanel" aria-labelledby={`watchlog-tab-${tab}`}>
         <div class={styles.people} role="group" aria-label={tab === 'next' ? 'Who is watching' : 'People to compare'}>
           <span class={styles.peopleLabel}>{tab === 'next' ? 'Who is watching?' : 'Compare'}</span>
           {people.map((p) => (
             <button key={p.username} type="button" class={styles.chip} aria-pressed={selected.includes(p)} onClick={() => choose(p.username)}>
               <Avatar src={p.avatarUrl} size={20} />
-              <span style={{ color: p.nameColor }}>{p.username === user.username ? 'You' : p.nickname}</span>
+              <span style={selected.includes(p) ? { color: p.nameColor } : undefined}>{p.username === user.username ? 'You' : p.nickname}</span>
             </button>
           ))}
           <button type="button" class={styles.everyone} disabled={!chosen} onClick={() => { setChosen(null); keep(null) }}>Everyone</button>
         </div>
         {tab === 'next' ? (
           <WatchNext anime={data.anime} here={selected} people={people} progress={data.progress} self={user.username} admin={user.admin}
-            playing={playing} ignoredOf={ignoredOf} onShow={(anime) => setShow(anime.id)} onOpen={episodesOf} onMark={mark} />
+            playing={playing} layout={layout} heading={present ? 'h3' : 'h2'} ignoredOf={ignoredOf} onShow={(anime) => setShow(anime.id)} onOpen={episodesOf} onMark={mark} />
         ) : (
           <WatchTable anime={data.anime} people={selected} self={user.username} playing={playing}
             watchedOf={watchedOf} ignoredOf={ignoredOf} onOpen={episodesOf} onShow={(anime) => setShow(anime.id)} />
@@ -274,14 +286,14 @@ export function WatchlogView({ user, present, playing, version }: {
         mayRemove={user.admin || !data.progress.some((p) => p.animeId === shown.id && p.watched.length > 0)}
         onEpisodes={(person) => episodesOf(shown, person)} onSet={(u, episode) => { void setWatched(shown.id, u, episode, episode, true) }}
         onIgnore={(u, value) => { void setIgnored(shown.id, u, value) }} onRefresh={() => { void add(shown.id) }}
-        onRemove={() => setRemoving(shown)} onClose={() => setShow(null)} />
+        onRemove={() => setRemoving(shown)} onClose={() => { setShow(null); relayout() }} />
     )}
     {detailAnime && detailPerson && (
       <EpisodesDialog anime={detailAnime} person={detailPerson} self={detailPerson.username === user.username}
         watched={watchedOf(detailAnime.id, detailPerson.username)} editable={mayChange(detailPerson.username)}
         ignored={ignoredOf(detailAnime.id, detailPerson.username)} onIgnore={(value) => { void setIgnored(detailAnime.id, detailPerson.username, value) }}
         onSet={(from, to, watched) => { void setWatched(detailAnime.id, detailPerson.username, from, to, watched) }}
-        onClose={() => setDetail(null)} />
+        onClose={() => { setDetail(null); relayout() }} />
     )}
     {removing && (
       <Modal title="Remove show" size="sm" onClose={() => setRemoving(null)} footer={<>

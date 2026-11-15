@@ -33,18 +33,20 @@ export function watchNext(anime: WatchAnime, group: readonly string[], here: Rea
   return { next, behind: t.behind, waiting: group.filter((u) => !here.has(u) && !hasEpisode(watchedOf(u), next)) }
 }
 
-// ready: those here who follow it are at the same episode. catchup: one of them is behind.
-// waiting: someone who follows it is not here and has not seen the next
-// episode. solo: only one of several here watches it. new: on the list, and
-// nobody here has started it.
-export type WatchState = 'ready' | 'catchup' | 'waiting' | 'solo' | 'new'
-export const watchStates: readonly WatchState[] = ['ready', 'catchup', 'waiting', 'solo', 'new']
+// together: everyone here follows it (someone may be behind). some: only
+// some of those here follow it; the others have not started it, have
+// finished it or stopped following it. waiting: someone who follows it is
+// not here and has not seen the next episode, so it is held up. new: on the
+// list, and nobody here has started it.
+export type WatchState = 'together' | 'some' | 'waiting' | 'new'
+export const watchStates: readonly WatchState[] = ['together', 'some', 'waiting', 'new']
 
 export interface WatchOption {
   anime: WatchAnime
   state: WatchState
   next: number
   group: string[] // who is in the middle of it, here or not
+  watching: string[] // of them, who is here
   waiting: string[] // of them, who is not here and has not seen the next episode
   behind: { username: string; by: number }[]
   unstarted: string[] // who is here and has not started it
@@ -68,19 +70,20 @@ export function watchOptions(anime: readonly WatchAnime[], here: readonly string
     const unstarted = here.filter((u) => !watched.has(u) && !ignoredOf(a.id, u))
     const t = watchNext(a, group, present, of)
     if (t) {
-      const alone = here.length > 1 && group.filter((u) => present.has(u)).length < 2
+      const watching = group.filter((u) => present.has(u))
       options.push({
-        anime: a, state: t.waiting.length ? 'waiting' : alone ? 'solo' : t.behind.length ? 'catchup' : 'ready', next: t.next, group,
+        anime: a, state: t.waiting.length ? 'waiting' : watching.length === here.length ? 'together' : 'some', next: t.next, group, watching,
         waiting: t.waiting, behind: t.behind, unstarted,
         needs: group.filter((u) => present.has(u) && !hasEpisode(of(u), t.next)),
         recent: Math.max(...following.map((p) => p.watchedAt)),
       })
     } else if (unstarted.length > 0 && !here.some((u) => watched.has(u))) {
-      options.push({ anime: a, state: 'new', next: 1, group, waiting: [], behind: [], unstarted, needs: unstarted, recent: a.addedAt ?? 0 })
+      options.push({ anime: a, state: 'new', next: 1, group, watching: [], waiting: [], behind: [], unstarted, needs: unstarted, recent: a.addedAt ?? 0 })
     }
   }
-  // In a section, the fewer of those here a show is new to, the earlier it comes.
+  // In a section, the more of those here watch a show, and the fewer of them
+  // are behind, the earlier it comes.
   return options.sort((a, b) => watchStates.indexOf(a.state) - watchStates.indexOf(b.state)
-    || (a.state === 'new' ? 0 : a.unstarted.length - b.unstarted.length)
+    || b.watching.length - a.watching.length || a.behind.length - b.behind.length
     || b.recent - a.recent || a.anime.title.localeCompare(b.anime.title))
 }

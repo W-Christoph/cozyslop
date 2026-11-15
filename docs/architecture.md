@@ -378,14 +378,17 @@ the episodes window by the person or an admin). What a group can watch
 together is the first episode one of them has not watched. "Watch next"
 lists the shows the people selected are in the middle of, each with the
 first episode one of them has not seen, in sections (`together.ts`,
-`watchOptions`): ready, someone has to catch up, waiting, shows only one of
-several selected watches, and not started yet (on the list, none of them has
-watched any). A show waits for someone of its group who is not selected only
-if they have not seen that episode either. A card shows the people as chips
-whose look says where each stands (seen up to an episode, behind, finished,
-not started, not selected), and ticks its next episode for
-oneself, or as an admin for everyone it is new to; that can be taken back
-for some seconds. A show keeps its section until other people are selected,
+`watchOptions`): together (everyone selected follows it, perhaps with
+someone behind), some (only some of them follow it), waiting (held up by
+someone who is not selected), and not started yet (on the list, none of them
+has watched any). A show waits for someone of its group who is not selected only
+if they have not seen that episode either. A show is a line:
+its cover; a verdict ("Ready for all 3 of you", "Mika is 1 behind", "Waiting
+for Tobi"); chips for where everyone stands (those selected who are level
+share one, then who is behind, who has finished, and after "Not here" who
+holds the show up and who does not); its next episode, and whose it is; and
+buttons that tick it for oneself, or as an admin for everyone it is new to.
+That can be taken back for some seconds. A show keeps its section until other people are selected,
 so that ticking moves nothing.
 
 In a room the same view opens as a window over the stream

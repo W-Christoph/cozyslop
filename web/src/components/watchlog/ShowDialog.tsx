@@ -41,7 +41,7 @@ export function ShowDialog({ anime, people, self, playing, busy, watchedOf, igno
       <div class={styles.head}>
         <Cover anime={anime} size={96} />
         <div class={styles.about}>
-          {anime.titleEnglish && anime.titleEnglish !== anime.title && <strong class={styles.title}>{anime.titleEnglish}</strong>}
+          {anime.titleEnglish && anime.titleEnglish.toLowerCase() !== anime.title.toLowerCase() && <strong class={styles.title}>{anime.titleEnglish}</strong>}
           <span class={styles.length}>
             {anime.episodes !== null ? `${anime.episodes} episode${anime.episodes === 1 ? '' : 's'}` : 'Length not known yet (still airing)'}
             {playing && <Badge tone="accent" icon="play">Watching now</Badge>}
@@ -61,17 +61,18 @@ export function ShowDialog({ anime, people, self, playing, busy, watchedOf, igno
                 <span class={styles.name}>
                   <span style={{ color: p.nameColor }}>{me ? 'You' : p.nickname}</span>
                   {dropped ? <Badge title={`The others do not wait for ${me ? 'you' : p.nickname}`}>{count === 0 ? 'Not interested' : 'Dropped'}</Badge> : done ? <Badge tone="success" icon="check">Finished</Badge> : null}
+                  {/* At the line's end, so that its changing label moves nothing. */}
+                  {editable && !done && (
+                    <button type="button" class={styles.drop} title={dropped ? 'The others wait again before they watch on' : 'The others stop waiting. What was watched stays.'}
+                      onClick={() => onIgnore(p.username, !dropped)}>{dropped ? 'Pick up again' : count === 0 ? 'Not interested' : 'Drop'}</button>
+                  )}
                 </span>
                 <EpisodeBar watched={watched} episodes={anime.episodes} />
-                <span class={styles.count}>{count === 0 ? 'Not started' : `${count}${anime.episodes !== null ? ` / ${anime.episodes}` : ''} watched`}</span>
+                <span class={styles.count}>{count === 0 ? 'Not started' : `${count === next - 1 ? '' : `Up to ep ${next - 1} · `}${count}${anime.episodes !== null ? ` / ${anime.episodes}` : ''} watched`}</span>
               </div>
               <div class={styles.actions}>
-                {editable && !done && <Button size="sm" icon="check" title={`Mark episode ${next} as watched for ${me ? 'you' : p.nickname}`} onClick={() => tick(p.username, next)}>Watched ep {next}</Button>}
+                {editable && !done && <Button size="sm" icon="check" class={styles.watched} title={`Mark episode ${next} as watched for ${me ? 'you' : p.nickname}`} aria-label={`Mark ep ${next}: as watched for ${me ? 'you' : p.nickname}`} onClick={() => tick(p.username, next)}>Mark ep {next}</Button>}
                 <Button size="sm" variant="ghost" title="Tick and untick single episodes" onClick={() => onEpisodes(p)}>{editable ? 'Episodes…' : 'Episodes'}</Button>
-                {editable && !done && (
-                  <Button size="sm" variant="ghost" title={dropped ? 'The others wait again before they watch on' : 'The others stop waiting. What was watched stays.'}
-                    onClick={() => onIgnore(p.username, !dropped)}>{dropped ? 'Pick up again' : count === 0 ? 'Not interested' : 'Drop'}</Button>
-                )}
               </div>
             </li>
           )

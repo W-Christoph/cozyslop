@@ -48,8 +48,14 @@ func newWatchFixture(t *testing.T) (*fixture, *fakeDesktop) {
 			d.mu.Lock()
 			d.searches++
 			d.mu.Unlock()
-			if search, _ := req.Variables["q"].(string); strings.Contains(search, "Podcast") {
+			search, _ := req.Variables["q"].(string)
+			// As AniList does: nothing for "im", which no title has.
+			if strings.Contains(search, "Podcast") || strings.HasPrefix(search, "im ") {
 				w.Write([]byte(`{"data":{"Page":{"media":[]}}}`))
+				return
+			}
+			if strings.Contains(search, "summoner") {
+				w.Write([]byte(`{"data":{"Page":{"media":[{"id":8,"title":{"romaji":"Summoner Shorts","english":"I’m Dating a Dark Summoner Shorts"}},{"id":7,"title":{"romaji":"Dark Summoner to Dekiteiru","english":"I'm Dating a Dark Summoner"},"episodes":12,"coverImage":{"medium":""}}]}}}`))
 				return
 			}
 			w.Write([]byte(`{"data":{"Page":{"media":[{"id":1,"title":{"romaji":"Sousou no Frieren"},"episodes":28,"coverImage":{"medium":"f.jpg"}}]}}}`))
@@ -289,4 +295,24 @@ func TestWatchFollowsFirefox(t *testing.T) {
 	f.r.checkPlayback(f.ctx)
 	requireEqual(t, d.searched(), searches)
 	requireEqual(t, f.progress()["alice"], "5")
+}
+
+func TestWatchFindsShowSpelledWithoutSigns(t *testing.T) {
+	f, d := newWatchFixture(t)
+	alice, a := f.join(f.user("alice"))
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watching", Watching: true})
+
+	// The address has "im" for "I'm": AniList knows the title's other words.
+	d.set(playStatus{State: "playing", Source: "firefox", Length: 100, Title: "An Episode's Title",
+		URL: "https://site.example/watch/AbCdEf_123/im-dating-a-dark-summoner?ep=6"})
+	f.r.checkPlayback(f.ctx)
+	requireEqual(t, *a.wait(t, "playing").(playingMsg).Playing, WatchPlaying{AnimeID: 7, Title: "Dark Summoner to Dekiteiru", Episode: 6})
+
+	// Only a show with the same letters counts: not whatever else is found.
+	d.set(playStatus{State: "playing", Source: "firefox", Length: 100, Title: "Another",
+		URL: "https://site.example/watch/AbCdEf_123/im-a-summoner-fan?ep=2"})
+	searches := d.searched()
+	f.r.checkPlayback(f.ctx)
+	requireEqual(t, f.r.watch.anime == nil, true)
+	requireEqual(t, d.searched(), searches+5)
 }

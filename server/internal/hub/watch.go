@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"cozycast/internal/anilist"
 	"cozycast/internal/episode"
@@ -293,10 +294,41 @@ func (r *Room) findAnime(ctx context.Context, n episode.Name) *store.Anime {
 		r.log.Warn("anilist search", "err", err)
 		return nil
 	}
-	if len(found) == 0 {
+	if len(found) > 0 {
+		return found[0].Anime()
+	}
+	// A page's address leaves out the signs between a title's letters ("im
+	// dating" for "I'm Dating"), and AniList finds nothing for that. Then
+	// the words are searched with one left out, for a show whose title is
+	// the same letters.
+	words := strings.Fields(n.Title)
+	if len(words) < 3 || len(words) > 8 {
 		return nil
 	}
-	return found[0].Anime()
+	want := letters(n.Title)
+	for i := range words {
+		found, err := r.hub.AniList.Search(ctx, strings.Join(slices.Delete(slices.Clone(words), i, i+1), " "))
+		if err != nil {
+			r.log.Warn("anilist search", "err", err)
+			return nil
+		}
+		for _, m := range found {
+			if letters(m.Title.Romaji) == want || letters(m.Title.English) == want {
+				return m.Anime()
+			}
+		}
+	}
+	return nil
+}
+
+// letters is a title's letters and digits, in lower case.
+func letters(title string) string {
+	return strings.Map(func(c rune) rune {
+		if unicode.IsLetter(c) || unicode.IsDigit(c) {
+			return unicode.ToLower(c)
+		}
+		return -1
+	}, title)
 }
 
 // endWatching ends the episode being watched, suggesting it for those who

@@ -303,7 +303,8 @@ nobody else may hold the remote. The tab that asked gets
 `{"type":"file_result","action":"delete"|"play","name":"<file>","error":"…"}`,
 with `error` `""` if it worked (see `docs/architecture.md`).
 With the `watchlog` setting on, `welcome.playing` is the episode VLC or Firefox
-plays on the desktop (`{"animeId":…,"title":"…","episode":5}`, `animeId` `0` when the
+plays on the desktop (`{"animeId":…,"title":"…","episode":5,"linked":false}`; `linked` when its name was
+linked to the show before and the show is not AniList's guess; `animeId` `0` when the
 show was not recognised; `null` when nothing is) and `welcome.watch` the open
 suggestion to mark an episode watched (`null` when there is none);
 `{"type":"playing","playing":…}` and `{"type":"watch","proposal":…}` follow

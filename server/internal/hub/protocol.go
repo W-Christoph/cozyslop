@@ -65,6 +65,9 @@ type WatchPlaying struct {
 	AnimeID int64  `json:"animeId"` // 0 = show not recognised
 	Title   string `json:"title"`
 	Episode int    `json:"episode"`
+	// Linked: the name was linked to the show before, by hand or by a saved
+	// suggestion. Otherwise the show is AniList's match, which may be wrong.
+	Linked bool `json:"linked"`
 }
 
 // WatchProposal suggests marking an episode watched for the ticked viewers.

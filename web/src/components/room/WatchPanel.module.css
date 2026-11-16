@@ -2,9 +2,12 @@
 /* The bar of an account: the watchlog's button, and one to link the show. */
 .bar { display: flex; align-items: stretch; background: var(--color-message-hover); border-bottom: 1px solid var(--color-message-hover); }
 .bar .playing { flex: 1; min-width: 0; width: auto; border-bottom: 0; }
-.linkShow { flex-shrink: 0; padding: 0 var(--space-3); border: 0; background: none; color: var(--color-text-muted); font: inherit; font-size: 0.8em; text-decoration: underline; white-space: nowrap; cursor: pointer; }
-.linkShow:hover { background: var(--color-accent); color: var(--color-text); }
-.wanted { color: var(--color-text); font-weight: 600; }
+/* An icon at the bar's end, a guess to correct; with a word on it where a
+   show is wanted. */
+.linkShow { flex-shrink: 0; align-self: center; display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 28px; height: 28px; margin-right: var(--space-2); padding: 0 6px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--color-text-muted); font: inherit; font-size: 0.8em; white-space: nowrap; cursor: pointer; opacity: 0.7; }
+.linkShow svg { fill: none; }
+.linkShow:hover, .linkShow[aria-expanded='true'] { background: var(--color-accent); color: var(--color-text); opacity: 1; }
+.wanted { padding: 0 8px; background: var(--color-message-bg); color: var(--color-text); font-weight: 600; opacity: 1; }
 .linking { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-accent); background: var(--color-message-hover); }
 .open { cursor: pointer; }
 .open:hover { background: var(--color-accent); }

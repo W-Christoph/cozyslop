@@ -8,7 +8,8 @@ import styles from './WatchPanel.module.css'
 // The episode VLC or Firefox plays, as a bar at the top of the chat: the
 // show's whole name, on two lines if it needs them. Accounts get to the
 // watchlog from it, and say which show it is where that was not recognised
-// or got wrong: the name it goes by is that show's from then on.
+// ("Link") or is AniList's guess, which may be wrong (a small button): the
+// name it goes by is that show's from then on, and the button is gone.
 function WatchPlayingBar() {
   const store = useRoomStore()
   const playing = store.watchPlaying.value
@@ -28,11 +29,14 @@ function WatchPlayingBar() {
     <div role="status">
       <div class={styles.bar}>
         <button type="button" class={`${styles.playing} ${styles.open}`} title="Open the watchlog" onClick={() => { watchlogWanted.value = true }}>{line}</button>
-        <button type="button" class={`${styles.linkShow} ${known ? '' : styles.wanted}`} aria-expanded={linking}
-          title={known ? 'Not this show? Link it to another' : 'Say which show this is. Its other episodes are then recognised.'}
-          onClick={() => setLinking(!linking)}>{known ? 'Wrong show?' : 'Link show'}</button>
+        {!playing.linked && (
+          <button type="button" class={`${styles.linkShow} ${known ? '' : styles.wanted}`} aria-expanded={linking}
+            aria-label={known ? 'Wrong show? Link another' : 'Link a show'}
+            title={known ? 'Not this show? Link it to another' : 'Say which show this is. Its other episodes are then recognised.'}
+            onClick={() => setLinking(!linking)}><Icon name="link" size={14} />{!known && 'Link'}</button>
+        )}
       </div>
-      {linking && (
+      {linking && !playing.linked && (
         <div class={styles.linking}>
           <AnimeSearch autoFocus placeholder="Search AniList…" onPick={(anime) => { store.linkWatch(anime.id); setLinking(false) }} />
         </div>

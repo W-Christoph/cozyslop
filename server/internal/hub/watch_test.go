@@ -348,7 +348,7 @@ func TestWatchLinksWhatPlaysToAShow(t *testing.T) {
 	f.r.Handle(f.ctx, guest, ClientMsg{Type: "watch_link", AnimeID: 2})
 	requireEqual(t, g.wait(t, "error").(errorMsg).Message, "You are not allowed to do that.")
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_link", AnimeID: 2})
-	requireEqual(t, *a.wait(t, "playing").(playingMsg).Playing, WatchPlaying{AnimeID: 2, Title: "Frieren 2", Episode: 5})
+	requireEqual(t, *a.wait(t, "playing").(playingMsg).Playing, WatchPlaying{AnimeID: 2, Title: "Frieren 2", Episode: 5, Linked: true})
 
 	// What was seen before counts, and the episode is suggested for the show.
 	for page.Time = 0; page.Time < 100; page.Time += watchBucket {
@@ -369,6 +369,6 @@ func TestWatchLinksWhatPlaysToAShow(t *testing.T) {
 	d.set(page)
 	f.r.checkPlayback(f.ctx)
 	requireEqual(t, a.wait(t, "playing").(playingMsg).Playing == nil, true)
-	requireEqual(t, *a.wait(t, "playing").(playingMsg).Playing, WatchPlaying{AnimeID: 2, Title: "Frieren 2", Episode: 6})
+	requireEqual(t, *a.wait(t, "playing").(playingMsg).Playing, WatchPlaying{AnimeID: 2, Title: "Frieren 2", Episode: 6, Linked: true})
 	requireEqual(t, d.searched(), searches)
 }

@@ -83,6 +83,7 @@ type watching struct {
 	known  bool         // the name has an episode number
 	page   bool         // a page of Firefox's, not a file
 	anime  *store.Anime // nil if not recognised
+	linked bool         // the name was linked to the show before: not AniList's guess
 	length int
 	seen   map[string]*viewer // by identity key
 }
@@ -109,7 +110,7 @@ func (w *watching) playing() *WatchPlaying {
 	}
 	p := &WatchPlaying{Title: w.name.Title, Episode: w.name.Episode}
 	if w.anime != nil {
-		p.AnimeID, p.Title = w.anime.ID, w.anime.Title
+		p.AnimeID, p.Title, p.Linked = w.anime.ID, w.anime.Title, w.linked
 	}
 	return p
 }
@@ -265,7 +266,7 @@ func (r *Room) checkPlayback(ctx context.Context) {
 func (r *Room) startWatching(ctx context.Context, file, key string, name episode.Name, known, page bool) *watching {
 	w := &watching{file: file, key: key, name: name, known: known, page: page, seen: make(map[string]*viewer)}
 	if w.known {
-		w.anime = r.findAnime(ctx, w.name)
+		w.anime, w.linked = r.findAnime(ctx, w.name)
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -277,27 +278,27 @@ func (r *Room) startWatching(ctx context.Context, file, key string, name episode
 }
 
 // findAnime is the show a file name means: the one it was matched to
-// before, or AniList's best match. nil if neither knows.
-func (r *Room) findAnime(ctx context.Context, n episode.Name) *store.Anime {
+// before (linked), or AniList's best match. nil if neither knows.
+func (r *Room) findAnime(ctx context.Context, n episode.Name) (a *store.Anime, linked bool) {
 	a, err := r.hub.Watchlog.AnimeByAlias(ctx, n.Alias())
 	if err == nil {
-		return a
+		return a, true
 	}
 	if !errors.Is(err, store.ErrNotFound) {
 		r.log.Warn("watchlog alias", "err", err)
 	}
 	if r.hub.AniList == nil {
-		return nil
+		return nil, false
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	found, err := r.hub.AniList.Search(ctx, n.Query())
 	if err != nil {
 		r.log.Warn("anilist search", "err", err)
-		return nil
+		return nil, false
 	}
 	if len(found) > 0 {
-		return found[0].Anime()
+		return found[0].Anime(), false
 	}
 	// A page's address leaves out the signs between a title's letters ("im
 	// dating" for "I'm Dating", "jojos" for "JoJo's"), and AniList finds
@@ -326,15 +327,15 @@ func (r *Room) findAnime(ctx context.Context, n episode.Name) *store.Anime {
 		found, err := r.hub.AniList.Search(ctx, strings.Join(part, " "))
 		if err != nil {
 			r.log.Warn("anilist search", "err", err)
-			return nil
+			return nil, false
 		}
 		for _, m := range found {
 			if slices.Contains(want, letters(m.Title.Romaji)) || slices.Contains(want, letters(m.Title.English)) {
-				return m.Anime()
+				return m.Anime(), false
 			}
 		}
 	}
-	return nil
+	return nil, false
 }
 
 // letters is a title's letters and digits, in lower case.
@@ -629,7 +630,7 @@ func (r *Room) linkPlaying(ctx context.Context, c *Client, animeID int64) error 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.watch == w {
-		w.anime = a
+		w.anime, w.linked = a, true
 		r.broadcastLocked(playingMsg{Type: "playing", Playing: w.playing()}, nil)
 	}
 	return nil

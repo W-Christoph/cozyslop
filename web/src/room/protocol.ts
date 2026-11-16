@@ -63,6 +63,7 @@ export interface WatchPlaying {
   animeId: number // 0: the show was not recognised
   title: string
   episode: number
+  linked: boolean // its name was linked to the show before; otherwise the show is AniList's guess
 }
 
 export interface WatchViewer {

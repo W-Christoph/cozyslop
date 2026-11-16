@@ -71,6 +71,10 @@ func newWatchFixture(t *testing.T) (*fixture, *fakeDesktop) {
 	f.r.statusURL, f.r.playToken = helper.URL+"/status", "secret"
 	f.h.AniList = anilist.New()
 	f.h.AniList.URL = ani.URL
+	wl, err := store.OpenWatchlog(f.ctx, ":memory:")
+	requireOK(t, err)
+	t.Cleanup(func() { wl.Close() })
+	f.h.Watchlog = wl
 	f.h.SetWatchlog(true)
 	return f, d
 }
@@ -92,10 +96,12 @@ func (f *fixture) play(d *fakeDesktop, file string, during func(second int)) {
 // progress is the episodes each account has watched, as "3 6" or "1-4".
 func (f *fixture) progress() map[string]string {
 	f.t.Helper()
-	list, err := f.s.ListProgress(f.ctx)
+	list, err := f.h.Watchlog.ListProgress(f.ctx)
 	requireOK(f.t, err)
 	out := map[string]string{}
 	for _, p := range list {
+		u, err := f.s.UserByID(f.ctx, p.UserID)
+		requireOK(f.t, err)
 		var parts []string
 		for _, r := range p.Watched {
 			if r[0] == r[1] {
@@ -104,7 +110,7 @@ func (f *fixture) progress() map[string]string {
 				parts = append(parts, strconv.Itoa(r[0])+"-"+strconv.Itoa(r[1]))
 			}
 		}
-		out[p.Username] = strings.Join(parts, " ")
+		out[u.Username] = strings.Join(parts, " ")
 	}
 	return out
 }

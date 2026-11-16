@@ -53,6 +53,8 @@ type Deps struct {
 	Relay *relay.Relay
 	// AniList finds shows for the watchlog; nil = searching is unavailable.
 	AniList *anilist.Client
+	// Watchlog is the watchlog's database; nil = there is no watchlog.
+	Watchlog *store.Watchlog
 }
 
 type Server struct {
@@ -61,6 +63,7 @@ type Server struct {
 	media          *fwd.Ports
 	relay          *relay.Relay
 	anilist        *anilist.Client
+	watchlog       *store.Watchlog
 	publicIP       netip.Addr
 	mediaPorts     [2]int
 	pairing        *pairing.Manager // nil when the tunnel is off
@@ -114,6 +117,7 @@ func New(d Deps) *Server {
 		media:          d.Media,
 		relay:          d.Relay,
 		anilist:        d.AniList,
+		watchlog:       d.Watchlog,
 		searchLimit:    ratelimit.New(10, 2*time.Second),
 		publicIP:       d.PublicIP,
 		mediaPorts:     d.MediaPorts,

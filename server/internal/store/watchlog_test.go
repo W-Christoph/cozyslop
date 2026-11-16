@@ -9,14 +9,13 @@ import (
 
 func TestWatchlog(t *testing.T) {
 	ctx := context.Background()
-	s := openTest(t)
-	alice := &User{Username: "alice", PasswordHash: "x", Nickname: "Alice"}
-	bob := &User{Username: "bob", PasswordHash: "x", Nickname: "Bob"}
-	for _, u := range []*User{alice, bob} {
-		if err := s.CreateUser(ctx, u); err != nil {
-			t.Fatal(err)
-		}
+	s, err := OpenWatchlog(ctx, ":memory:")
+	if err != nil {
+		t.Fatal(err)
 	}
+	t.Cleanup(func() { s.Close() })
+	// Accounts are the main database's: ids only here.
+	alice, bob := &User{ID: 1}, &User{ID: 2}
 
 	if err := s.SetWatched(ctx, alice.ID, 1, 1, 3, true, "manual"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("progress for an unknown show: %v", err)
@@ -44,21 +43,35 @@ func TestWatchlog(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, episode := range []int{4, 7} {
-		if err := s.MarkWatched(ctx, []int64{alice.ID, bob.ID, 999}, 1, episode); err != nil {
+		if err := s.MarkWatched(ctx, []int64{alice.ID, bob.ID}, 1, episode); err != nil {
 			t.Fatal(err)
 		}
 	}
+	if err := s.MarkWatched(ctx, []int64{alice.ID}, 2, 1); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("an episode of an unknown show: %v", err)
+	}
 	list, err := s.ListProgress(ctx)
-	if err != nil || len(list) != 2 || list[0].Username != "alice" || !reflect.DeepEqual(list[0].Watched, [][2]int{{1, 1}, {3, 5}, {7, 7}}) ||
-		list[1].Username != "bob" || !reflect.DeepEqual(list[1].Watched, [][2]int{{4, 4}, {7, 7}}) {
+	if err != nil || len(list) != 2 || list[0].UserID != alice.ID || !reflect.DeepEqual(list[0].Watched, [][2]int{{1, 1}, {3, 5}, {7, 7}}) ||
+		list[1].UserID != bob.ID || !reflect.DeepEqual(list[1].Watched, [][2]int{{4, 4}, {7, 7}}) {
 		t.Fatalf("progress: %v %+v", err, list)
 	}
 	if got, err := s.Watched(ctx, bob.ID, 1); err != nil || !reflect.DeepEqual(got, [][2]int{{4, 4}, {7, 7}}) {
 		t.Fatalf("watched: %v %+v", err, got)
 	}
-	users, err := s.WatchlogUsers(ctx)
-	if err != nil || len(users) != 2 {
-		t.Fatalf("users: %v %+v", err, users)
+
+	// A deleted account leaves nothing.
+	if err := s.SetIgnored(ctx, 3, 1, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetWatched(ctx, 3, 1, 1, 2, true, "manual"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteUser(ctx, 3); err != nil {
+		t.Fatal(err)
+	}
+	ignored, err := s.ListIgnored(ctx)
+	if list, _ := s.ListProgress(ctx); err != nil || len(ignored) != 0 || len(list) != 2 {
+		t.Fatalf("after deleting an account: %v %+v %+v", err, ignored, list)
 	}
 
 	if err := s.SetWatched(ctx, bob.ID, 1, 1, 9999, false, "manual"); err != nil {

@@ -102,7 +102,12 @@ func run(args []string, out io.Writer) error {
 	defer db.Close()
 	if command == "export" {
 		// The archive is all that goes to out.
-		return transfer.Export(ctx, db, cfg.DataDir, out)
+		watchlog, err := store.OpenWatchlog(ctx, filepath.Join(cfg.DataDir, transfer.WatchlogDatabase))
+		if err != nil {
+			return fmt.Errorf("the watchlog's database: %w", err)
+		}
+		defer watchlog.Close()
+		return transfer.Export(ctx, db, watchlog, cfg.DataDir, out)
 	}
 	if command == "reset-admin" {
 		created, err := db.ResetAdmin(ctx, adminHash)
@@ -220,6 +225,12 @@ func run(args []string, out io.Writer) error {
 	h := hub.New(db, filepath.Join(mediaDir, "chat"), rooms)
 	h.HibernateAfter = cfg.HibernateAfter
 	h.AniList = anilist.New()
+	watchlog, err := store.OpenWatchlog(ctx, filepath.Join(cfg.DataDir, transfer.WatchlogDatabase))
+	if err != nil {
+		return fmt.Errorf("the watchlog's database: %w", err)
+	}
+	defer watchlog.Close()
+	h.Watchlog = watchlog
 	settings, err := db.Settings(ctx)
 	if err != nil {
 		return err
@@ -249,6 +260,7 @@ func run(args []string, out io.Writer) error {
 		MaxUploadMB: cfg.MaxUploadMB,
 		SourceURL:   cfg.SourceURL,
 		AniList:     h.AniList,
+		Watchlog:    watchlog,
 	})
 	handler := api.Handler()
 

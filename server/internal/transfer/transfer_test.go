@@ -46,8 +46,16 @@ func server(t *testing.T) []byte {
 	if err := os.MkdirAll(filepath.Join(dir, "media", "chat"), 0o750); err != nil {
 		t.Fatal(err)
 	}
+	wl, err := store.OpenWatchlog(ctx, filepath.Join(dir, WatchlogDatabase))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer wl.Close()
+	if err := wl.SaveAnime(ctx, &store.Anime{ID: 1, Title: "Frieren"}); err != nil {
+		t.Fatal(err)
+	}
 	var out bytes.Buffer
-	if err := Export(ctx, st, dir, &out); err != nil {
+	if err := Export(ctx, st, wl, dir, &out); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, exportTmp)); !errors.Is(err, os.ErrNotExist) {
@@ -60,7 +68,7 @@ func files(t *testing.T, dir string) string {
 	t.Helper()
 	var names []string
 	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
-		if rel, _ := filepath.Rel(dir, p); err == nil && rel != "." && !strings.HasPrefix(filepath.Base(rel), Database+"-") {
+		if rel, _ := filepath.Rel(dir, p); err == nil && rel != "." && !strings.HasSuffix(rel, "-wal") && !strings.HasSuffix(rel, "-shm") {
 			names = append(names, filepath.ToSlash(rel))
 		}
 		return err
@@ -95,7 +103,7 @@ func TestExportImport(t *testing.T) {
 	if exported.IsZero() {
 		t.Fatal("no export time")
 	}
-	if got, want := files(t, dir), "cozycast.db media media/avatars media/avatars/moved.png media/chat wireguard.key"; got != want {
+	if got, want := files(t, dir), "cozycast.db media media/avatars media/avatars/moved.png media/chat watchlog.db wireguard.key"; got != want {
 		t.Fatalf("data directory: %s, want %s", got, want)
 	}
 	if data, _ := os.ReadFile(filepath.Join(dir, "media", "avatars", "moved.png")); string(data) != "picture" {
@@ -111,6 +119,14 @@ func TestExportImport(t *testing.T) {
 	}
 	if _, err := st.UserByUsername(ctx, "admin"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("the new server's own account stayed: %v", err)
+	}
+	wl, err := store.OpenWatchlog(ctx, filepath.Join(dir, WatchlogDatabase))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer wl.Close()
+	if a, err := wl.Anime(ctx, 1); err != nil || a.Title != "Frieren" {
+		t.Fatalf("watchlog: %+v %v", a, err)
 	}
 }
 

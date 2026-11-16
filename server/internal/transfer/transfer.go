@@ -25,6 +25,8 @@ import (
 const (
 	// Database is the database's file name in the data directory.
 	Database = "cozycast.db"
+	// WatchlogDatabase is the watchlog's own database there.
+	WatchlogDatabase = "watchlog.db"
 	// The archive's first entry: what made it, and when.
 	manifestName = "cozycast-server.json"
 	format       = 1
@@ -44,8 +46,9 @@ var ErrNotExport = errors.New("not a server export")
 
 // Export writes the data directory as a gzipped tar to w. The server may be
 // running: the database goes in as a copy taken in one piece (st is the
-// database in dataDir), the files around it as they are found.
-func Export(ctx context.Context, st *store.Store, dataDir string, w io.Writer) error {
+// database in dataDir, wl the watchlog's or nil if there is none), the files
+// around it as they are found.
+func Export(ctx context.Context, st *store.Store, wl *store.Watchlog, dataDir string, w io.Writer) error {
 	tmp := filepath.Join(dataDir, exportTmp)
 	if err := os.RemoveAll(tmp); err != nil {
 		return err
@@ -57,6 +60,11 @@ func Export(ctx context.Context, st *store.Store, dataDir string, w io.Writer) e
 	snapshot := filepath.Join(tmp, Database)
 	if err := st.Snapshot(ctx, snapshot); err != nil {
 		return fmt.Errorf("copy the database: %w", err)
+	}
+	if wl != nil {
+		if err := wl.Snapshot(ctx, filepath.Join(tmp, WatchlogDatabase)); err != nil {
+			return fmt.Errorf("copy the watchlog's database: %w", err)
+		}
 	}
 
 	gz := gzip.NewWriter(w)
@@ -73,6 +81,11 @@ func Export(ctx context.Context, st *store.Store, dataDir string, w io.Writer) e
 	}
 	if err := addFile(tw, snapshot, Database); err != nil {
 		return err
+	}
+	if wl != nil {
+		if err := addFile(tw, filepath.Join(tmp, WatchlogDatabase), WatchlogDatabase); err != nil {
+			return err
+		}
 	}
 	err = filepath.WalkDir(dataDir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -92,7 +105,8 @@ func Export(ctx context.Context, st *store.Store, dataDir string, w io.Writer) e
 		switch name {
 		case exportTmp, importTmp:
 			return filepath.SkipDir
-		case Database, Database + "-wal", Database + "-shm", manifestName:
+		case Database, Database + "-wal", Database + "-shm", manifestName,
+			WatchlogDatabase, WatchlogDatabase + "-wal", WatchlogDatabase + "-shm":
 			return nil
 		}
 		switch {
@@ -212,6 +226,16 @@ func Import(ctx context.Context, dataDir string, r io.Reader) (exported time.Tim
 	}
 	if err := st.Close(); err != nil {
 		return exported, err
+	}
+	// The watchlog's database likewise, if the export has one.
+	if _, err := os.Stat(filepath.Join(staging, WatchlogDatabase)); err == nil {
+		wl, err := store.OpenWatchlog(ctx, filepath.Join(staging, WatchlogDatabase))
+		if err != nil {
+			return exported, fmt.Errorf("the export's watchlog: %w", err)
+		}
+		if err := wl.Close(); err != nil {
+			return exported, err
+		}
 	}
 
 	old, err := os.ReadDir(dataDir)

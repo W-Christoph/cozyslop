@@ -276,7 +276,7 @@ func (r *Room) startWatching(ctx context.Context, file, key string, name episode
 // findAnime is the show a file name means: the one it was matched to
 // before, or AniList's best match. nil if neither knows.
 func (r *Room) findAnime(ctx context.Context, n episode.Name) *store.Anime {
-	a, err := r.hub.store.AnimeByAlias(ctx, n.Alias())
+	a, err := r.hub.Watchlog.AnimeByAlias(ctx, n.Alias())
 	if err == nil {
 		return a
 	}
@@ -389,9 +389,9 @@ func (r *Room) saveProposal(ctx context.Context, p *proposal) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	err := r.hub.store.SaveAnime(ctx, p.anime)
+	err := r.hub.Watchlog.SaveAnime(ctx, p.anime)
 	if err == nil && p.alias != "" {
-		err = r.hub.store.SaveAlias(ctx, p.alias, p.anime.ID)
+		err = r.hub.Watchlog.SaveAlias(ctx, p.alias, p.anime.ID)
 	}
 	if err == nil {
 		var ids []int64
@@ -400,7 +400,7 @@ func (r *Room) saveProposal(ctx context.Context, p *proposal) error {
 				ids = append(ids, p.users[v.Key])
 			}
 		}
-		err = r.hub.store.MarkWatched(ctx, ids, p.anime.ID, p.Episode)
+		err = r.hub.Watchlog.MarkWatched(ctx, ids, p.anime.ID, p.Episode)
 	}
 	if err != nil {
 		r.log.Error("save watched episode", "err", err)
@@ -482,7 +482,7 @@ func (r *Room) changeProposalShow(ctx context.Context, c *Client, id, animeID in
 	if !r.showLimit.Allow(key) {
 		return ErrRateLimited
 	}
-	a, err := r.hub.store.Anime(ctx, animeID)
+	a, err := r.hub.Watchlog.Anime(ctx, animeID)
 	if errors.Is(err, store.ErrNotFound) {
 		if r.hub.AniList == nil {
 			return &userError{"AniList is not available."}

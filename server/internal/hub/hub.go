@@ -31,6 +31,9 @@ type Hub struct {
 	// AniList finds the shows of the episodes played in rooms, for the
 	// watchlog; nil = none are recognised. Set before Start.
 	AniList *anilist.Client
+	// Watchlog is the watchlog's database; nil = there is no watchlog, and
+	// SetWatchlog turns nothing on. Set before Start.
+	Watchlog *store.Watchlog
 
 	watchlog atomic.Bool // the watchlog is on: rooms follow what is played
 
@@ -80,7 +83,7 @@ func New(s *store.Store, mediaDir string, rooms []RoomConfig) *Hub {
 // SetWatchlog turns following what is played in the rooms on or off (the
 // watchlog setting). Turned off, rooms forget their episode and suggestion
 // at their next poll.
-func (h *Hub) SetWatchlog(on bool) { h.watchlog.Store(on) }
+func (h *Hub) SetWatchlog(on bool) { h.watchlog.Store(on && h.Watchlog != nil) }
 
 // Room returns the named room, or nil.
 func (h *Hub) Room(name string) *Room {

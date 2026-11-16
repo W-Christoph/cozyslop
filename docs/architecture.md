@@ -120,7 +120,7 @@ replaces what was there. It needs the server stopped.
 
 ## Data (SQLite)
 
-One file, `data/cozycast.db`, WAL mode, foreign keys on. Schema migrations are
+One file, `data/cozycast.db` (and one for the watchlog, below), WAL mode, foreign keys on. Schema migrations are
 embedded SQL files applied in order at startup (`server/internal/store/migrations`).
 The migration runner uses one connection with foreign keys disabled outside
 the migration transactions, checks `PRAGMA foreign_key_check` before each
@@ -162,19 +162,32 @@ from both existing users and numeric account identity keys retained in chat.
 - `anon_bans`: room, anon_id, ip, banned_until.
 - `invites`: code, room, temporary, name, remote, image, upload, uses,
   max_uses, expires_at, created_at.
-- `anime`: id (the AniList id), title, title_english, episodes (NULL while
-  unknown), cover_url, added_at. Shows on the watchlog.
-- `watch_ignored`: (user_id, anime_id) primary key: someone who has stopped
-  following a show. Deleted with the account or the show.
-- `anime_aliases`: alias (a file name's title, normalised), anime_id. File
-  names matched to a show before.
-- `watched_episodes`: (user_id, anime_id, episode) primary key, source
-  (`manual` | `auto`), watched_at: one row for each episode someone has
-  watched. Deleted with the account or the show.
 - `chat_messages`: id, room, identity key, user_id, nickname/colour snapshot,
   anonymous, type (`text` | `image` | `video`), body, media, edited,
   created_at. Kept for 1 hour, at most 1000 per room; media files are deleted
   with their message.
+
+### The watchlog's database
+
+The watchlog has its own file, `data/watchlog.db`, with its own migrations
+(`server/internal/store/migrations/watchlog`), so that the main database is
+the same with and without it: a server from before the watchlog runs on the
+main one as it is, and deleting `watchlog.db` (with the server stopped)
+empties the watchlog and nothing else. Only the setting `watchlog` is in the
+main database. Accounts are known here by their id; nothing checks it
+against `users`, so the server removes an account's rows when the account is
+deleted, and shows nothing of ids it does not know. Exports carry the file
+along.
+
+- `anime`: id (the AniList id), title, title_english, episodes (NULL while
+  unknown), cover_url, added_at. Shows on the watchlog.
+- `anime_aliases`: alias (a file name's title, normalised), anime_id. File
+  names matched to a show before.
+- `watched_episodes`: (user_id, anime_id, episode) primary key, source
+  (`manual` | `auto`), watched_at: one row for each episode someone has
+  watched. Deleted with the show.
+- `watch_ignored`: (user_id, anime_id) primary key: someone who has stopped
+  following a show. Deleted with the show.
 
 ## Permissions
 

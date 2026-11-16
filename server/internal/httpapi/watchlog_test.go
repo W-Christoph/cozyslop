@@ -43,12 +43,18 @@ func newWatchlogTest(t *testing.T) *apiTest {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
+	wl, err := store.OpenWatchlog(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { wl.Close() })
 	nc, err := neko.NewClient("http://127.0.0.1:1", "x", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	h := hub.New(st, t.TempDir(), []hub.RoomConfig{{Name: "default", Neko: nc}})
-	srv := httptest.NewServer(httpapi.New(httpapi.Deps{Store: st, Auth: auth.New(st, false), Hub: h, AniList: client}).Handler())
+	h.Watchlog = wl
+	srv := httptest.NewServer(httpapi.New(httpapi.Deps{Store: st, Auth: auth.New(st, false), Hub: h, AniList: client, Watchlog: wl}).Handler())
 	t.Cleanup(srv.Close)
 	return &apiTest{t: t, st: st, srv: srv, h: h}
 }

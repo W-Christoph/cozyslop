@@ -19,6 +19,11 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
+// The watchlog's database has its own migrations (watchlog.go).
+//
+//go:embed migrations/watchlog/*.sql
+var watchlogMigrations embed.FS
+
 var ErrNotFound = errors.New("not found")
 
 type Store struct {
@@ -29,6 +34,18 @@ type Store struct {
 // Open opens (creating if needed) the database at path and applies pending
 // migrations. Use ":memory:" for tests.
 func Open(ctx context.Context, path string) (*Store, error) {
+	db, err := open(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := migrate(ctx, db, migrations, "migrations/*.sql"); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &Store{db: db, now: time.Now}, nil
+}
+
+func open(path string) (*sql.DB, error) {
 	dsn := "file:" + path + "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_txlock=immediate"
 	if path != ":memory:" {
 		dsn += "&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
@@ -41,12 +58,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		// Every connection would get its own empty in-memory database.
 		db.SetMaxOpenConns(1)
 	}
-	s := &Store{db: db, now: time.Now}
-	if err := s.migrate(ctx); err != nil {
-		db.Close()
-		return nil, err
-	}
-	return s, nil
+	return db, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -64,8 +76,10 @@ func SchemaVersion() int {
 	return len(names)
 }
 
-func (s *Store) migrate(ctx context.Context) (err error) {
-	conn, err := s.db.Conn(ctx)
+// migrate applies the migrations in files (a glob pattern) that db has not
+// had yet.
+func migrate(ctx context.Context, db *sql.DB, files embed.FS, pattern string) (err error) {
+	conn, err := db.Conn(ctx)
 	if err != nil {
 		return err
 	}
@@ -76,7 +90,7 @@ func (s *Store) migrate(ctx context.Context) (err error) {
 		return err
 	}
 
-	names, err := fs.Glob(migrations, "migrations/*.sql")
+	names, err := fs.Glob(files, pattern)
 	if err != nil {
 		return err
 	}
@@ -95,7 +109,7 @@ func (s *Store) migrate(ctx context.Context) (err error) {
 		if i+1 <= version {
 			continue
 		}
-		body, err := migrations.ReadFile(name)
+		body, err := files.ReadFile(name)
 		if err != nil {
 			return err
 		}
@@ -134,7 +148,11 @@ func migrateSQL(ctx context.Context, conn *sql.Conn, body string, version int) e
 }
 
 func (s *Store) tx(ctx context.Context, fn func(*sql.Tx) error) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	return inTx(ctx, s.db, fn)
+}
+
+func inTx(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) error {
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}

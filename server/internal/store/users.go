@@ -184,7 +184,11 @@ func (s *Store) DeleteUser(ctx context.Context, id int64) error {
 
 // execOne runs a statement that must affect exactly one row.
 func (s *Store) execOne(ctx context.Context, query string, args ...any) error {
-	res, err := s.db.ExecContext(ctx, query, args...)
+	return execOne(ctx, s.db, query, args...)
+}
+
+func execOne(ctx context.Context, db *sql.DB, query string, args ...any) error {
+	res, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}

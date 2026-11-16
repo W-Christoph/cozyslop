@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -31,7 +32,7 @@ func (s *Server) watchlogUser(w http.ResponseWriter, r *http.Request) *store.Use
 		s.internalError(w, r, err)
 		return nil
 	}
-	if !set.Watchlog {
+	if !set.Watchlog || s.watchlog == nil {
 		writeError(w, http.StatusNotFound, "The watchlog is off.")
 		return nil
 	}
@@ -53,20 +54,33 @@ func (s *Server) getWatchlog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	anime, err := s.store.ListAnime(ctx)
+	anime, err := s.watchlog.ListAnime(ctx)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
 	}
-	users, err := s.store.WatchlogUsers(ctx)
+	progress, err := s.watchlog.ListProgress(ctx)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
 	}
-	progress, err := s.store.ListProgress(ctx)
+	ignored, err := s.watchlog.ListIgnored(ctx)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
+	}
+	// The watchlog knows accounts by id only. Those it has anything from
+	// are listed, by username; disabled (and deleted) ones are left out.
+	users, err := s.store.ListUsers(ctx)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	names := map[int64]string{}
+	for _, u := range users {
+		if !u.Disabled {
+			names[u.ID] = u.Username
+		}
 	}
 	type person struct {
 		Username  string `json:"username"`
@@ -74,26 +88,35 @@ func (s *Server) getWatchlog(w http.ResponseWriter, r *http.Request) {
 		NameColor string `json:"nameColor"`
 		AvatarURL string `json:"avatarUrl"`
 	}
-	// Disabled accounts are left out.
-	people, shown := []person{}, map[int64]bool{}
-	for _, u := range users {
-		if !u.Disabled {
-			people = append(people, person{u.Username, u.Nickname, u.NameColor, avatarURL(u)})
-			shown[u.ID] = true
-		}
-	}
-	kept := progress[:0]
+	watched := map[int64]bool{}
+	keptProgress := progress[:0]
 	for _, p := range progress {
-		if shown[p.UserID] {
-			kept = append(kept, p)
+		if p.Username = names[p.UserID]; p.Username != "" {
+			watched[p.UserID] = true
+			keptProgress = append(keptProgress, p)
 		}
 	}
-	ignored, err := s.store.ListIgnored(ctx)
-	if err != nil {
-		s.internalError(w, r, err)
-		return
+	sort.SliceStable(keptProgress, func(i, j int) bool {
+		a, b := keptProgress[i], keptProgress[j]
+		return a.AnimeID < b.AnimeID || a.AnimeID == b.AnimeID && a.Username < b.Username
+	})
+	keptIgnored := ignored[:0]
+	for _, i := range ignored {
+		if i.Username = names[i.UserID]; i.Username != "" {
+			keptIgnored = append(keptIgnored, i)
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"anime": anime, "people": people, "progress": kept, "ignored": ignored})
+	sort.SliceStable(keptIgnored, func(i, j int) bool {
+		a, b := keptIgnored[i], keptIgnored[j]
+		return a.AnimeID < b.AnimeID || a.AnimeID == b.AnimeID && a.Username < b.Username
+	})
+	people := []person{}
+	for _, u := range users {
+		if watched[u.ID] {
+			people = append(people, person{u.Username, u.Nickname, u.NameColor, avatarURL(u)})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"anime": anime, "people": people, "progress": keptProgress, "ignored": keptIgnored})
 }
 
 // searchAnime asks AniList for shows to add.
@@ -165,7 +188,7 @@ func (s *Server) addAnime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a := m.Anime()
-	if err := s.store.SaveAnime(r.Context(), a); err != nil {
+	if err := s.watchlog.SaveAnime(r.Context(), a); err != nil {
 		s.internalError(w, r, err)
 		return
 	}
@@ -182,7 +205,7 @@ func (s *Server) deleteAnime(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	// A show nobody has watched was added by mistake: anyone takes it off.
 	if !u.Admin {
-		watched, err := s.store.AnimeWatched(r.Context(), id)
+		watched, err := s.watchlog.AnimeWatched(r.Context(), id)
 		if err != nil {
 			s.internalError(w, r, err)
 			return
@@ -192,7 +215,7 @@ func (s *Server) deleteAnime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	err := s.store.DeleteAnime(r.Context(), id)
+	err := s.watchlog.DeleteAnime(r.Context(), id)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "That show is not on the watchlog.")
 		return
@@ -234,7 +257,7 @@ func (s *Server) setProgress(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	id, _ := strconv.ParseInt(r.PathValue("anime"), 10, 64)
-	a, err := s.store.Anime(r.Context(), id)
+	a, err := s.watchlog.Anime(r.Context(), id)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "That show is not on the watchlog.")
 		return
@@ -252,7 +275,7 @@ func (s *Server) setProgress(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "The show has no such episode.")
 		return
 	}
-	err = s.store.SetWatched(r.Context(), target.ID, a.ID, req.From, req.To, req.Watched, "manual")
+	err = s.watchlog.SetWatched(r.Context(), target.ID, a.ID, req.From, req.To, req.Watched, "manual")
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "That show is not on the watchlog.")
 		return
@@ -261,7 +284,7 @@ func (s *Server) setProgress(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
-	watched, err := s.store.Watched(r.Context(), target.ID, a.ID)
+	watched, err := s.watchlog.Watched(r.Context(), target.ID, a.ID)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
@@ -294,7 +317,7 @@ func (s *Server) setIgnored(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	id, _ := strconv.ParseInt(r.PathValue("anime"), 10, 64)
-	err := s.store.SetIgnored(r.Context(), target.ID, id, req.Ignored)
+	err := s.watchlog.SetIgnored(r.Context(), target.ID, id, req.Ignored)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "That show is not on the watchlog.")
 		return

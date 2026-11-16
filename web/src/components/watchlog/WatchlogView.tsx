@@ -193,6 +193,16 @@ export function WatchlogView({ user, present, playing, version }: {
     }
   }
 
+  async function unlink(alias: string) {
+    setError('')
+    try {
+      await watchlog.unlink(alias)
+      setData((d) => d && { ...d, aliases: d.aliases.filter((l) => l.alias !== alias) })
+    } catch (e) {
+      fail(e)
+    }
+  }
+
   async function remove(anime: WatchAnime) {
     setRemoving(null)
     setShow(null)
@@ -203,6 +213,7 @@ export function WatchlogView({ user, present, playing, version }: {
       setData((d) => d && {
         ...d, anime: d.anime.filter((a) => a.id !== anime.id), progress: d.progress.filter((p) => p.animeId !== anime.id),
         follows: d.follows.filter((f) => f.animeId !== anime.id),
+        aliases: d.aliases.filter((l) => l.animeId !== anime.id),
       })
     } catch (e) {
       fail(e)
@@ -284,6 +295,7 @@ export function WatchlogView({ user, present, playing, version }: {
         people={people.filter((p) => p.username === user.username || selected.includes(p) || watchedOf(shown.id, p.username).length > 0)}
         watchedOf={(u) => watchedOf(shown.id, u)} modeOf={(u) => modeOf(shown.id, u)} mayChange={mayChange}
         mayRemove={user.admin || !data.progress.some((p) => p.animeId === shown.id && p.watched.length > 0)}
+        names={data.aliases.filter((l) => l.animeId === shown.id).map((l) => l.alias)} onUnlink={user.admin ? (alias) => { void unlink(alias) } : undefined}
         onEpisodes={(person) => episodesOf(shown, person)} onSet={(u, episode) => { void setWatched(shown.id, u, episode, episode, true) }}
         onFollow={(u, mode) => { void setFollow(shown.id, u, mode) }} onRefresh={() => { void add(shown.id) }}
         onRemove={() => setRemoving(shown)} onClose={() => { setShow(null); relayout() }} />

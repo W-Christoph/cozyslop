@@ -19,3 +19,7 @@
 .manage { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .remove { margin-left: auto; }
 .note { margin: var(--space-2) 0 0; color: var(--text-muted); font-size: var(--text-sm); }
+.names { margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.linked { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; }
+.linked + .linked { border-top: 1px solid var(--border); }
+.linkedName { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--text-sm); }

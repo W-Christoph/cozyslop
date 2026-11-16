@@ -142,4 +142,5 @@ export type ClientMessage =
   | { type: 'watch_answer'; id: number; checked: boolean } // whether I watched it
   | { type: 'watch_episode'; id: number; episode: number }
   | { type: 'watch_anime'; id: number; animeId: number } // AniList id
+  | { type: 'watch_link'; animeId: number } // the show of what plays, remembered for its name
   | { type: 'watch_save' | 'watch_dismiss'; id: number }

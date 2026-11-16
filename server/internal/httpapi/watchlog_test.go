@@ -134,6 +134,18 @@ func TestWatchlog(t *testing.T) {
 		}
 	}
 	a.call(admin, "PUT", "/api/watchlog/follow/154587/bob", map[string]any{"mode": "following"}, 204, nil)
+	// Names linked to a show are listed; an admin unlinks one.
+	if err := a.h.Watchlog.SaveAlias(context.Background(), "some frieren", 154587); err != nil {
+		t.Fatal(err)
+	}
+	var linked struct{ Aliases []store.Alias }
+	a.call(alice, "GET", "/api/watchlog", nil, 200, &linked)
+	if len(linked.Aliases) != 1 || linked.Aliases[0] != (store.Alias{Alias: "some frieren", AnimeID: 154587}) {
+		t.Fatalf("aliases: %+v", linked)
+	}
+	a.error(alice, "DELETE", "/api/watchlog/aliases/some%20frieren", nil, 403, "Only admins can unlink a name.")
+	a.call(admin, "DELETE", "/api/watchlog/aliases/some%20frieren", nil, 204, nil)
+	a.error(admin, "DELETE", "/api/watchlog/aliases/some%20frieren", nil, 404, "That name is not linked to a show.")
 	a.call(alice, "GET", "/api/watchlog", nil, 200, &following)
 	if len(following.Follows) != 0 {
 		t.Fatalf("follows still: %+v", following)

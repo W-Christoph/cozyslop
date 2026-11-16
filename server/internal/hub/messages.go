@@ -81,6 +81,9 @@ func (r *Room) Handle(ctx context.Context, c *Client, msg ClientMsg) {
 	case "watch_anime":
 		go func() { r.report(c, msg.Type, r.changeProposalShow(ctx, c, msg.ID, msg.AnimeID)) }()
 		return
+	case "watch_link":
+		go func() { r.report(c, msg.Type, r.linkPlaying(ctx, c, msg.AnimeID)) }()
+		return
 	default:
 		c.send(errorMsg{Type: "error", Message: "Unknown message type."})
 		return

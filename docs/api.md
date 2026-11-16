@@ -237,10 +237,11 @@ progress is `{"username":"…","animeId":…,"watched":[[1,4],[6,6]]}`: the epis
 
 | Method and path | Caller | Request body | Response | Notable errors |
 |---|---|---|---|---|
-| `GET /api/watchlog` | Account | None | 200 `{"anime":[…],"people":[{"username","nickname","nameColor","avatarUrl"}],"progress":[{"username","animeId","watched":[[1,4],[6,6]],"watchedAt":<unix s>}],"follows":[{"username","animeId","mode"}]}`; shows by title; `watched` is the episodes as ranges, in order; `follows` lists who follows a show as `casual` or `dropped` (everyone else is `following`); people are the enabled accounts with any progress | |
+| `GET /api/watchlog` | Account | None | 200 `{"anime":[…],"people":[{"username","nickname","nameColor","avatarUrl"}],"progress":[{"username","animeId","watched":[[1,4],[6,6]],"watchedAt":<unix s>}],"follows":[{"username","animeId","mode"}]}`; shows by title; `watched` is the episodes as ranges, in order; `follows` lists who follows a show as `casual` or `dropped` (everyone else is `following`); `aliases` (`[{"alias","animeId"}]`) are the names of files and pages that count as a show; people are the enabled accounts with any progress | |
 | `GET /api/watchlog/search?q=<text>` | Account | None | 200 up to 10 shows from AniList, best match first, each with `year` (or `null`) | 400 `"Search for 2 to 100 characters."`; 429 `"Asking AniList too fast. Wait a moment."` (searches and added shows together: 10 in a burst, then one more every 2 seconds); 502 `"AniList did not answer. Try again."`; 503 AniList unavailable |
 | `POST /api/watchlog/anime` | Account | `{"id":<AniList id>}` | 200 the show, added or refreshed from AniList | 404 `"AniList has no such anime."`; 429 as for search; 502 AniList unreachable |
 | `DELETE /api/watchlog/anime/{id}` | Admin; any account while nobody has watched an episode of the show | None | 204; removes the show, everyone's progress in it and the file names matched to it | 403 `"Someone has watched this show: only admins can remove it."`; 404 `"That show is not on the watchlog."` |
+| `DELETE /api/watchlog/aliases/{alias}` | Admin | None | 204; the name no longer means a show, and what plays under it is matched anew | 403 `"Only admins can unlink a name."`; 404 `"That name is not linked to a show."` |
 | `PUT /api/watchlog/progress/{animeId}/{username}` | That account, or an admin | `{"from":3,"to":5,"watched":true}`: the episodes 3 to 5 are watched, or with `false` are not; `to` may be left out for one episode | 200 `{"username","animeId","watched":[[1,5]]}`: what is watched now | 400 `"The show has no such episode."` (below 1, `to` below `from`, over 9999, or ticking past the show's episode count); 403 `"You can only change your own progress."`; 404 unknown show or user |
 | `PUT /api/watchlog/follow/{animeId}/{username}` | That account, or an admin | `{"mode":"following"\|"casual"\|"dropped"}`: `following`, the others wait for them; `casual`, they watch along when they are there and nobody waits; `dropped`, they have stopped | 204 | 400 `"The mode is following, casual or dropped."`; 403 `"You can only change your own progress."`; 404 unknown show or user |
 
@@ -317,6 +318,9 @@ only such tabs count as having seen an episode. Nobody else is told. Accounts in
 the room send `{"type":"watch_check","id":…,"key":"<identity key>","checked":true}`,
 `{"type":"watch_episode","id":…,"episode":6}`,
 `{"type":"watch_anime","id":…,"animeId":<AniList id>}`,
+`{"type":"watch_link","animeId":<AniList id>}` (the show of the episode that
+plays, remembered for the name it goes by; `error` "No episode is playing."
+without one),
 `{"type":"watch_answer","id":…,"checked":true}` (whether they watched it
 themselves; once everyone listed has answered it is saved), and admins
 `{"type":"watch_save","id":…}` and `{"type":"watch_dismiss","id":…}`, which

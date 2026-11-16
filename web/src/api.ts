@@ -104,13 +104,18 @@ export interface WatchProgress {
 export type WatchMode = 'following' | 'casual' | 'dropped'
 export interface WatchFollow { username: string; animeId: number; mode: WatchMode }
 
-export interface Watchlog { anime: WatchAnime[]; people: WatchPerson[]; progress: WatchProgress[]; follows: WatchFollow[] }
+// A name that means a show: the title part of a file's or a page's name.
+// What plays under it is recognised as that show.
+export interface WatchAlias { alias: string; animeId: number }
+
+export interface Watchlog { anime: WatchAnime[]; people: WatchPerson[]; progress: WatchProgress[]; follows: WatchFollow[]; aliases: WatchAlias[] }
 
 export const watchlog = {
   get: () => api.get<Watchlog>('/api/watchlog'),
   search: (q: string) => api.get<WatchAnime[]>(`/api/watchlog/search?q=${encodeURIComponent(q)}`),
   add: (id: number) => api.post<WatchAnime>('/api/watchlog/anime', { id }),
   remove: (id: number) => api.del<void>(`/api/watchlog/anime/${id}`),
+  unlink: (alias: string) => api.del<void>(`/api/watchlog/aliases/${encodeURIComponent(alias)}`),
   // Marks the episodes from..to as watched, or as not; answers what is
   // watched now.
   setWatched: (animeId: number, username: string, from: number, to: number, watched: boolean) =>

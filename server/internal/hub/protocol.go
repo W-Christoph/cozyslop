@@ -220,5 +220,5 @@ type ClientMsg struct {
 	Key       string `json:"key"`       // watch_check: identity key
 	Checked   bool   `json:"checked"`   // watch_check, watch_answer
 	Episode   int    `json:"episode"`   // watch_episode
-	AnimeID   int64  `json:"animeId"`   // watch_anime: AniList id
+	AnimeID   int64  `json:"animeId"`   // watch_anime, watch_link: AniList id
 }

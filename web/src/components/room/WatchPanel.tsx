@@ -7,24 +7,36 @@ import styles from './WatchPanel.module.css'
 
 // The episode VLC or Firefox plays, as a bar at the top of the chat: the
 // show's whole name, on two lines if it needs them. Accounts get to the
-// watchlog from it.
+// watchlog from it, and say which show it is where that was not recognised
+// or got wrong: the name it goes by is that show's from then on.
 function WatchPlayingBar() {
   const store = useRoomStore()
   const playing = store.watchPlaying.value
+  const [linking, setLinking] = useState(false)
   if (!playing) return null
+  const known = playing.animeId !== 0
   const line = <>
     <Icon name="play" size={14} />
     <span class={styles.playingText}>
-      <span class={styles.label}>Watching{playing.animeId === 0 && ' (not recognised)'}</span>
+      <span class={styles.label}>Watching{!known && ' (not recognised)'}</span>
       <strong class={styles.show} title={playing.title}>{playing.title}</strong>
     </span>
     <span class={styles.ep}>Ep {playing.episode}</span>
   </>
+  if (store.self.value?.anonymous !== false) return <div role="status"><div class={styles.playing}>{line}</div></div>
   return (
     <div role="status">
-      {store.self.value?.anonymous === false
-        ? <button type="button" class={`${styles.playing} ${styles.open}`} title="Open the watchlog" onClick={() => { watchlogWanted.value = true }}>{line}</button>
-        : <div class={styles.playing}>{line}</div>}
+      <div class={styles.bar}>
+        <button type="button" class={`${styles.playing} ${styles.open}`} title="Open the watchlog" onClick={() => { watchlogWanted.value = true }}>{line}</button>
+        <button type="button" class={`${styles.linkShow} ${known ? '' : styles.wanted}`} aria-expanded={linking}
+          title={known ? 'Not this show? Link it to another' : 'Say which show this is. Its other episodes are then recognised.'}
+          onClick={() => setLinking(!linking)}>{known ? 'Wrong show?' : 'Link show'}</button>
+      </div>
+      {linking && (
+        <div class={styles.linking}>
+          <AnimeSearch autoFocus placeholder="Search AniList…" onPick={(anime) => { store.linkWatch(anime.id); setLinking(false) }} />
+        </div>
+      )}
     </div>
   )
 }

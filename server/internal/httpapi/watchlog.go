@@ -69,6 +69,11 @@ func (s *Server) getWatchlog(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
+	aliases, err := s.watchlog.ListAliases(ctx)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
 	// The watchlog knows accounts by id only. Those it has anything from
 	// are listed, by username; disabled (and deleted) ones are left out.
 	users, err := s.store.ListUsers(ctx)
@@ -116,7 +121,7 @@ func (s *Server) getWatchlog(w http.ResponseWriter, r *http.Request) {
 			people = append(people, person{u.Username, u.Nickname, u.NameColor, avatarURL(u)})
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"anime": anime, "people": people, "progress": keptProgress, "follows": keptFollows})
+	writeJSON(w, http.StatusOK, map[string]any{"anime": anime, "people": people, "progress": keptProgress, "follows": keptFollows, "aliases": aliases})
 }
 
 // searchAnime asks AniList for shows to add.
@@ -218,6 +223,29 @@ func (s *Server) deleteAnime(w http.ResponseWriter, r *http.Request) {
 	err := s.watchlog.DeleteAnime(r.Context(), id)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "That show is not on the watchlog.")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// deleteAlias forgets which show a name means, for one linked by mistake:
+// what plays under that name is matched anew. Admins only.
+func (s *Server) deleteAlias(w http.ResponseWriter, r *http.Request) {
+	u := s.watchlogUser(w, r)
+	if u == nil {
+		return
+	}
+	if !u.Admin {
+		writeError(w, http.StatusForbidden, "Only admins can unlink a name.")
+		return
+	}
+	err := s.watchlog.DeleteAlias(r.Context(), r.PathValue("alias"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "That name is not linked to a show.")
 		return
 	}
 	if err != nil {

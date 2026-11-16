@@ -152,6 +152,43 @@ func (s *Watchlog) SaveAlias(ctx context.Context, alias string, animeID int64) e
 	return err
 }
 
+// Alias is a name that means a show: the title part of a file's or a
+// page's name, normalised.
+type Alias struct {
+	Alias   string `json:"alias"`
+	AnimeID int64  `json:"animeId"`
+}
+
+// ListAliases returns the names matched to shows, by show and name.
+func (s *Watchlog) ListAliases(ctx context.Context) ([]Alias, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT alias, anime_id FROM anime_aliases ORDER BY anime_id, alias")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Alias{}
+	for rows.Next() {
+		var a Alias
+		if err := rows.Scan(&a.Alias, &a.AnimeID); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// DeleteAlias forgets which show a name means. ErrNotFound if it meant none.
+func (s *Watchlog) DeleteAlias(ctx context.Context, alias string) error {
+	res, err := s.db.ExecContext(ctx, "DELETE FROM anime_aliases WHERE alias = ?", alias)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // ListProgress returns what everyone has watched, by show and account.
 func (s *Watchlog) ListProgress(ctx context.Context) ([]Progress, error) {
 	return s.progress(ctx, "")

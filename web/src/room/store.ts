@@ -218,6 +218,11 @@ export class RoomStore {
     this.socket.send({ type: 'watch_episode', id, episode })
   }
 
+  // Which show the episode playing is of: remembered for its other episodes.
+  linkWatch(animeId: number) {
+    this.socket.send({ type: 'watch_link', animeId })
+  }
+
   setWatchAnime(id: number, animeId: number) {
     this.socket.send({ type: 'watch_anime', id, animeId })
   }

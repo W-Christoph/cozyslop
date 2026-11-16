@@ -423,8 +423,15 @@ the show that plays comes first. Rooms also notice episodes (`hub/watch.go`):
   (`source: "firefox"`). The show and the episode come from those
   (`episode.ParsePage`): a title like `Watch Show Episode 5 English Sub -
   Site`, or an address like `/watch/<id>/show-name?ep=5` or
-  `/show-name-episode-5`. Only a spelled-out episode counts, and only a show
-  that AniList or an earlier episode knows: other videos have episodes too.
+  `/show-name-episode-5`. Only a spelled-out episode counts. The show is the one the
+  name was linked to before (`anime_aliases`), or AniList's match for it: a
+  search for the name and, if that finds nothing (an address has `jojos`
+  for "JoJo's"), for a few of its words, taking only a show whose title
+  is the same letters. A page whose show nobody knows is shown as not
+  recognised and suggests nothing, as other videos have episodes too; an
+  account in the room can say which show it is (`watch_link`, "Link show"
+  on the bar, or "Wrong show?" for one got wrong), and the name is that
+  show's from then on, in every room and without AniList.
   A site that names the episode in neither (only an id of its own) is not
   followed. The texts may change while the video plays; the episode is the
   same while they name the same one.

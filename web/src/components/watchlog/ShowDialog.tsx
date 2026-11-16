@@ -14,7 +14,7 @@ import styles from './ShowDialog.module.css'
 // the next episode to tick and how they follow it for each person one may
 // change;
 // and the show itself, to bring up to date from AniList or take off the list.
-export function ShowDialog({ anime, people, self, playing, busy, watchedOf, modeOf, mayChange, mayRemove, onEpisodes, onSet, onFollow, onRefresh, onRemove, onClose }: {
+export function ShowDialog({ anime, people, self, playing, busy, watchedOf, modeOf, mayChange, mayRemove, names, onUnlink, onEpisodes, onSet, onFollow, onRefresh, onRemove, onClose }: {
   anime: WatchAnime
   people: WatchPerson[] // me, those selected and everyone who has watched some of it
   self: string // my username
@@ -24,6 +24,8 @@ export function ShowDialog({ anime, people, self, playing, busy, watchedOf, mode
   modeOf: (username: string) => WatchMode
   mayChange: (username: string) => boolean
   mayRemove: boolean
+  names: string[] // what plays under these names is recognised as this show
+  onUnlink?: (name: string) => void // admins: forget one linked by mistake
   onEpisodes: (person: WatchPerson) => void
   onSet: (username: string, episode: number) => void // ticks one episode
   onFollow: (username: string, mode: WatchMode) => void
@@ -77,6 +79,18 @@ export function ShowDialog({ anime, people, self, playing, busy, watchedOf, mode
           )
         })}
       </ul>
+      {names.length > 0 && <>
+        <h3 class={styles.label}>Recognised as</h3>
+        <p class={styles.note}>A file or page that plays under one of these names counts as this show.</p>
+        <ul class={styles.names}>
+          {names.map((name) => (
+            <li key={name} class={styles.linked}>
+              <span class={styles.linkedName}>{name}</span>
+              {onUnlink && <Button size="sm" variant="ghost" title="Forget this name: what plays under it is matched anew" aria-label={`Unlink ${name}`} onClick={() => onUnlink(name)}>Unlink</Button>}
+            </li>
+          ))}
+        </ul>
+      </>}
       <h3 class={styles.label}>Manage the show</h3>
       <div class={styles.manage}>
         <ButtonLink size="sm" icon="link" href={`https://anilist.co/anime/${anime.id}`} target="_blank" rel="noreferrer noopener">Open on AniList</ButtonLink>

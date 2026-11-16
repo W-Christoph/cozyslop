@@ -81,6 +81,7 @@ type watching struct {
 	key    string
 	name   episode.Name
 	known  bool         // the name has an episode number
+	page   bool         // a page of Firefox's, not a file
 	anime  *store.Anime // nil if not recognised
 	length int
 	seen   map[string]*viewer // by identity key
@@ -114,9 +115,10 @@ func (w *watching) playing() *WatchPlaying {
 }
 
 // proposal suggests the episode for those who saw enough of it; nil if
-// nobody saw much.
+// nobody saw much. A page without a show suggests nothing: other videos
+// have episodes too, and nobody said that this one is a show's.
 func (w *watching) proposal() *proposal {
-	if !w.known || w.length <= 0 {
+	if !w.known || w.length <= 0 || w.page && w.anime == nil {
 		return nil
 	}
 	parts := float64((w.length + watchBucket - 1) / watchBucket)
@@ -257,13 +259,13 @@ func (r *Room) checkPlayback(ctx context.Context) {
 	}
 }
 
-// startWatching follows a new file or page. A page counts only with a show
-// AniList or an earlier episode knows: other videos have episodes too.
+// startWatching follows a new file or page. One whose show neither AniList
+// nor an earlier episode knows is followed all the same: someone may say
+// which show it is (linkPlaying).
 func (r *Room) startWatching(ctx context.Context, file, key string, name episode.Name, known, page bool) *watching {
-	w := &watching{file: file, key: key, name: name, known: known, seen: make(map[string]*viewer)}
+	w := &watching{file: file, key: key, name: name, known: known, page: page, seen: make(map[string]*viewer)}
 	if w.known {
 		w.anime = r.findAnime(ctx, w.name)
-		w.known = w.anime != nil || !page
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -298,22 +300,36 @@ func (r *Room) findAnime(ctx context.Context, n episode.Name) *store.Anime {
 		return found[0].Anime()
 	}
 	// A page's address leaves out the signs between a title's letters ("im
-	// dating" for "I'm Dating"), and AniList finds nothing for that. Then
-	// the words are searched with one left out, for a show whose title is
-	// the same letters.
+	// dating" for "I'm Dating", "jojos" for "JoJo's"), and AniList finds
+	// nothing for such a word. Then a few of the title's words are searched,
+	// for a show whose title is the same letters: other seasons are found
+	// with them, and are not it.
 	words := strings.Fields(n.Title)
-	if len(words) < 3 || len(words) > 8 {
-		return nil
+	var parts [][]string
+	switch {
+	case len(words) >= 4:
+		parts = [][]string{words[:3], words[len(words)-3:], words[:2]}
+	case len(words) == 3:
+		parts = [][]string{words[:2], words[1:]}
 	}
-	want := letters(n.Title)
-	for i := range words {
-		found, err := r.hub.AniList.Search(ctx, strings.Join(slices.Delete(slices.Clone(words), i, i+1), " "))
+	// A later season has its number in the title, one way or another.
+	want := []string{letters(n.Title)}
+	if n.Season > 1 {
+		no := strconv.Itoa(n.Season)
+		ordinal := no + "th"
+		if n.Season <= 3 {
+			ordinal = no + [...]string{"nd", "rd"}[n.Season-2]
+		}
+		want = []string{want[0] + "season" + no, want[0] + no, want[0] + ordinal + "season", want[0] + "part" + no}
+	}
+	for _, part := range parts {
+		found, err := r.hub.AniList.Search(ctx, strings.Join(part, " "))
 		if err != nil {
 			r.log.Warn("anilist search", "err", err)
 			return nil
 		}
 		for _, m := range found {
-			if letters(m.Title.Romaji) == want || letters(m.Title.English) == want {
+			if slices.Contains(want, letters(m.Title.Romaji)) || slices.Contains(want, letters(m.Title.English)) {
 				return m.Anime()
 			}
 		}
@@ -542,24 +558,8 @@ func (r *Room) changeProposalShow(ctx context.Context, c *Client, id, animeID in
 	if !r.showLimit.Allow(key) {
 		return ErrRateLimited
 	}
-	a, err := r.hub.Watchlog.Anime(ctx, animeID)
-	if errors.Is(err, store.ErrNotFound) {
-		if r.hub.AniList == nil {
-			return &userError{"AniList is not available."}
-		}
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-		var m anilist.Media
-		m, err = r.hub.AniList.Get(ctx, animeID)
-		if errors.Is(err, anilist.ErrNotFound) {
-			return &userError{"AniList has no such anime."}
-		}
-		if err != nil {
-			r.log.Warn("anilist get", "err", err)
-			return &userError{"AniList did not answer. Try again."}
-		}
-		a = m.Anime()
-	} else if err != nil {
+	a, err := r.showByID(ctx, animeID)
+	if err != nil {
 		return err
 	}
 	r.mu.Lock()
@@ -570,6 +570,68 @@ func (r *Room) changeProposalShow(ctx context.Context, c *Client, id, animeID in
 	p.setAnime(a, p.Title)
 	r.scheduleLocked(p)
 	r.broadcastLocked(watchMsg{Type: "watch", Proposal: p.view()}, nil)
+	return nil
+}
+
+// showByID is a show by its AniList id: the watchlog's, or else AniList's.
+func (r *Room) showByID(ctx context.Context, animeID int64) (*store.Anime, error) {
+	a, err := r.hub.Watchlog.Anime(ctx, animeID)
+	if !errors.Is(err, store.ErrNotFound) {
+		return a, err
+	}
+	if r.hub.AniList == nil {
+		return nil, &userError{"AniList is not available."}
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	m, err := r.hub.AniList.Get(ctx, animeID)
+	if errors.Is(err, anilist.ErrNotFound) {
+		return nil, &userError{"AniList has no such anime."}
+	}
+	if err != nil {
+		r.log.Warn("anilist get", "err", err)
+		return nil, &userError{"AniList did not answer. Try again."}
+	}
+	return m.Anime(), nil
+}
+
+// linkPlaying says which show the episode playing is of (watch_link), for
+// one that was not recognised or was taken for another. The name it goes
+// by is that show's from then on: for its other episodes, in every room,
+// without asking AniList. Anyone in the room with an account may.
+func (r *Room) linkPlaying(ctx context.Context, c *Client, animeID int64) error {
+	r.mu.Lock()
+	user, key, w := c.m.user, c.m.key, r.watch
+	r.mu.Unlock()
+	if user == nil {
+		return ErrNotAllowed
+	}
+	if w == nil || !w.known {
+		return &userError{"No episode is playing."}
+	}
+	if !r.showLimit.Allow(key) {
+		return ErrRateLimited
+	}
+	a, err := r.showByID(ctx, animeID)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := r.hub.Watchlog.SaveAnime(ctx, a); err != nil {
+		return err
+	}
+	if alias := w.name.Alias(); alias != "" {
+		if err := r.hub.Watchlog.SaveAlias(ctx, alias, a.ID); err != nil {
+			return err
+		}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.watch == w {
+		w.anime = a
+		r.broadcastLocked(playingMsg{Type: "playing", Playing: w.playing()}, nil)
+	}
 	return nil
 }
 

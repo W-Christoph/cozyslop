@@ -262,13 +262,14 @@ func TestWatchFollowsFirefox(t *testing.T) {
 	alice, a := f.join(f.user("alice"))
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watching", Watching: true})
 
-	// A video with an episode but no show AniList knows is not followed.
+	// A video with an episode but no show AniList knows is followed, for
+	// someone to say which show it is; it suggests nothing by itself.
 	page := playStatus{State: "playing", Source: "firefox", Length: 100, Title: "Some Podcast Episode 5 - Site", URL: "https://site.example/watch?v=abc"}
 	for page.Time = 0; page.Time < 100; page.Time += watchBucket {
 		d.set(page)
 		f.r.checkPlayback(f.ctx)
 	}
-	requireEqual(t, a.count("playing"), 0)
+	requireEqual(t, *a.wait(t, "playing").(playingMsg).Playing, WatchPlaying{Title: "Some Podcast", Episode: 5})
 
 	// The show and the episode are in the address; the title, the page's
 	// to change, does not start the episode over.
@@ -281,7 +282,8 @@ func TestWatchFollowsFirefox(t *testing.T) {
 		d.set(page)
 		f.r.checkPlayback(f.ctx)
 	}
-	requireEqual(t, a.count("watch"), 0) // the podcast was no episode
+	requireEqual(t, a.count("watch"), 0) // the podcast was no show's episode
+	requireEqual(t, a.wait(t, "playing").(playingMsg).Playing == nil, true)
 	requireEqual(t, *a.wait(t, "playing").(playingMsg).Playing, WatchPlaying{AnimeID: 1, Title: "Sousou no Frieren", Episode: 5})
 	// Paused in the middle it waits; paused at its end it is over.
 	page.State, page.Time = "paused", 50
@@ -314,7 +316,7 @@ func TestWatchFindsShowSpelledWithoutSigns(t *testing.T) {
 	alice, a := f.join(f.user("alice"))
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watching", Watching: true})
 
-	// The address has "im" for "I'm": AniList knows the title's other words.
+	// The address has "im" for "I'm": AniList knows the title's last words.
 	d.set(playStatus{State: "playing", Source: "firefox", Length: 100, Title: "An Episode's Title",
 		URL: "https://site.example/watch/AbCdEf_123/im-dating-a-dark-summoner?ep=6"})
 	f.r.checkPlayback(f.ctx)
@@ -326,5 +328,47 @@ func TestWatchFindsShowSpelledWithoutSigns(t *testing.T) {
 	searches := d.searched()
 	f.r.checkPlayback(f.ctx)
 	requireEqual(t, f.r.watch.anime == nil, true)
-	requireEqual(t, d.searched(), searches+5)
+	requireEqual(t, d.searched(), searches+4)
+}
+
+func TestWatchLinksWhatPlaysToAShow(t *testing.T) {
+	f, d := newWatchFixture(t)
+	alice, a := f.join(f.user("alice"))
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watching", Watching: true})
+	guest, g := f.join(anon("guest"))
+
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_link", AnimeID: 2})
+	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "No episode is playing.")
+
+	// Not recognised: alice says which show it is. Guests may not.
+	page := playStatus{State: "playing", Source: "firefox", Length: 100, Title: "Some Podcast Episode 5 - Site", URL: "https://site.example/watch?v=abc"}
+	d.set(page)
+	f.r.checkPlayback(f.ctx)
+	requireEqual(t, a.wait(t, "playing").(playingMsg).Playing.AnimeID, int64(0))
+	f.r.Handle(f.ctx, guest, ClientMsg{Type: "watch_link", AnimeID: 2})
+	requireEqual(t, g.wait(t, "error").(errorMsg).Message, "You are not allowed to do that.")
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_link", AnimeID: 2})
+	requireEqual(t, *a.wait(t, "playing").(playingMsg).Playing, WatchPlaying{AnimeID: 2, Title: "Frieren 2", Episode: 5})
+
+	// What was seen before counts, and the episode is suggested for the show.
+	for page.Time = 0; page.Time < 100; page.Time += watchBucket {
+		d.set(page)
+		f.r.checkPlayback(f.ctx)
+	}
+	page.State = "stopped"
+	d.set(page)
+	f.r.checkPlayback(f.ctx)
+	p := lastProposal(t, a)
+	requireEqual(t, p.AnimeID, int64(2))
+	requireEqual(t, p.Viewers[0].Checked, true)
+
+	// The name is the show's from now on: the next episode needs nobody,
+	// and no AniList.
+	searches := d.searched()
+	page.State, page.Time, page.Title = "playing", 0, "Some Podcast Episode 6 - Site"
+	d.set(page)
+	f.r.checkPlayback(f.ctx)
+	requireEqual(t, a.wait(t, "playing").(playingMsg).Playing == nil, true)
+	requireEqual(t, *a.wait(t, "playing").(playingMsg).Playing, WatchPlaying{AnimeID: 2, Title: "Frieren 2", Episode: 6})
+	requireEqual(t, d.searched(), searches)
 }

@@ -203,8 +203,13 @@ export class RoomStore {
     this.socket.send({ type: 'whisper', to, body })
   }
 
-  // The watchlog's suggestion: tick a viewer, change the episode or the show
-  // (an AniList id), save it now or drop it.
+  // The watchlog's suggestion: say whether I watched it, change the episode
+  // or the show (an AniList id); as an admin tick a viewer, save it now or
+  // drop it for everyone.
+  answerWatch(id: number, checked: boolean) {
+    this.socket.send({ type: 'watch_answer', id, checked })
+  }
+
   checkWatcher(id: number, key: string, checked: boolean) {
     this.socket.send({ type: 'watch_check', id, key, checked })
   }

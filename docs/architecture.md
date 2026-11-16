@@ -445,9 +445,12 @@ the show that plays comes first. Rooms also notice episodes (`hub/watch.go`):
   answer three times; in Firefox when the tab closes or plays another
   episode, or is paused in the last tenth of the video (a page keeps a
   video that is over, paused). If anyone saw at least half of it, the room gets a
-  suggestion: everyone who saw at least 20% is listed, those with 80% ticked.
-  Accounts in the room may change the episode or pick another show, and
-  tick themselves (admins anyone); it is saved two minutes after the last change, or at once with Save,
+  suggestion: everyone who saw at least 20% is listed, those with 60% ticked (skipping the opening and the ending must not cost the tick).
+  Accounts in the room may change the episode or pick another show.
+  Everyone listed is asked whether they watched it (`watch_answer`): their
+  answer closes it for them alone, and saves it once all have answered.
+  Admins see everyone to tick, and save or dismiss it for the room. Left
+  alone it is saved two minutes after the last correction,
   and adds that one episode for those ticked: nothing else they have
   watched changes. Without a recognised show it
   waits for one to be picked, and with an episode past the show's last one

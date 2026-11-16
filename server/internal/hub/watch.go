@@ -31,7 +31,7 @@ const (
 	// Shares of an episode someone saw: to be listed in the suggestion, to
 	// be ticked in it, and that someone must have seen for a suggestion.
 	watchListed  = 0.2
-	watchChecked = 0.8
+	watchChecked = 0.6
 	watchWorth   = 0.5
 	// A web page keeps a video that is over, paused at its end; one paused
 	// this far in, during the credits, counts as over too.
@@ -442,9 +442,11 @@ func (r *Room) saveProposal(ctx context.Context, p *proposal) error {
 
 var errProposalGone = &userError{"That suggestion is gone."}
 
-// editProposal handles watch_check, watch_episode, watch_save and
-// watch_dismiss: anyone in the room with an account may correct or settle
-// the suggestion, but tick only themselves; admins anyone.
+// editProposal handles watch_check, watch_answer, watch_episode, watch_save
+// and watch_dismiss. Anyone in the room with an account may correct the
+// episode and say whether they watched it themselves (watch_answer): that
+// is the end of it for them, and for everyone once all have answered.
+// Admins tick anyone, and settle it for everyone.
 func (r *Room) editProposal(ctx context.Context, c *Client, msg ClientMsg) error {
 	r.mu.Lock()
 	if c.m.user == nil {
@@ -469,6 +471,24 @@ func (r *Room) editProposal(ctx context.Context, c *Client, msg ClientMsg) error
 			return ErrNotAllowed
 		}
 		p.Viewers[i].Checked = msg.Checked
+	case "watch_answer":
+		i := slices.IndexFunc(p.Viewers, func(v WatchViewer) bool { return v.Key == c.m.key })
+		if i < 0 {
+			r.mu.Unlock()
+			return &userError{"That person is not in the suggestion."}
+		}
+		p.Viewers[i].Checked, p.Viewers[i].Answered = msg.Checked, true
+		// With everyone's answer there is nothing left to wait for. An
+		// answer does not put the saving off, as a correction does.
+		if p.saveable() && !slices.ContainsFunc(p.Viewers, func(v WatchViewer) bool { return !v.Answered }) {
+			r.takeProposalLocked()
+			r.broadcastLocked(watchMsg{Type: "watch"}, nil)
+			r.mu.Unlock()
+			return r.saveProposal(ctx, p)
+		}
+		r.broadcastLocked(watchMsg{Type: "watch", Proposal: p.view()}, nil)
+		r.mu.Unlock()
+		return nil
 	case "watch_episode":
 		if msg.Episode < 1 || msg.Episode > maxEpisode || p.Episodes != nil && msg.Episode > *p.Episodes {
 			r.mu.Unlock()
@@ -476,6 +496,10 @@ func (r *Room) editProposal(ctx context.Context, c *Client, msg ClientMsg) error
 		}
 		p.Episode = msg.Episode
 	case "watch_save":
+		if !c.m.rights.Admin {
+			r.mu.Unlock()
+			return ErrNotAllowed
+		}
 		if p.anime == nil {
 			r.mu.Unlock()
 			return &userError{"Pick the show first."}
@@ -489,6 +513,10 @@ func (r *Room) editProposal(ctx context.Context, c *Client, msg ClientMsg) error
 		r.mu.Unlock()
 		return r.saveProposal(ctx, p)
 	case "watch_dismiss":
+		if !c.m.rights.Admin {
+			r.mu.Unlock()
+			return ErrNotAllowed
+		}
 		r.takeProposalLocked()
 		r.broadcastLocked(watchMsg{Type: "watch"}, nil)
 		r.mu.Unlock()

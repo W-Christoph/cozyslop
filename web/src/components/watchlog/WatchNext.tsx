@@ -136,13 +136,14 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
     const me = (x: string, y: string) => Number(y === self) - Number(x === self)
     // Those here who are level share a summary: their faces and the episode
     // they have all seen up to. Everyone who differs gets a chip: behind
-    // (amber, "1 behind"), finished (green, a tick), watching casually (muted,
+    // (amber, "1 behind"; those equally far behind share one), finished (green, a tick), watching casually (muted,
     // how many they have seen: nobody waits for them). Those not here follow,
     // dashed: first who the show waits on (a clock), then who it does not.
     const following = o.group.filter((u) => present.has(u))
     const level = following.filter((u) => !behind.has(u)).sort(me)
+    const behindAt = new Map<number, string[]>() // who is behind, by the episode they are up to
+    for (const u of following.filter((u) => behind.has(u)).sort(me)) behindAt.set(seen(a, u), [...(behindAt.get(seen(a, u)) ?? []), u])
     const chips = [
-      ...following.filter((u) => behind.has(u)).sort(me).map((u) => ({ u, kind: 'behind' })),
       ...done.sort(me).map((u) => ({ u, kind: 'done' })),
       ...[...o.casual].sort(me).map((u) => ({ u, kind: 'casual' })),
     ]
@@ -170,6 +171,13 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
         </button>
       )
     }
+    const behindChips = [...behindAt].sort(([x], [y]) => y - x).map(([episode, us]) => us.length === 1 ? chip({ u: us[0], kind: 'behind' }) : (
+      <span class={`${styles.crowd} ${styles.behind}`}>
+        <span class={styles.faces}>{us.map((u) => avatarButton(o.anime, u, `up to episode ${episode}, ${behind.get(u)} behind`))}</span>
+        <span class={styles.personName}>{us.length > 3 ? `${name(us[0])} +${us.length - 1}` : list(us.map(name))}</span>
+        <span class={styles.at}>up to ep {episode}<span class={styles.by}>{behind.get(us[0])} behind</span></span>
+      </span>
+    ))
     // Those not here, under a label that never parts from its first chip.
     // Several at the same episode share one, as those here who are level do.
     const absentGroup = (label: string, entries: { u: string; kind: string }[]) => {
@@ -221,6 +229,7 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
                 <span class={styles.at}>up to ep {seen(a, level[0])}</span>
               </li>
             )}
+            {behindChips.map((c, i) => <li key={i}>{c}</li>)}
             {chips.map((c) => <li key={c.u}>{chip(c)}</li>)}
             {absentGroup('Waiting on', waitingOn)}
             {absentGroup('Away', away)}

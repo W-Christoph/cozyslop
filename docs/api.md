@@ -307,8 +307,9 @@ show was not recognised; `null` when nothing is) and `welcome.watch` the open
 suggestion to mark an episode watched (`null` when there is none);
 `{"type":"playing","playing":…}` and `{"type":"watch","proposal":…}` follow
 when they change, `proposal` `null` once it was saved or dismissed. A
-suggestion is `{"id","animeId","title","coverUrl","episodes","episode","file","applyAt","viewers":[{"key","nickname","coverage","checked"}]}`:
-`coverage` is the share of the episode that person saw (0 to 1), `applyAt`
+suggestion is `{"id","animeId","title","coverUrl","episodes","episode","file","applyAt","viewers":[{"key","nickname","coverage","checked","answered"}]}`:
+`coverage` is the share of the episode that person saw (0 to 1), `answered`
+that they said themselves whether they watched it, `applyAt`
 when it is saved by itself (unix ms; `0` while `animeId` is `0` or `episode`
 is past the show's `episodes`, and `watch_save` then fails). A tab sends `{"type":"watching","watching":true}` while the stream runs in it
 with its picture (not paused, not sound only), and `false` when it stops:
@@ -316,8 +317,11 @@ only such tabs count as having seen an episode. Nobody else is told. Accounts in
 the room send `{"type":"watch_check","id":…,"key":"<identity key>","checked":true}`,
 `{"type":"watch_episode","id":…,"episode":6}`,
 `{"type":"watch_anime","id":…,"animeId":<AniList id>}`,
-`{"type":"watch_save","id":…}` and `{"type":"watch_dismiss","id":…}`; each
-change but saving and dismissing restarts the wait before it saves by itself.
+`{"type":"watch_answer","id":…,"checked":true}` (whether they watched it
+themselves; once everyone listed has answered it is saved), and admins
+`{"type":"watch_save","id":…}` and `{"type":"watch_dismiss","id":…}`, which
+others get `error` "You are not allowed to do that." for; a change of the
+episode, the show or a tick restarts the wait before it saves by itself.
 Anonymous users get `error` "You are not allowed to do that.", and so does
 `watch_check` for someone else's `key` unless an admin sends it; a suggestion
 that is gone `error` "That suggestion is gone.".

@@ -85,6 +85,7 @@ type WatchViewer struct {
 	Nickname string  `json:"nickname"`
 	Coverage float64 `json:"coverage"` // share of the episode seen, 0 to 1
 	Checked  bool    `json:"checked"`
+	Answered bool    `json:"answered"` // they said themselves whether they watched it
 }
 
 type playingMsg struct {
@@ -217,7 +218,7 @@ type ClientMsg struct {
 	To        string `json:"to"`        // whisper: identity key
 	Name      string `json:"name"`      // file_delete, file_play: a file in the desktop's Downloads
 	Key       string `json:"key"`       // watch_check: identity key
-	Checked   bool   `json:"checked"`   // watch_check
+	Checked   bool   `json:"checked"`   // watch_check, watch_answer
 	Episode   int    `json:"episode"`   // watch_episode
 	AnimeID   int64  `json:"animeId"`   // watch_anime: AniList id
 }

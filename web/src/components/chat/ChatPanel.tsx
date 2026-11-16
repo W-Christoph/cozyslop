@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { preferences } from '../../app/state'
 import { useRoomStore } from '../room/RoomContext'
-import { WatchPanel, WatchPlayingBar } from '../room/WatchPanel'
+import { WatchPanel } from '../room/WatchPanel'
 import { ChatInput } from './ChatInput'
 import { MediaModal } from './MediaModal'
 import { MessageList } from './MessageList'
@@ -43,10 +43,8 @@ export function ChatPanel({ lines = [], active = true, idle = false, wide = fals
   const transparent = fullscreen && transparentChat
   return <div ref={panel} hidden={!active} class={`${styles.chat} ${transparent ? styles.transparent : ''} ${transparent && idle ? styles.idle : ''}`}
     data-chat-style={chatStyle} data-chat-wide={wide || undefined} data-chat-overlay={transparent || undefined} style={chatScale && chatScale !== 100 ? { fontSize: `${chatScale}%` } : undefined}>
-    {/* Not over the stream in fullscreen: there it would cover the picture. */}
-    {!transparent && <WatchPlayingBar />}
+    <WatchPanel bar={!transparent} />
     <MessageList lines={lines} wide={wide} editing={editing} onEdit={setEditing} onEndEdit={endEdit} onMedia={setMedia} />
-    <WatchPanel />
     <ChatInput inputRef={input} onEdit={setEditing} />
     {mediaMessage && <MediaModal message={mediaMessage} onClose={() => setMedia(null)} />}
   </div>

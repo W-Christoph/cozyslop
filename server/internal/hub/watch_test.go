@@ -133,6 +133,7 @@ func TestWatchSuggestsAndSaves(t *testing.T) {
 	bob, _ := f.join(f.user("bob"))
 	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watching", Watching: true})
 	guest, g := f.join(anon("guest"))
+	admin, _ := f.join(f.flags(f.user("root"), true, false))
 
 	// Bob pauses the stream for the second half; the anonymous guest is not
 	// tracked.
@@ -173,8 +174,13 @@ func TestWatchSuggestsAndSaves(t *testing.T) {
 	// A show without episode 6: not saved, by itself or by hand.
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_anime", ID: p.ID, AnimeID: 4})
 	requireEqual(t, lastProposal(t, a).ApplyAt, int64(0))
-	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_save", ID: p.ID})
-	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "The show has no such episode.")
+	f.r.Handle(f.ctx, admin, ClientMsg{Type: "watch_save", ID: p.ID})
+	requireEqual(t, f.progress()["alice"], "")
+	// Everyone's answer does not save it either; it stays open.
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_answer", ID: p.ID, Checked: true})
+	requireEqual(t, lastProposal(t, a).Viewers[0].Answered, true)
+	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watch_answer", ID: p.ID, Checked: true})
+	requireEqual(t, lastProposal(t, a).Viewers[1].Answered, true)
 	// Another show, from AniList.
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_anime", ID: p.ID, AnimeID: 2})
 	changed := lastProposal(t, a)
@@ -184,11 +190,17 @@ func TestWatchSuggestsAndSaves(t *testing.T) {
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_anime", ID: p.ID, AnimeID: 3})
 	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "AniList has no such anime.")
 
-	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_save", ID: p.ID})
+	// Settling it for everyone is an admin's.
+	for _, kind := range []string{"watch_save", "watch_dismiss"} {
+		f.r.Handle(f.ctx, alice, ClientMsg{Type: kind, ID: p.ID})
+		requireEqual(t, a.wait(t, "error").(errorMsg).Message, "You are not allowed to do that.")
+	}
+	f.r.Handle(f.ctx, admin, ClientMsg{Type: "watch_save", ID: p.ID})
 	requireEqual(t, lastProposal(t, a) == nil, true)
 	requireEqual(t, f.progress()["alice"], "6")
 	requireEqual(t, f.progress()["bob"], "6")
-	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_save", ID: p.ID})
+	f.r.Handle(f.ctx, admin, ClientMsg{Type: "watch_save", ID: p.ID})
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_answer", ID: p.ID, Checked: true})
 	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "That suggestion is gone.")
 
 	// The file's title is now known as the show picked: AniList is not
@@ -287,8 +299,8 @@ func TestWatchFollowsFirefox(t *testing.T) {
 	requireEqual(t, a.count("watch"), 1)
 
 	// Saved, the address's title is known for the show: the next episode
-	// needs no AniList.
-	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_save", ID: p.ID})
+	// needs no AniList. Alice is the only one asked: her answer saves it.
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_answer", ID: p.ID, Checked: true})
 	searches := d.searched()
 	page.State, page.Time, page.URL = "playing", 0, "https://site.example/watch/AbCdEf_123/sousou-no-frieren?ep=6"
 	d.set(page)

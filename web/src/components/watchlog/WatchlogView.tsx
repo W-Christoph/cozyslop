@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'preact/hooks'
-import { watchlog, type Me, type WatchAnime, type WatchPerson, type WatchRange, type Watchlog } from '../../api'
+import { watchlog, type Me, type WatchAnime, type WatchMode, type WatchPerson, type WatchRange, type Watchlog } from '../../api'
 import { Button } from '../Button'
 import { Modal } from '../Modal'
 import { Avatar } from '../ui/Avatar'
@@ -100,8 +100,8 @@ export function WatchlogView({ user, present, playing, version }: {
   const selected = people.filter((p) => !chosen || chosen.includes(p.username))
   const progress = useMemo(() => new Map(data?.progress.map((p) => [key(p.animeId, p.username), p.watched])), [data])
   const watchedOf = (animeId: number, username: string) => progress.get(key(animeId, username)) ?? none
-  const ignored = useMemo(() => new Set(data?.ignored.map((i) => key(i.animeId, i.username))), [data])
-  const ignoredOf = (animeId: number, username: string) => ignored.has(key(animeId, username))
+  const follows = useMemo(() => new Map(data?.follows.map((f) => [key(f.animeId, f.username), f.mode])), [data])
+  const modeOf = (animeId: number, username: string): WatchMode => follows.get(key(animeId, username)) ?? 'following'
   const mayChange = (username: string) => user.admin || username === user.username
 
   function choose(username: string) {
@@ -178,15 +178,15 @@ export function WatchlogView({ user, present, playing, version }: {
     }
   }
 
-  async function setIgnored(animeId: number, username: string, ignored: boolean) {
+  async function setFollow(animeId: number, username: string, mode: WatchMode) {
     relayout()
     setData((d) => d && {
       ...d,
-      ignored: [...d.ignored.filter((i) => i.animeId !== animeId || i.username !== username), ...(ignored ? [{ animeId, username }] : [])],
+      follows: [...d.follows.filter((f) => f.animeId !== animeId || f.username !== username), ...(mode !== 'following' ? [{ animeId, username, mode }] : [])],
     })
     setError('')
     try {
-      await watchlog.setIgnored(animeId, username, ignored)
+      await watchlog.setFollow(animeId, username, mode)
     } catch (e) {
       fail(e)
       watchlog.get().then(setData).catch(() => {})
@@ -202,7 +202,7 @@ export function WatchlogView({ user, present, playing, version }: {
       await watchlog.remove(anime.id)
       setData((d) => d && {
         ...d, anime: d.anime.filter((a) => a.id !== anime.id), progress: d.progress.filter((p) => p.animeId !== anime.id),
-        ignored: d.ignored.filter((i) => i.animeId !== anime.id),
+        follows: d.follows.filter((f) => f.animeId !== anime.id),
       })
     } catch (e) {
       fail(e)
@@ -264,10 +264,10 @@ export function WatchlogView({ user, present, playing, version }: {
         </div>
         {tab === 'next' ? (
           <WatchNext anime={data.anime} here={selected} people={people} progress={data.progress} self={user.username} admin={user.admin}
-            playing={playing} layout={layout} heading={present ? 'h3' : 'h2'} ignoredOf={ignoredOf} onShow={(anime) => setShow(anime.id)} onOpen={episodesOf} onMark={mark} />
+            playing={playing} layout={layout} heading={present ? 'h3' : 'h2'} modeOf={modeOf} onShow={(anime) => setShow(anime.id)} onOpen={episodesOf} onMark={mark} />
         ) : (
           <WatchTable anime={data.anime} people={selected} self={user.username} playing={playing}
-            watchedOf={watchedOf} ignoredOf={ignoredOf} onOpen={episodesOf} onShow={(anime) => setShow(anime.id)} />
+            watchedOf={watchedOf} modeOf={modeOf} onOpen={episodesOf} onShow={(anime) => setShow(anime.id)} />
         )}
       </div>
     )}
@@ -282,16 +282,16 @@ export function WatchlogView({ user, present, playing, version }: {
     {shown && data && (
       <ShowDialog anime={shown} self={user.username} playing={shown.id === playing} busy={refreshing}
         people={people.filter((p) => p.username === user.username || selected.includes(p) || watchedOf(shown.id, p.username).length > 0)}
-        watchedOf={(u) => watchedOf(shown.id, u)} ignoredOf={(u) => ignoredOf(shown.id, u)} mayChange={mayChange}
+        watchedOf={(u) => watchedOf(shown.id, u)} modeOf={(u) => modeOf(shown.id, u)} mayChange={mayChange}
         mayRemove={user.admin || !data.progress.some((p) => p.animeId === shown.id && p.watched.length > 0)}
         onEpisodes={(person) => episodesOf(shown, person)} onSet={(u, episode) => { void setWatched(shown.id, u, episode, episode, true) }}
-        onIgnore={(u, value) => { void setIgnored(shown.id, u, value) }} onRefresh={() => { void add(shown.id) }}
+        onFollow={(u, mode) => { void setFollow(shown.id, u, mode) }} onRefresh={() => { void add(shown.id) }}
         onRemove={() => setRemoving(shown)} onClose={() => { setShow(null); relayout() }} />
     )}
     {detailAnime && detailPerson && (
       <EpisodesDialog anime={detailAnime} person={detailPerson} self={detailPerson.username === user.username}
         watched={watchedOf(detailAnime.id, detailPerson.username)} editable={mayChange(detailPerson.username)}
-        ignored={ignoredOf(detailAnime.id, detailPerson.username)} onIgnore={(value) => { void setIgnored(detailAnime.id, detailPerson.username, value) }}
+        mode={modeOf(detailAnime.id, detailPerson.username)} onFollow={(mode) => { void setFollow(detailAnime.id, detailPerson.username, mode) }}
         onSet={(from, to, watched) => { void setWatched(detailAnime.id, detailPerson.username, from, to, watched) }}
         onClose={() => { setDetail(null); relayout() }} />
     )}

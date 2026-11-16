@@ -1,4 +1,4 @@
-import type { WatchAnime, WatchProgress, WatchRange } from '../../api'
+import type { WatchAnime, WatchMode, WatchProgress, WatchRange } from '../../api'
 import { countEpisodes, finished, firstMissing, hasEpisode } from './episodes'
 
 export interface Together {
@@ -35,7 +35,8 @@ export function watchNext(anime: WatchAnime, group: readonly string[], here: Rea
 
 // together: everyone here follows it (someone may be behind). some: only
 // some of those here follow it; the others have not started it, have
-// finished it or stopped following it. waiting: someone who follows it is
+// finished it or stopped following it. Who watches it casually counts for
+// neither: they come along with whatever the others watch. waiting: someone who follows it is
 // not here and has not seen the next episode, so it is held up. new: on the
 // list, and nobody here has started it.
 export type WatchState = 'together' | 'some' | 'waiting' | 'new'
@@ -49,36 +50,39 @@ export interface WatchOption {
   watching: string[] // of them, who is here
   waiting: string[] // of them, who is not here and has not seen the next episode
   behind: { username: string; by: number }[]
+  casual: string[] // who is here and watches it casually: along with the others, and not waited for
   unstarted: string[] // who is here and has not started it
-  needs: string[] // who is here and would see the next episode for the first time
+  needs: string[] // who is here and would see the next episode for the first time, casually too
   recent: number // when it was last watched; for a new show, when it was added
 }
 
 // What the people here can watch, best first. A show's group is everyone
-// who has watched some of it, has not finished it and has not stopped
-// following it. Shows nobody here has started come last, newest first.
+// who has watched some of it, has not finished it and follows it: not who
+// has dropped it, nor who watches it casually. Those decide nothing: not
+// which episode is next, nor whether the show waits. Shows nobody here has started come last, newest first.
 export function watchOptions(anime: readonly WatchAnime[], here: readonly string[], progress: readonly WatchProgress[],
-  ignoredOf: (animeId: number, username: string) => boolean): WatchOption[] {
+  modeOf: (animeId: number, username: string) => WatchMode): WatchOption[] {
   const present = new Set(here)
   const options: WatchOption[] = []
   for (const a of anime) {
     const rows = progress.filter((p) => p.animeId === a.id && countEpisodes(p.watched) > 0)
     const watched = new Map(rows.map((p) => [p.username, p.watched]))
     const of = (u: string) => watched.get(u) ?? []
-    const following = rows.filter((p) => !finished(p.watched, a.episodes) && !ignoredOf(a.id, p.username))
+    const following = rows.filter((p) => !finished(p.watched, a.episodes) && modeOf(a.id, p.username) === 'following')
     const group = following.map((p) => p.username)
-    const unstarted = here.filter((u) => !watched.has(u) && !ignoredOf(a.id, u))
+    const casual = here.filter((u) => modeOf(a.id, u) === 'casual' && !finished(of(u), a.episodes))
+    const unstarted = here.filter((u) => !watched.has(u) && modeOf(a.id, u) === 'following')
     const t = watchNext(a, group, present, of)
     if (t) {
       const watching = group.filter((u) => present.has(u))
       options.push({
-        anime: a, state: t.waiting.length ? 'waiting' : watching.length === here.length ? 'together' : 'some', next: t.next, group, watching,
-        waiting: t.waiting, behind: t.behind, unstarted,
-        needs: group.filter((u) => present.has(u) && !hasEpisode(of(u), t.next)),
+        anime: a, state: t.waiting.length ? 'waiting' : watching.length === here.length - casual.length ? 'together' : 'some', next: t.next, group, watching,
+        waiting: t.waiting, behind: t.behind, casual, unstarted,
+        needs: [...watching, ...casual].filter((u) => !hasEpisode(of(u), t.next)),
         recent: Math.max(...following.map((p) => p.watchedAt)),
       })
     } else if (unstarted.length > 0 && !here.some((u) => watched.has(u))) {
-      options.push({ anime: a, state: 'new', next: 1, group, watching: [], waiting: [], behind: [], unstarted, needs: unstarted, recent: a.addedAt ?? 0 })
+      options.push({ anime: a, state: 'new', next: 1, group, watching: [], waiting: [], behind: [], casual, unstarted, needs: [...unstarted, ...casual], recent: a.addedAt ?? 0 })
     }
   }
   // In a section, the more of those here watch a show, and the fewer of them

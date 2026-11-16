@@ -117,21 +117,26 @@ func TestWatchlog(t *testing.T) {
 	}
 
 	// Bob stopped following it: alice may not say so, bob and admins may.
-	a.error(alice, "PUT", "/api/watchlog/ignored/154587/bob", map[string]any{"ignored": true}, 403, "You can only change your own progress.")
-	a.error(admin, "PUT", "/api/watchlog/ignored/1/bob", map[string]any{"ignored": true}, 404, "That show is not on the watchlog.")
-	a.call(admin, "PUT", "/api/watchlog/ignored/154587/bob", map[string]any{"ignored": true}, 204, nil)
-	var ignoring struct {
-		Ignored  []store.Ignored
+	a.error(alice, "PUT", "/api/watchlog/follow/154587/bob", map[string]any{"mode": "dropped"}, 403, "You can only change your own progress.")
+	a.error(admin, "PUT", "/api/watchlog/follow/1/bob", map[string]any{"mode": "dropped"}, 404, "That show is not on the watchlog.")
+	a.error(admin, "PUT", "/api/watchlog/follow/154587/bob", map[string]any{"mode": "sometimes"}, 400, "The mode is following, casual or dropped.")
+	var following struct {
+		Follows  []store.Follow
 		Progress []store.Progress
 	}
-	a.call(alice, "GET", "/api/watchlog", nil, 200, &ignoring)
-	if len(ignoring.Ignored) != 1 || ignoring.Ignored[0].Username != "bob" || ignoring.Ignored[0].AnimeID != 154587 || ignoring.Progress[0].WatchedAt == 0 {
-		t.Fatalf("ignored: %+v", ignoring)
+	// Then he watches along casually, and then follows it again.
+	for _, mode := range []string{"dropped", "casual"} {
+		a.call(admin, "PUT", "/api/watchlog/follow/154587/bob", map[string]any{"mode": mode}, 204, nil)
+		a.call(alice, "GET", "/api/watchlog", nil, 200, &following)
+		if len(following.Follows) != 1 || following.Follows[0].Username != "bob" || following.Follows[0].AnimeID != 154587 ||
+			following.Follows[0].Mode != mode || following.Progress[0].WatchedAt == 0 {
+			t.Fatalf("%s: %+v", mode, following)
+		}
 	}
-	a.call(admin, "PUT", "/api/watchlog/ignored/154587/bob", map[string]any{"ignored": false}, 204, nil)
-	a.call(alice, "GET", "/api/watchlog", nil, 200, &ignoring)
-	if len(ignoring.Ignored) != 0 {
-		t.Fatalf("ignored still: %+v", ignoring)
+	a.call(admin, "PUT", "/api/watchlog/follow/154587/bob", map[string]any{"mode": "following"}, 204, nil)
+	a.call(alice, "GET", "/api/watchlog", nil, 200, &following)
+	if len(following.Follows) != 0 {
+		t.Fatalf("follows still: %+v", following)
 	}
 
 	// Unticking past the show's end is fine; with everything unticked the

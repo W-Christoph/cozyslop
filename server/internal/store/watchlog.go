@@ -62,11 +62,19 @@ type Progress struct {
 	WatchedAt int64 `json:"watchedAt"`
 }
 
-// Ignored is an account that is not following a show any more.
-type Ignored struct {
+// How someone follows a show. Following is the usual way and is not stored.
+const (
+	FollowFollowing = "following" // the others wait for them
+	FollowCasual    = "casual"    // they watch along when they are there; nobody waits
+	FollowDropped   = "dropped"   // they have stopped
+)
+
+// Follow is how an account follows a show, where it is not the usual way.
+type Follow struct {
 	UserID   int64  `json:"-"`
 	Username string `json:"username"` // as in Progress
 	AnimeID  int64  `json:"animeId"`
+	Mode     string `json:"mode"` // casual | dropped
 }
 
 const animeColumns = "id, title, title_english, episodes, cover_url, added_at"
@@ -232,44 +240,45 @@ func (s *Watchlog) MarkWatched(ctx context.Context, userIDs []int64, animeID int
 	})
 }
 
-// SetIgnored says whether an account has stopped following a show.
+// SetFollow says how an account follows a show: one of the Follow modes.
 // ErrNotFound if the show is not on the watchlog.
-func (s *Watchlog) SetIgnored(ctx context.Context, userID, animeID int64, ignored bool) error {
-	if !ignored {
-		_, err := s.db.ExecContext(ctx, "DELETE FROM watch_ignored WHERE user_id = ? AND anime_id = ?", userID, animeID)
+func (s *Watchlog) SetFollow(ctx context.Context, userID, animeID int64, mode string) error {
+	if mode == FollowFollowing {
+		_, err := s.db.ExecContext(ctx, "DELETE FROM watch_follow WHERE user_id = ? AND anime_id = ?", userID, animeID)
 		return err
 	}
 	_, err := s.db.ExecContext(ctx,
-		"INSERT INTO watch_ignored (user_id, anime_id) VALUES (?, ?) ON CONFLICT (user_id, anime_id) DO NOTHING", userID, animeID)
+		"INSERT INTO watch_follow (user_id, anime_id, mode) VALUES (?, ?, ?) ON CONFLICT (user_id, anime_id) DO UPDATE SET mode = excluded.mode",
+		userID, animeID, mode)
 	if isForeignKeyViolation(err) {
 		return ErrNotFound
 	}
 	return err
 }
 
-// ListIgnored returns who has stopped following which show.
-func (s *Watchlog) ListIgnored(ctx context.Context) ([]Ignored, error) {
+// ListFollows returns who follows which show casually or has dropped it.
+func (s *Watchlog) ListFollows(ctx context.Context) ([]Follow, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT user_id, anime_id FROM watch_ignored ORDER BY anime_id, user_id")
+		"SELECT user_id, anime_id, mode FROM watch_follow ORDER BY anime_id, user_id")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := []Ignored{}
+	out := []Follow{}
 	for rows.Next() {
-		var i Ignored
-		if err := rows.Scan(&i.UserID, &i.AnimeID); err != nil {
+		var f Follow
+		if err := rows.Scan(&f.UserID, &f.AnimeID, &f.Mode); err != nil {
 			return nil, err
 		}
-		out = append(out, i)
+		out = append(out, f)
 	}
 	return out, rows.Err()
 }
 
-// DeleteUser removes what a deleted account watched and ignored.
+// DeleteUser removes what a deleted account watched and how it followed.
 func (s *Watchlog) DeleteUser(ctx context.Context, id int64) error {
 	return inTx(ctx, s.db, func(tx *sql.Tx) error {
-		for _, table := range []string{"watched_episodes", "watch_ignored"} {
+		for _, table := range []string{"watched_episodes", "watch_follow"} {
 			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE user_id = ?", id); err != nil {
 				return err
 			}

@@ -60,7 +60,22 @@ func TestWatchlog(t *testing.T) {
 	}
 
 	// A deleted account leaves nothing.
-	if err := s.SetIgnored(ctx, 3, 1, true); err != nil {
+	if err := s.SetFollow(ctx, 3, 99, FollowDropped); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("following a show that is not listed: %v", err)
+	}
+	// The mode is replaced, and following takes it back.
+	for _, mode := range []string{FollowDropped, FollowCasual} {
+		if err := s.SetFollow(ctx, 3, 1, mode); err != nil {
+			t.Fatal(err)
+		}
+		if follows, err := s.ListFollows(ctx); err != nil || len(follows) != 1 || follows[0] != (Follow{UserID: 3, AnimeID: 1, Mode: mode}) {
+			t.Fatalf("follows: %v %+v", err, follows)
+		}
+	}
+	if err := s.SetFollow(ctx, bob.ID, 1, FollowCasual); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetFollow(ctx, bob.ID, 1, FollowFollowing); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetWatched(ctx, 3, 1, 1, 2, true, "manual"); err != nil {
@@ -69,9 +84,9 @@ func TestWatchlog(t *testing.T) {
 	if err := s.DeleteUser(ctx, 3); err != nil {
 		t.Fatal(err)
 	}
-	ignored, err := s.ListIgnored(ctx)
-	if list, _ := s.ListProgress(ctx); err != nil || len(ignored) != 0 || len(list) != 2 {
-		t.Fatalf("after deleting an account: %v %+v %+v", err, ignored, list)
+	follows, err := s.ListFollows(ctx)
+	if list, _ := s.ListProgress(ctx); err != nil || len(follows) != 0 || len(list) != 2 {
+		t.Fatalf("after deleting an account: %v %+v %+v", err, follows, list)
 	}
 
 	if err := s.SetWatched(ctx, bob.ID, 1, 1, 9999, false, "manual"); err != nil {

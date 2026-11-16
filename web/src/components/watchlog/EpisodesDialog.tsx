@@ -1,10 +1,11 @@
 import { useState } from 'preact/hooks'
-import type { WatchAnime, WatchPerson, WatchRange } from '../../api'
+import type { WatchAnime, WatchMode, WatchPerson, WatchRange } from '../../api'
 import { Button } from '../Button'
 import { Modal } from '../Modal'
 import { Avatar } from '../ui/Avatar'
 import { Cover } from './AnimeSearch'
 import { EpisodeBar } from './EpisodeBar'
+import { FollowSelect, followAbout } from './FollowSelect'
 import { countEpisodes, hasEpisode, lastEpisode, rangeText, skipped } from './episodes'
 import styles from './EpisodesDialog.module.css'
 
@@ -13,15 +14,15 @@ const MORE = 24 // episodes offered at a time while a show's length is unknown
 // The episodes of one show for one person, each to tick and untick: by the
 // person and by admins; everyone else sees them. Nothing in it moves when
 // an episode is ticked: the buttons stay, switched off when they do nothing.
-export function EpisodesDialog({ anime, person, self, watched, editable, ignored, onSet, onIgnore, onClose }: {
+export function EpisodesDialog({ anime, person, self, watched, editable, mode, onSet, onFollow, onClose }: {
   anime: WatchAnime
   person: WatchPerson
   self: boolean // the person is me
   watched: readonly WatchRange[]
   editable: boolean
-  ignored: boolean // not following the show any more: the others do not wait
+  mode: WatchMode // how they follow the show: whether the others wait
   onSet: (from: number, to: number, watched: boolean) => void
-  onIgnore: (ignored: boolean) => void
+  onFollow: (mode: WatchMode) => void
   onClose: () => void
 }) {
   const last = lastEpisode(watched), count = countEpisodes(watched), gaps = skipped(watched)
@@ -66,13 +67,13 @@ export function EpisodesDialog({ anime, person, self, watched, editable, ignored
         <span>{editable ? 'Click an episode to tick or untick it.' : `Only ${person.nickname} and admins can change this.`}</span>
         {anime.episodes === null && <Button size="sm" variant="ghost" onClick={() => setShown(total + MORE)}>More episodes</Button>}
       </div>
-      {(editable || ignored) && (
+      {(editable || mode !== 'following') && (
         <div class={styles.following}>
           <div class={styles.followingText}>
-            <strong>{ignored ? 'Dropped' : 'Watching this show'}</strong>
-            <span>{ignored ? `The others do not wait for ${self ? 'you' : person.nickname}. What was watched stays.` : `The others wait for ${self ? 'you' : person.nickname} before they watch on.`}</span>
+            <strong>{mode === 'dropped' ? (count === 0 ? 'Not interested' : 'Dropped') : mode === 'casual' ? 'Watching casually' : 'Following this show'}</strong>
+            <span>{followAbout(mode, self ? 'you' : person.nickname)}</span>
           </div>
-          {editable && <Button size="sm" variant="secondary" onClick={() => onIgnore(!ignored)}>{ignored ? 'Pick up again' : 'Drop'}</Button>}
+          {editable && <FollowSelect mode={mode} who={self ? 'you' : person.nickname} started={count > 0} onChange={onFollow} />}
         </div>
       )}
     </Modal>

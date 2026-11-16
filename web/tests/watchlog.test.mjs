@@ -71,7 +71,7 @@ test('what to watch is sorted into together, some of us, waiting and not started
     row(6, 'away', [[1, 3]]),
     row(8, 'bob', [[1, 3]]),
   ]
-  const ignored = (animeId, username) => animeId === 6 && username === 'bob'
+  const ignored = (animeId, username) => (animeId === 6 && username === 'bob' ? 'dropped' : 'following')
   const options = watchOptions(anime, ['me', 'bob'], progress, ignored)
   assert.deepEqual(options.map((o) => [o.anime.title, o.state, o.next]),
     [['Ready', 'together', 5], ['Catchup', 'together', 3], ['Solo', 'some', 4], ['Waiting', 'waiting', 5], ['Newer', 'new', 1], ['Dropped', 'new', 1], ['New', 'new', 1]])
@@ -86,4 +86,23 @@ test('what to watch is sorted into together, some of us, waiting and not started
   // Alone, what one watches is for everyone here.
   assert.equal(watchOptions(anime, ['bob'], progress, ignored).find((o) => o.anime.title === 'Solo').state, 'together')
   assert.deepEqual(watchOptions(anime, [], progress, ignored), [])
+})
+
+test('who watches a show casually is not waited for and holds nobody back', () => {
+  const anime = [{ id: 1, title: 'Show', titleEnglish: '', episodes: 12, coverUrl: '', addedAt: 1 }]
+  const row = (username, watched) => ({ animeId: 1, username, watched, watchedAt: 1 })
+  const progress = [row('me', [[1, 6]]), row('bob', [[1, 6]]), row('cas', [[2, 2], [5, 5]])]
+  const mode = (_, username) => (username === 'cas' ? 'casual' : 'following')
+  // Away, cas is not waited for, though they have not seen episode 7.
+  const [away] = watchOptions(anime, ['me', 'bob'], progress, mode)
+  assert.deepEqual([away.state, away.next, away.waiting, away.group], ['together', 7, [], ['me', 'bob']])
+  // Here, the next episode is still the others': cas sees it with them.
+  const [here] = watchOptions(anime, ['me', 'bob', 'cas'], progress, mode)
+  assert.deepEqual([here.state, here.next, here.behind, here.casual], ['together', 7, [], ['cas']])
+  assert.deepEqual(here.needs, ['me', 'bob', 'cas'])
+  // Following it, cas would hold it up either way.
+  assert.equal(watchOptions(anime, ['me', 'bob'], progress, () => 'following')[0].state, 'waiting')
+  assert.equal(watchOptions(anime, ['me', 'bob', 'cas'], progress, () => 'following')[0].next, 1)
+  // Nobody who follows it is here: it is not theirs to watch on.
+  assert.deepEqual(watchOptions(anime, ['cas'], progress, mode), [])
 })

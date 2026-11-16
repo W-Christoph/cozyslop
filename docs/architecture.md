@@ -186,8 +186,9 @@ along.
 - `watched_episodes`: (user_id, anime_id, episode) primary key, source
   (`manual` | `auto`), watched_at: one row for each episode someone has
   watched. Deleted with the show.
-- `watch_ignored`: (user_id, anime_id) primary key: someone who has stopped
-  following a show. Deleted with the show.
+- `watch_follow`: (user_id, anime_id) primary key, mode (`casual` |
+  `dropped`): someone the others do not wait for, because they watch the
+  show along when they are there, or have stopped. Deleted with the show.
 
 ## Permissions
 
@@ -381,13 +382,16 @@ selected can watch now; "Progress" is a table of how many episodes each
 person has watched of each show, and which they skipped. A click on a number
 opens the episodes, to tick and untick: one's own, admins anyone's. A click
 on a show opens it (`ShowDialog`): everyone's progress with the next episode
-to tick, dropping the show, bringing it up to date from AniList and removing
+to tick and how they follow it, bringing it up to date from AniList and removing
 it. Admins remove any show; anyone removes one nobody has watched (added by
 mistake). "Add show" searches AniList.
 
 A show's group is who is in the middle of it: has watched some of it, has
-not finished it, and has not stopped following it (`watch_ignored`, set in
-the episodes window by the person or an admin). What a group can watch
+not finished it, and follows it. Who has dropped it or watches it casually
+(`watch_follow`, set in the show's and the episodes window by the person or
+an admin) is not in it: nobody waits for them, and they do not hold the
+next episode back. Someone casual who is selected still gets the episode
+ticked with the others, and does not turn "together" into "some". What a group can watch
 together is the first episode one of them has not watched. "Watch next"
 lists the shows the people selected are in the middle of, each with the
 first episode one of them has not seen, in sections (`together.ts`,

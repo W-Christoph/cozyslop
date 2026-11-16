@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks'
-import type { WatchAnime, WatchPerson, WatchRange } from '../../api'
+import type { WatchAnime, WatchMode, WatchPerson, WatchRange } from '../../api'
 import { Avatar } from '../ui/Avatar'
 import { Cover } from './AnimeSearch'
 import { ProgressCell } from './ProgressCell'
@@ -15,13 +15,13 @@ const statuses: { id: Status; label: string }[] = [
 // The shows as rows and the people as columns, with what they can watch
 // together last. Shows the group can go on with come first. A number opens
 // that person's episodes, a show's name the show.
-export function WatchTable({ anime, people, self, playing, watchedOf, ignoredOf, onOpen, onShow }: {
+export function WatchTable({ anime, people, self, playing, watchedOf, modeOf, onOpen, onShow }: {
   anime: WatchAnime[]
   people: WatchPerson[]
   self: string // my username
   playing?: number // the anime being watched right now: first, and marked
   watchedOf: (animeId: number, username: string) => readonly WatchRange[]
-  ignoredOf: (animeId: number, username: string) => boolean // not following it any more: left out of Together
+  modeOf: (animeId: number, username: string) => WatchMode // who does not follow it is left out of Together
   onOpen: (anime: WatchAnime, person: WatchPerson) => void // someone's episodes of a show
   onShow: (anime: WatchAnime) => void
 }) {
@@ -29,12 +29,12 @@ export function WatchTable({ anime, people, self, playing, watchedOf, ignoredOf,
   const [filter, setFilter] = useState('')
   const nickname = new Map(people.map((p) => [p.username, p.username === self ? 'You' : p.nickname]))
   // Together is about those in the middle of a show: who has watched some
-  // of it, and has not finished it or stopped following it. With nobody in
+  // of it, has not finished it, and follows it (not casually). With nobody in
   // the middle of it, it is the first episode of those who have yet to
   // start; done once all who started it have finished or dropped it.
   const rows = anime.map((a) => {
     const open = people.map((p) => p.username).filter((u) => !finished(watchedOf(a.id, u), a.episodes))
-    const following = open.filter((u) => watchedOf(a.id, u).length > 0 && !ignoredOf(a.id, u))
+    const following = open.filter((u) => watchedOf(a.id, u).length > 0 && modeOf(a.id, u) === 'following')
     const started = people.some((p) => watchedOf(a.id, p.username).length > 0)
     return {
       anime: a, going: following.length > 0, started,
@@ -93,7 +93,7 @@ export function WatchTable({ anime, people, self, playing, watchedOf, ignoredOf,
               </th>
               {people.map((p) => (
                 <td key={p.username} class={styles.cell}>
-                  <ProgressCell watched={watchedOf(a.id, p.username)} episodes={a.episodes} ignored={ignoredOf(a.id, p.username)}
+                  <ProgressCell watched={watchedOf(a.id, p.username)} episodes={a.episodes} mode={modeOf(a.id, p.username)}
                     label={`${nickname.get(p.username)} in ${a.title}`} onOpen={() => onOpen(a, p)} />
                 </td>
               ))}

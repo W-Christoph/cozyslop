@@ -1,10 +1,10 @@
 import { useRef, useState } from 'preact/hooks'
-import type { WatchAnime, WatchPerson, WatchProgress } from '../../api'
+import type { WatchAnime, WatchMode, WatchPerson, WatchProgress } from '../../api'
 import { Button } from '../Button'
 import { Avatar } from '../ui/Avatar'
 import { Icon, type IconName } from '../ui/Icon'
 import { Cover } from './AnimeSearch'
-import { finished, firstMissing } from './episodes'
+import { countEpisodes, finished, firstMissing } from './episodes'
 import { watchOptions, watchStates, type WatchOption, type WatchState } from './together'
 import styles from './WatchNext.module.css'
 
@@ -23,7 +23,7 @@ const few: Partial<Record<WatchState, number>> = { some: 4, new: 6 }
 // is away and shows yet to start (together.ts). A line per show says who has
 // seen how much of it and where that leaves me; it opens the show, a person
 // on it their episodes, and its buttons tick the next episode.
-export function WatchNext({ anime, here, people, progress, self, admin, playing, layout, heading: Heading = 'h2', ignoredOf, onShow, onOpen, onMark }: {
+export function WatchNext({ anime, here, people, progress, self, admin, playing, layout, heading: Heading = 'h2', modeOf, onShow, onOpen, onMark }: {
   anime: WatchAnime[]
   here: WatchPerson[]
   people: WatchPerson[] // everyone, for those who are not here
@@ -33,7 +33,7 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
   playing?: number // the anime being watched right now: first in its section, and marked
   layout?: unknown // a change sorts the shows into their sections again
   heading?: 'h2' | 'h3' // the sections' headings: h3 in a window, whose title is h2
-  ignoredOf: (animeId: number, username: string) => boolean
+  modeOf: (animeId: number, username: string) => WatchMode
   onShow: (anime: WatchAnime) => void
   onOpen: (anime: WatchAnime, person: WatchPerson) => void // someone's episodes
   onMark: (anime: WatchAnime, episode: number, usernames: string[]) => void
@@ -45,7 +45,7 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
   const watchedOf = (animeId: number, username: string) => watched.get(`${animeId}:${username}`) ?? []
   // The last episode someone has seen without leaving one out before it.
   const seen = (animeId: number, username: string) => firstMissing(watchedOf(animeId, username)) - 1
-  const options = watchOptions(anime, here.map((p) => p.username), progress, ignoredOf)
+  const options = watchOptions(anime, here.map((p) => p.username), progress, modeOf)
   // A show stays where it stood when these people were picked, or the list
   // was last laid out (layout): ticking an episode on its line changes what
   // the line says, and moves nothing under the pointer. Dropping a show, or
@@ -84,7 +84,7 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
     if (o.state === 'waiting') return [`Waiting for ${list(o.waiting.map(name))}`, behind].filter(Boolean).join(' · ')
     if (behind) return behind
     if (watching.length === 1) return watching[0] === self ? 'Only you watch this' : `Only ${name(watching[0])} watches this`
-    return watching.length === here.length ? `Ready for all ${here.length} of you` : `Ready for ${list(watching.map(inText))}`
+    return watching.length + o.casual.length === here.length ? `Ready for all ${here.length} of you` : `Ready for ${list(watching.map(inText))}`
   }
 
   // Whose next episode the column shows: everyone's, or the one person's
@@ -132,17 +132,19 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
     const a = o.anime.id
     const behind = new Map(o.behind.map((b) => [b.username, b.by]))
     const done = here.map((p) => p.username).filter((u) => finished(watchedOf(a, u), o.anime.episodes))
-    const dropped = here.map((p) => p.username).filter((u) => ignoredOf(a, u) && !done.includes(u))
+    const dropped = here.map((p) => p.username).filter((u) => modeOf(a, u) === 'dropped' && !done.includes(u))
     const me = (x: string, y: string) => Number(y === self) - Number(x === self)
     // Those here who are level share a summary: their faces and the episode
     // they have all seen up to. Everyone who differs gets a chip: behind
-    // (amber, "1 behind"), finished (green, a tick). Those not here follow,
+    // (amber, "1 behind"), finished (green, a tick), watching casually (muted,
+    // how many they have seen: nobody waits for them). Those not here follow,
     // dashed: first who the show waits on (a clock), then who it does not.
     const following = o.group.filter((u) => present.has(u))
     const level = following.filter((u) => !behind.has(u)).sort(me)
     const chips = [
       ...following.filter((u) => behind.has(u)).sort(me).map((u) => ({ u, kind: 'behind' })),
       ...done.sort(me).map((u) => ({ u, kind: 'done' })),
+      ...[...o.casual].sort(me).map((u) => ({ u, kind: 'casual' })),
     ]
     const waitingOn = o.waiting.map((u) => ({ u, kind: 'blocking' }))
     const away = o.group.filter((u) => !present.has(u) && !o.waiting.includes(u)).map((u) => ({ u, kind: 'away' }))
@@ -150,9 +152,11 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
       const p = person.get(u)
       const by = behind.get(u)
       // What the chip shows, then what it means: the visible text starts the name.
-      const shown = kind === 'done' ? `${name(u)} finished` : `${name(u)} up to ep ${seen(a, u)}${by ? `, ${by} behind` : ''}`
+      const some = countEpisodes(watchedOf(a, u))
+      const shown = kind === 'done' ? `${name(u)} finished` : kind === 'casual' ? `${name(u)} casually${some ? `, seen ${some}` : ''}` : `${name(u)} up to ep ${seen(a, u)}${by ? `, ${by} behind` : ''}`
       const about = kind === 'blocking' ? 'not here and has not seen the next episode: the others wait'
-        : kind === 'away' ? 'not here; has seen the next episode, so nobody waits' : ''
+        : kind === 'away' ? 'not here; has seen the next episode, so nobody waits'
+        : kind === 'casual' ? 'watches along; nobody waits' : ''
       const label = `${shown}${about ? `, ${about}` : ''}. Opens ${u === self ? 'your' : 'their'} episodes`
       return (
         <button type="button" class={`${styles.person} ${styles[kind]}`} title={label} aria-label={label}
@@ -161,6 +165,7 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
           {face(u, 18)}
           <span class={styles.personName}>{name(u)}</span>
           {kind === 'done' ? <span class={styles.at}><Icon name="check" size={13} />finished</span>
+            : kind === 'casual' ? <span class={styles.at}>casually{some ? ` · seen ${some}` : ''}</span>
             : <span class={styles.at}>up to ep {seen(a, u)}{by ? <span class={styles.by}>{by} behind</span> : null}</span>}
         </button>
       )
@@ -193,10 +198,6 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
     const moved = o.state !== place(o).state
     const now = o.state === 'together' || o.state === 'some'
     const length = o.anime.episodes !== null ? `of ${o.anime.episodes}` : 'airing'
-    const notes = [
-      o.unstarted.length > 0 && `Not started: ${list(o.unstarted.map(name))}`,
-      dropped.length > 0 && `Dropped: ${list(dropped.map(name))}`,
-    ].filter(Boolean)
     return (
       <li key={a} class={`${styles.item} ${styles[o.state]} ${a === playing ? styles.playing : ''}`}>
         {/* The title opens the show too: the cover is for the mouse only. */}
@@ -223,7 +224,7 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
             {chips.map((c) => <li key={c.u}>{chip(c)}</li>)}
             {absentGroup('Waiting on', waitingOn)}
             {absentGroup('Away', away)}
-            {notes.length > 0 && <li class={styles.notes}>{notes.join(' · ')}</li>}
+            {dropped.length > 0 && <li class={styles.notes}>Dropped: {list(dropped.map(name))}</li>}
           </ul>
         </div>
         <div class={styles.foot}>

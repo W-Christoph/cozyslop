@@ -64,7 +64,7 @@ func (s *Server) getWatchlog(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, r, err)
 		return
 	}
-	ignored, err := s.watchlog.ListIgnored(ctx)
+	follows, err := s.watchlog.ListFollows(ctx)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
@@ -100,14 +100,14 @@ func (s *Server) getWatchlog(w http.ResponseWriter, r *http.Request) {
 		a, b := keptProgress[i], keptProgress[j]
 		return a.AnimeID < b.AnimeID || a.AnimeID == b.AnimeID && a.Username < b.Username
 	})
-	keptIgnored := ignored[:0]
-	for _, i := range ignored {
-		if i.Username = names[i.UserID]; i.Username != "" {
-			keptIgnored = append(keptIgnored, i)
+	keptFollows := follows[:0]
+	for _, f := range follows {
+		if f.Username = names[f.UserID]; f.Username != "" {
+			keptFollows = append(keptFollows, f)
 		}
 	}
-	sort.SliceStable(keptIgnored, func(i, j int) bool {
-		a, b := keptIgnored[i], keptIgnored[j]
+	sort.SliceStable(keptFollows, func(i, j int) bool {
+		a, b := keptFollows[i], keptFollows[j]
 		return a.AnimeID < b.AnimeID || a.AnimeID == b.AnimeID && a.Username < b.Username
 	})
 	people := []person{}
@@ -116,7 +116,7 @@ func (s *Server) getWatchlog(w http.ResponseWriter, r *http.Request) {
 			people = append(people, person{u.Username, u.Nickname, u.NameColor, avatarURL(u)})
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"anime": anime, "people": people, "progress": keptProgress, "ignored": keptIgnored})
+	writeJSON(w, http.StatusOK, map[string]any{"anime": anime, "people": people, "progress": keptProgress, "follows": keptFollows})
 }
 
 // searchAnime asks AniList for shows to add.
@@ -292,18 +292,22 @@ func (s *Server) setProgress(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, store.Progress{Username: target.Username, AnimeID: a.ID, Watched: watched})
 }
 
-// setIgnored says that someone has stopped following a show, or follows it
-// again: yourself, or anyone as an admin. The others then do not wait for
-// them; what they watched stays.
-func (s *Server) setIgnored(w http.ResponseWriter, r *http.Request) {
+// setFollow says how someone follows a show: yourself, or anyone as an
+// admin. The others wait for who is following; not for who watches along
+// casually or has dropped it. What they watched stays.
+func (s *Server) setFollow(w http.ResponseWriter, r *http.Request) {
 	u := s.watchlogUser(w, r)
 	if u == nil {
 		return
 	}
 	var req struct {
-		Ignored bool `json:"ignored"`
+		Mode string `json:"mode"`
 	}
 	if !readJSON(w, r, &req) {
+		return
+	}
+	if req.Mode != store.FollowFollowing && req.Mode != store.FollowCasual && req.Mode != store.FollowDropped {
+		writeError(w, http.StatusBadRequest, "The mode is following, casual or dropped.")
 		return
 	}
 	target := u
@@ -317,7 +321,7 @@ func (s *Server) setIgnored(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	id, _ := strconv.ParseInt(r.PathValue("anime"), 10, 64)
-	err := s.watchlog.SetIgnored(r.Context(), target.ID, id, req.Ignored)
+	err := s.watchlog.SetFollow(r.Context(), target.ID, id, req.Mode)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "That show is not on the watchlog.")
 		return

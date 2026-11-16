@@ -99,9 +99,12 @@ export interface WatchProgress {
 }
 
 // Someone who is not following a show any more: the others do not wait.
-export interface WatchIgnored { username: string; animeId: number }
+// following: the others wait for them (the usual way, and not listed).
+// casual: they watch along when they are there. dropped: they have stopped.
+export type WatchMode = 'following' | 'casual' | 'dropped'
+export interface WatchFollow { username: string; animeId: number; mode: WatchMode }
 
-export interface Watchlog { anime: WatchAnime[]; people: WatchPerson[]; progress: WatchProgress[]; ignored: WatchIgnored[] }
+export interface Watchlog { anime: WatchAnime[]; people: WatchPerson[]; progress: WatchProgress[]; follows: WatchFollow[] }
 
 export const watchlog = {
   get: () => api.get<Watchlog>('/api/watchlog'),
@@ -112,8 +115,8 @@ export const watchlog = {
   // watched now.
   setWatched: (animeId: number, username: string, from: number, to: number, watched: boolean) =>
     api.put<WatchProgress>(`/api/watchlog/progress/${animeId}/${encodeURIComponent(username)}`, { from, to, watched }),
-  setIgnored: (animeId: number, username: string, ignored: boolean) =>
-    api.put<void>(`/api/watchlog/ignored/${animeId}/${encodeURIComponent(username)}`, { ignored }),
+  setFollow: (animeId: number, username: string, mode: WatchMode) =>
+    api.put<void>(`/api/watchlog/follow/${animeId}/${encodeURIComponent(username)}`, { mode }),
 }
 
 export interface RoomInfo {

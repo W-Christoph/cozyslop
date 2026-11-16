@@ -99,4 +99,7 @@ button.person:hover { background: var(--bg-hover); }
 .away .face:hover img { opacity: 1; }
 .away .personName, .away .at { color: var(--text-muted); font-weight: 400; }
 .away:hover .personName, .away:hover .at { color: var(--text-secondary); }
+/* Watching casually: there, but nobody waits for them. */
+.casual .personName, .casual .at { color: var(--text-muted); font-weight: 400; }
+.casual:hover .personName, .casual:hover .at { color: var(--text-secondary); }
 .notes { color: var(--text-muted); font-size: var(--text-xs); }

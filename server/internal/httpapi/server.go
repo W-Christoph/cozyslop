@@ -199,7 +199,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/watchlog/anime", s.addAnime)
 	mux.HandleFunc("DELETE /api/watchlog/anime/{id}", s.deleteAnime)
 	mux.HandleFunc("PUT /api/watchlog/progress/{anime}/{username}", s.setProgress)
-	mux.HandleFunc("PUT /api/watchlog/ignored/{anime}/{username}", s.setIgnored)
+	mux.HandleFunc("PUT /api/watchlog/follow/{anime}/{username}", s.setFollow)
 
 	mux.HandleFunc("GET /api/rooms", s.listRooms)
 	mux.HandleFunc("GET /api/rooms/{room}/ws", s.roomSocket)

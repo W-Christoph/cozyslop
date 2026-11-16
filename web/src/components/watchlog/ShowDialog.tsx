@@ -1,30 +1,32 @@
 import { useRef } from 'preact/hooks'
-import type { WatchAnime, WatchPerson, WatchRange } from '../../api'
+import type { WatchAnime, WatchMode, WatchPerson, WatchRange } from '../../api'
 import { Button, ButtonLink } from '../Button'
 import { Modal } from '../Modal'
 import { Avatar } from '../ui/Avatar'
 import { Badge } from '../ui/Badge'
 import { Cover } from './AnimeSearch'
 import { EpisodeBar } from './EpisodeBar'
+import { FollowSelect } from './FollowSelect'
 import { countEpisodes, finished, firstMissing } from './episodes'
 import styles from './ShowDialog.module.css'
 
 // One show with everything to do about it: who has watched how far, with
-// the next episode to tick and dropping it for each person one may change;
+// the next episode to tick and how they follow it for each person one may
+// change;
 // and the show itself, to bring up to date from AniList or take off the list.
-export function ShowDialog({ anime, people, self, playing, busy, watchedOf, ignoredOf, mayChange, mayRemove, onEpisodes, onSet, onIgnore, onRefresh, onRemove, onClose }: {
+export function ShowDialog({ anime, people, self, playing, busy, watchedOf, modeOf, mayChange, mayRemove, onEpisodes, onSet, onFollow, onRefresh, onRemove, onClose }: {
   anime: WatchAnime
   people: WatchPerson[] // me, those selected and everyone who has watched some of it
   self: string // my username
   playing: boolean // the room is watching it
   busy: boolean // AniList is being asked
   watchedOf: (username: string) => readonly WatchRange[]
-  ignoredOf: (username: string) => boolean
+  modeOf: (username: string) => WatchMode
   mayChange: (username: string) => boolean
   mayRemove: boolean
   onEpisodes: (person: WatchPerson) => void
   onSet: (username: string, episode: number) => void // ticks one episode
-  onIgnore: (username: string, ignored: boolean) => void
+  onFollow: (username: string, mode: WatchMode) => void
   onRefresh: () => void
   onRemove: () => void
   onClose: () => void
@@ -52,20 +54,17 @@ export function ShowDialog({ anime, people, self, playing, busy, watchedOf, igno
       <ul class={styles.people}>
         {people.map((p) => {
           const watched = watchedOf(p.username), count = countEpisodes(watched), next = firstMissing(watched)
-          const done = finished(watched, anime.episodes), dropped = ignoredOf(p.username), editable = mayChange(p.username)
+          const done = finished(watched, anime.episodes), mode = modeOf(p.username), dropped = mode === 'dropped', editable = mayChange(p.username)
           const me = p.username === self
           return (
-            <li key={p.username} class={`${styles.person} ${dropped ? styles.dropped : ''}`}>
+            <li key={p.username} class={`${styles.person} ${dropped && !done ? styles.dropped : ''}`}>
               <Avatar src={p.avatarUrl} size={28} />
               <div class={styles.progress}>
                 <span class={styles.name}>
                   <span style={{ color: p.nameColor }}>{me ? 'You' : p.nickname}</span>
-                  {dropped ? <Badge title={`The others do not wait for ${me ? 'you' : p.nickname}`}>{count === 0 ? 'Not interested' : 'Dropped'}</Badge> : done ? <Badge tone="success" icon="check">Finished</Badge> : null}
+                  {done ? <Badge tone="success" icon="check">Finished</Badge> : !editable && mode !== 'following' ? <Badge title={`The others do not wait for ${p.nickname}`}>{mode === 'casual' ? 'Casual' : count === 0 ? 'Not interested' : 'Dropped'}</Badge> : null}
                   {/* At the line's end, so that its changing label moves nothing. */}
-                  {editable && !done && (
-                    <button type="button" class={styles.drop} title={dropped ? 'The others wait again before they watch on' : 'The others stop waiting. What was watched stays.'}
-                      onClick={() => onIgnore(p.username, !dropped)}>{dropped ? 'Pick up again' : count === 0 ? 'Not interested' : 'Drop'}</button>
-                  )}
+                  {editable && !done && <span class={styles.drop}><FollowSelect mode={mode} who={me ? 'you' : p.nickname} started={count > 0} onChange={(m) => onFollow(p.username, m)} /></span>}
                 </span>
                 <EpisodeBar watched={watched} episodes={anime.episodes} />
                 <span class={styles.count}>{count === 0 ? 'Not started' : `${count === next - 1 ? '' : `Up to ep ${next - 1} · `}${count}${anime.episodes !== null ? ` / ${anime.episodes}` : ''} watched`}</span>

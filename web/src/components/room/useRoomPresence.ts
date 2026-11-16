@@ -52,11 +52,13 @@ export function useRoomPresence() {
       if (value !== sentMuted) { sentMuted = value; store.setMuted(listeningOff, paused, listening) }
     })
     // For the watchlog, and told to nobody else: whether the stream runs
-    // here, with its picture. Being in the room with it paused is not
-    // watching; nor is anything in a browser that opted out.
+    // here, with its picture and its sound. Being in the room with it paused
+    // or muted is not watching; nor is anything in a browser that opted out.
+    // Said whether or not this browser shares that it is muted.
     let sentWatching: boolean | null = null
     const stopWatching = effect(() => {
-      const watching = preferences.value.trackWatching && store.video.value === 'connected' && !store.paused.value && !store.audioOnly.value
+      const { trackWatching, muted, volume } = preferences.value
+      const watching = trackWatching && !muted && volume > 0 && store.video.value === 'connected' && !store.paused.value && !store.audioOnly.value
       if (store.server.value !== 'connected' || !store.selfKey.value) { sentWatching = null; return }
       if (watching !== sentWatching) { sentWatching = watching; store.setWatching(watching) }
     })

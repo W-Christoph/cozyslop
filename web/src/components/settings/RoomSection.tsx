@@ -45,7 +45,7 @@ export function RoomSection({ room }: { room: RoomStore | null }) {
     </Section>
     {serverSettings.value.watchlog && me.value && (
       <Section title="Watchlog" description="Rooms notice the anime episodes played on their desktop and suggest marking them watched for the people who saw them.">
-        <ToggleRow title="Note what I watch" description="Counts you in while the stream is running here, with its picture. Off: rooms never suggest an episode for you in this browser; you can still tick episodes yourself."
+        <ToggleRow title="Note what I watch" description="Counts you in while the stream is running here, with its picture and its sound on. Off: rooms never suggest an episode for you in this browser; you can still tick episodes yourself."
           checked={prefs.trackWatching} onChange={(trackWatching) => updatePreferences({ trackWatching })} />
       </Section>
     )}

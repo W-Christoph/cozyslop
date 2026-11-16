@@ -131,7 +131,7 @@ export type ClientMessage =
   | { type: 'typing'; typing: boolean }
   | { type: 'activity'; active: boolean }
   | { type: 'muted'; muted: boolean; paused: boolean; listening: boolean }
-  | { type: 'watching'; watching: boolean } // for the watchlog: the stream runs here, with its picture
+  | { type: 'watching'; watching: boolean } // for the watchlog: the stream runs here, with its picture and sound
   | { type: 'whisper'; to: string; body: string }
   | { type: 'remote_reset' }
   | { type: 'restart' }

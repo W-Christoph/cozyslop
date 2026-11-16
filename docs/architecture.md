@@ -443,9 +443,10 @@ the show that plays comes first. Rooms also notice episodes (`hub/watch.go`):
 - The episode is split into 10-second parts. At each answer while VLC plays,
   every account with a tab where the stream runs is noted as having seen
   the current part. The tab says so itself (`watching`, told to nobody
-  else): the stream is connected, not paused and has its picture, and the
-  browser has not opted out (the setting "Note what I watch", kept in the
-  browser). Being in the room with the stream paused is not watching. A
+  else): the stream is connected, not paused, has its picture and its sound
+  (not muted, the volume not at zero), and the browser has not opted out
+  (the setting "Note what I watch", kept in the browser). Being in the
+  room with the stream paused or muted is not watching. A
   tab hidden for five minutes does not count either. Anonymous people are
   not followed.
 - The episode ends when VLC stops, plays another file, or the helper does not

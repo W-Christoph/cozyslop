@@ -313,7 +313,7 @@ suggestion is `{"id","animeId","title","coverUrl","episodes","episode","file","a
 that they said themselves whether they watched it, `applyAt`
 when it is saved by itself (unix ms; `0` while `animeId` is `0` or `episode`
 is past the show's `episodes`, and `watch_save` then fails). A tab sends `{"type":"watching","watching":true}` while the stream runs in it
-with its picture (not paused, not sound only), and `false` when it stops:
+with its picture and its sound (not paused, not sound only, not muted), and `false` when it stops:
 only such tabs count as having seen an episode. Nobody else is told. Accounts in
 the room send `{"type":"watch_check","id":…,"key":"<identity key>","checked":true}`,
 `{"type":"watch_episode","id":…,"episode":6}`,

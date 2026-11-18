@@ -34,7 +34,7 @@ func (s *Store) SessionUser(ctx context.Context, tokenHash []byte) (*User, bool,
 		 WHERE s.token_hash = ? AND s.expires_at > ? AND u.disabled = 0`, tokenHash, now)
 	var u User
 	err := row.Scan(&lastSeen, &u.ID, &u.Username, &u.PasswordHash, &u.Nickname, &u.NameColor,
-		&u.Avatar, &u.Admin, &u.Verified, &u.Disabled, &u.CreatedAt)
+		&u.Avatar, &u.Admin, &u.Verified, &u.Disabled, &u.CreatedAt, &u.WatchlogOff)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, ErrNotFound
 	}

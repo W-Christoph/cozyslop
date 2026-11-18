@@ -126,19 +126,45 @@ func lastProposal(t *testing.T, rec *recording) *WatchProposal {
 	return rec.wait(t, "watch").(watchMsg).Proposal
 }
 
+// unconsumed is what rec was sent of a type and not yet waited for.
+func unconsumed(rec *recording, typ string) []any {
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	var out []any
+	for i, m := range rec.messages {
+		if !rec.consumed[i] && messageType(m) == typ {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// newestProposal is the last of the suggestions rec was sent, passing over
+// those before.
+func newestProposal(t *testing.T, rec *recording) *WatchProposal {
+	t.Helper()
+	p := lastProposal(t, rec)
+	for len(unconsumed(rec, "watch")) > 0 {
+		p = lastProposal(t, rec)
+	}
+	return p
+}
+
 func TestWatchSuggestsAndSaves(t *testing.T) {
 	f, d := newWatchFixture(t)
 	alice, a := f.join(f.user("alice"))
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watching", Watching: true})
-	bob, _ := f.join(f.user("bob"))
+	bob, b := f.join(f.user("bob"))
 	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watching", Watching: true})
+	carol, c := f.join(f.user("carol"))
 	guest, g := f.join(anon("guest"))
-	admin, _ := f.join(f.flags(f.user("root"), true, false))
+	admin, ad := f.join(f.flags(f.user("root"), true, false))
 
-	// Bob pauses the stream for the second half; the anonymous guest is not
-	// tracked.
+	// Bob pauses the stream for the second half, carol sees only its start;
+	// the anonymous guest is not tracked.
 	const file = "[SubsPlease] Sousou no Frieren - 05 (1080p) [ABCD1234].mkv"
 	f.play(d, file, func(s int) {
+		f.r.Handle(f.ctx, carol, ClientMsg{Type: "watching", Watching: s < 10})
 		if s == 50 {
 			f.r.Handle(f.ctx, bob, ClientMsg{Type: "watching", Watching: false})
 		}
@@ -146,41 +172,50 @@ func TestWatchSuggestsAndSaves(t *testing.T) {
 	playing := a.wait(t, "playing").(playingMsg).Playing
 	requireEqual(t, *playing, WatchPlaying{AnimeID: 1, Title: "Sousou no Frieren", Episode: 5})
 	requireEqual(t, a.wait(t, "playing").(playingMsg).Playing == nil, true)
+	requireEqual(t, g.wait(t, "playing").(playingMsg).Playing != nil, true)
 
+	// Each is asked about themselves alone: yes unless they say no from
+	// 60% on, no unless they say yes from 20%. Who saw less is not asked,
+	// and nobody, admins too, sees the others.
 	p := lastProposal(t, a)
 	requireEqual(t, p.AnimeID, int64(1))
 	requireEqual(t, p.Episode, 5)
 	requireEqual(t, *p.Episodes, 28)
-	requireEqual(t, len(p.Viewers), 2)
+	requireEqual(t, len(p.Viewers), 1)
 	requireEqual(t, p.Viewers[0], WatchViewer{Key: alice.m.key, Nickname: "alice nick", Coverage: 1, Checked: true})
-	requireEqual(t, p.Viewers[1], WatchViewer{Key: bob.m.key, Nickname: "bob nick", Coverage: 0.5, Checked: false})
+	pb := lastProposal(t, b)
+	requireEqual(t, len(pb.Viewers), 1)
+	requireEqual(t, pb.Viewers[0], WatchViewer{Key: bob.m.key, Nickname: "bob nick", Coverage: 0.5, Checked: false})
+	requireEqual(t, lastProposal(t, c) == nil, true)
+	requireEqual(t, lastProposal(t, g) == nil, true)
+	requireEqual(t, lastProposal(t, ad) == nil, true)
 	if p.ApplyAt < time.Now().Add(watchSaveAfter-time.Minute).UnixMilli() {
 		t.Fatalf("applyAt %d", p.ApplyAt)
 	}
 
-	// Only accounts may change it.
-	f.r.Handle(f.ctx, guest, ClientMsg{Type: "watch_check", ID: p.ID, Key: bob.m.key, Checked: true})
-	requireEqual(t, g.wait(t, "error").(errorMsg).Message, "You are not allowed to do that.")
+	// Only those asked may change it.
+	for _, other := range []struct {
+		c   *Client
+		rec *recording
+	}{{guest, g}, {carol, c}, {admin, ad}} {
+		other.c.m.rights.Admin = other.c == admin // an admin is no exception
+		f.r.Handle(f.ctx, other.c, ClientMsg{Type: "watch_answer", ID: p.ID, Checked: true})
+		requireEqual(t, other.rec.wait(t, "error").(errorMsg).Message, "You are not asked about that episode.")
+		f.r.Handle(f.ctx, other.c, ClientMsg{Type: "watch_episode", ID: p.ID, Episode: 6})
+		requireEqual(t, other.rec.wait(t, "error").(errorMsg).Message, "You are not asked about that episode.")
+	}
+	f.r.Handle(f.ctx, admin, ClientMsg{Type: "watch_save", ID: p.ID})
+	requireEqual(t, ad.wait(t, "error").(errorMsg).Message, "Unknown message type.")
 
-	// Only bob, or an admin, says that bob watched it.
-	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_check", ID: p.ID, Key: bob.m.key, Checked: true})
-	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "You are not allowed to do that.")
-	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watch_check", ID: p.ID, Key: bob.m.key, Checked: true})
-	requireEqual(t, lastProposal(t, a).Viewers[1].Checked, true)
-	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_episode", ID: p.ID, Episode: 29})
-	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "The show has no such episode.")
-	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_episode", ID: p.ID, Episode: 6})
+	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watch_episode", ID: p.ID, Episode: 29})
+	requireEqual(t, b.wait(t, "error").(errorMsg).Message, "The show has no such episode.")
+	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watch_episode", ID: p.ID, Episode: 6})
 	requireEqual(t, lastProposal(t, a).Episode, 6)
-	// A show without episode 6: not saved, by itself or by hand.
+	// A show without episode 6: not saved by itself, and nobody can say yes.
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_anime", ID: p.ID, AnimeID: 4})
 	requireEqual(t, lastProposal(t, a).ApplyAt, int64(0))
-	f.r.Handle(f.ctx, admin, ClientMsg{Type: "watch_save", ID: p.ID})
-	requireEqual(t, f.progress()["alice"], "")
-	// Everyone's answer does not save it either; it stays open.
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_answer", ID: p.ID, Checked: true})
-	requireEqual(t, lastProposal(t, a).Viewers[0].Answered, true)
-	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watch_answer", ID: p.ID, Checked: true})
-	requireEqual(t, lastProposal(t, a).Viewers[1].Answered, true)
+	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "Pick the show first.")
 	// Another show, from AniList.
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_anime", ID: p.ID, AnimeID: 2})
 	changed := lastProposal(t, a)
@@ -190,21 +225,21 @@ func TestWatchSuggestsAndSaves(t *testing.T) {
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_anime", ID: p.ID, AnimeID: 3})
 	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "AniList has no such anime.")
 
-	// Settling it for everyone is an admin's.
-	for _, kind := range []string{"watch_save", "watch_dismiss"} {
-		f.r.Handle(f.ctx, alice, ClientMsg{Type: kind, ID: p.ID})
-		requireEqual(t, a.wait(t, "error").(errorMsg).Message, "You are not allowed to do that.")
-	}
-	f.r.Handle(f.ctx, admin, ClientMsg{Type: "watch_save", ID: p.ID})
+	// Bob says yes, alice no: with everyone's answer it is saved.
+	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watch_answer", ID: p.ID, Checked: true})
+	answered := newestProposal(t, b).Viewers[0]
+	requireEqual(t, answered.Checked && answered.Answered, true)
+	requireEqual(t, lastProposal(t, a).Viewers[0].Answered, false)
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_answer", ID: p.ID, Checked: false})
 	requireEqual(t, lastProposal(t, a) == nil, true)
-	requireEqual(t, f.progress()["alice"], "6")
+	requireEqual(t, f.progress()["alice"], "")
 	requireEqual(t, f.progress()["bob"], "6")
-	f.r.Handle(f.ctx, admin, ClientMsg{Type: "watch_save", ID: p.ID})
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_answer", ID: p.ID, Checked: true})
 	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "That suggestion is gone.")
 
 	// The file's title is now known as the show picked: AniList is not
-	// asked again. Saved by itself after the wait, never lowering progress.
+	// asked again. Saved by itself after the wait, as suggested, never
+	// lowering progress.
 	searches := d.searched()
 	watchSaveAfter = 50 * time.Millisecond
 	t.Cleanup(func() { watchSaveAfter = 2 * time.Minute })
@@ -213,12 +248,58 @@ func TestWatchSuggestsAndSaves(t *testing.T) {
 	requireEqual(t, d.searched(), searches)
 	p = lastProposal(t, a)
 	requireEqual(t, p.AnimeID, int64(2))
-	requireEqual(t, len(p.Viewers), 2)
 	requireEqual(t, lastProposal(t, a) == nil, true) // being saved
-	for i := 0; i < 100 && f.progress()["alice"] == "6"; i++ {
+	for i := 0; i < 100 && f.progress()["alice"] == ""; i++ {
 		time.Sleep(10 * time.Millisecond)
 	}
-	requireEqual(t, f.progress()["alice"], "3 6")
+	requireEqual(t, f.progress()["alice"], "3")
+	requireEqual(t, f.progress()["bob"], "3 6")
+}
+
+// An account that left the watchlog is not followed, not told what plays
+// and not asked; leaving takes it out of what is open.
+func TestWatchLeavesOutWhoLeft(t *testing.T) {
+	f, d := newWatchFixture(t)
+	alice, a := f.join(f.user("alice"))
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watching", Watching: true})
+	bob, b := f.join(f.user("bob"))
+	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watching", Watching: true})
+	leave := func(c *Client, off bool) {
+		requireOK(t, f.s.SetWatchlogOff(f.ctx, c.m.user.ID, off))
+		f.h.UserChanged(f.ctx, c.m.user.ID)
+	}
+
+	leave(bob, true)
+	requireEqual(t, b.wait(t, "user_updated").(userMsg).User.WatchlogOff, true)
+	f.play(d, "Show - 01.mkv", nil)
+	requireEqual(t, a.count("playing"), 2)
+	requireEqual(t, b.count("playing"), 3) // the one for leaving, and nothing twice
+	for range 3 {
+		requireEqual(t, b.wait(t, "playing").(playingMsg).Playing == nil, true)
+	}
+	requireEqual(t, len(lastProposal(t, a).Viewers), 1)
+	requireEqual(t, newestProposal(t, b) == nil, true)
+	f.r.mu.Lock()
+	requireEqual(t, f.r.proposal.viewer(bob.m.key), -1)
+	f.r.mu.Unlock()
+	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watch_link", AnimeID: 1})
+	requireEqual(t, b.wait(t, "error").(errorMsg).Message, "You are not allowed to do that.")
+
+	// Back in, and asked; leaving again, the suggestion goes with the last
+	// one asked.
+	leave(bob, false)
+	requireEqual(t, b.wait(t, "playing").(playingMsg).Playing == nil, true)
+	f.play(d, "Show - 02.mkv", nil)
+	requireEqual(t, b.wait(t, "playing").(playingMsg).Playing.Episode, 2)
+	requireEqual(t, len(newestProposal(t, b).Viewers), 1)
+	leave(alice, true)
+	requireEqual(t, newestProposal(t, a) == nil, true)
+	requireEqual(t, len(unconsumed(b, "watch")), 0) // nothing changes for bob
+	leave(bob, true)
+	requireEqual(t, newestProposal(t, b) == nil, true)
+	f.r.mu.Lock()
+	requireEqual(t, f.r.proposal == nil, true)
+	f.r.mu.Unlock()
 }
 
 func TestWatchIgnoresWhatNobodySaw(t *testing.T) {
@@ -231,8 +312,8 @@ func TestWatchIgnoresWhatNobodySaw(t *testing.T) {
 	requireEqual(t, a.count("playing"), 2)
 	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watching", Watching: true})
 
-	// Skipped through: a few parts only.
-	for _, s := range []int{0, 90} {
+	// Skipped through: one part only.
+	for _, s := range []int{0} {
 		d.set(playStatus{State: "playing", Time: s, Length: 100, File: "Show - 01.mkv"})
 		f.r.checkPlayback(f.ctx)
 	}

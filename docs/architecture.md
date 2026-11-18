@@ -130,7 +130,7 @@ from both existing users and numeric account identity keys retained in chat.
 
 - `users`: id, username (lowercase, unique), password_hash, nickname,
   name_color, avatar (file name or empty), admin, verified, disabled,
-  created_at.
+  created_at, watchlog_off (left the watchlog, below).
 - `sessions`: token_hash, user_id, created_at, expires_at, last_seen_at.
 - `settings`: key/value. `message` (front page text), `registration`
   (`open` | `invite`).
@@ -173,8 +173,10 @@ The watchlog has its own file, `data/watchlog.db`, with its own migrations
 (`server/internal/store/migrations/watchlog`), so that the main database is
 the same with and without it: a server from before the watchlog runs on the
 main one as it is, and deleting `watchlog.db` (with the server stopped)
-empties the watchlog and nothing else. Only the setting `watchlog` is in the
-main database. Accounts are known here by their id; nothing checks it
+empties the watchlog and nothing else. Only the setting `watchlog` and who
+left the watchlog (`users.watchlog_off`) are in the main database: leaving
+is a choice about the account, and emptying the watchlog must not take
+anyone back in. Accounts are known here by their id; nothing checks it
 against `users`, so the server removes an account's rows when the account is
 deleted, and shows nothing of ids it does not know. Exports carry the file
 along.
@@ -444,20 +446,21 @@ the show that plays comes first. Rooms also notice episodes (`hub/watch.go`):
   every account with a tab where the stream runs is noted as having seen
   the current part. The tab says so itself (`watching`, told to nobody
   else): the stream is connected, not paused, has its picture and its sound
-  (not muted, the volume not at zero), and the browser has not opted out
-  (the setting "Note what I watch", kept in the browser). Being in the
+  (not muted, the volume not at zero). Being in the
   room with the stream paused or muted is not watching. A
   tab hidden for five minutes does not count either. Anonymous people are
   not followed.
 - The episode ends when VLC stops, plays another file, or the helper does not
   answer three times; in Firefox when the tab closes or plays another
   episode, or is paused in the last tenth of the video (a page keeps a
-  video that is over, paused). If anyone saw at least half of it, the room gets a
-  suggestion: everyone who saw at least 20% is listed, those with 60% ticked (skipping the opening and the ending must not cost the tick).
-  Accounts in the room may change the episode or pick another show.
-  Everyone listed is asked whether they watched it (`watch_answer`): their
-  answer closes it for them alone, and saves it once all have answered.
-  Admins see everyone to tick, and save or dismiss it for the room. Left
+  video that is over, paused). Everyone who saw at least 20% of it is asked
+  whether they watched it, and sees only their own share: from 60% the
+  answer is yes unless they say no (skipping the opening and the ending
+  must not cost the tick), below it no unless they say yes. Admins are
+  asked like everyone else and see nobody else's. Those asked may change
+  the episode or pick another show. An answer (`watch_answer`) closes it
+  for them alone, and saves it once all have answered; yes needs a show
+  with that episode. Left
   alone it is saved two minutes after the last correction,
   and adds that one episode for those ticked: nothing else they have
   watched changes. Without a recognised show it
@@ -466,6 +469,13 @@ the show that plays comes first. Rooms also notice episodes (`hub/watch.go`):
   for that show, so the next episode is matched without asking AniList.
 - A new suggestion saves the previous one first. Turning the setting off
   drops the open suggestion unsaved.
+- An account can leave the watchlog (Settings, Room, "Take part in the
+  watchlog"; `users.watchlog_off`). Then it is as if it were not there:
+  rooms do not note what it sees, do not tell it what plays or ask it
+  anything, and it has no watchlog button or page; the watchlog leaves it
+  out of its people and progress for everyone, also in a room's window.
+  Leaving drops its part of an open suggestion. What it watched is kept,
+  and is back when it takes part again.
 
 ## Changes from CozyCast
 

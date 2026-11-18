@@ -148,6 +148,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/password-reset/redeem", s.redeemPasswordReset)
 	mux.HandleFunc("GET /api/me", s.getMe)
 	mux.HandleFunc("PATCH /api/me", s.updateMe)
+	mux.HandleFunc("PUT /api/me/watchlog", s.setWatchlogTaking)
 	mux.HandleFunc("POST /api/me/password", s.changePassword)
 	mux.HandleFunc("POST /api/me/avatar", s.uploadAvatar)
 	mux.HandleFunc("DELETE /api/me/avatar", s.deleteAvatar)

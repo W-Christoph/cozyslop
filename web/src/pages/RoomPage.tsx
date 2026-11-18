@@ -74,7 +74,7 @@ export function RoomPage() {
   useAwayLine()
   const files = store.rights.value.upload
   // For accounts, while the server keeps one.
-  const watchlog = serverSettings.value.watchlog && store.self.value?.anonymous === false && me.value !== null
+  const watchlog = serverSettings.value.watchlog && store.self.value?.anonymous === false && me.value !== null && !me.value.watchlogOff
   const { audioOnly, chatWidth, chatViewOnPause, streamBuffer, tcpOnly } = preferences.value
   // Chat view: with no picture (paused, or sound only), chat takes the
   // stream's place. Not in fullscreen, which is for watching.

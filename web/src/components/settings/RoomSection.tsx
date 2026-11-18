@@ -1,6 +1,9 @@
+import { useState } from 'preact/hooks'
+import { api, type Me } from '../../api'
 import { me, preferences, serverSettings, updatePreferences } from '../../app/state'
 import type { RoomStore } from '../../room/store'
 import { RestartButton } from '../room/RestartButton'
+import { Notice } from '../ui/Notice'
 import { RadioCards } from '../ui/RadioCards'
 import { Section, SettingRow, ToggleRow } from '../ui/Section'
 import { SubtitleCoverSection } from './SubtitleCoverSection'
@@ -13,6 +16,32 @@ function ListPreview({ left }: { left: boolean }) {
       <div class={styles.screen} />
       <div class={styles.people}><span /><span /><span /></div>
     </div>
+  )
+}
+
+// Taking part in the watchlog, for the account: out of it, rooms do not
+// follow what you watch or show what plays, and the watchlog leaves you out
+// for everyone. What you watched is kept for when you take part again.
+function WatchlogSection() {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  async function take(on: boolean) {
+    setBusy(true)
+    setError('')
+    try {
+      me.value = (await api.put<{ user: Me }>('/api/me/watchlog', { off: !on })).user
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Section title="Watchlog" description="Rooms notice the anime episodes played on their desktop and ask the people who saw them whether they watched them.">
+      <ToggleRow title="Take part in the watchlog" description="Counts you in while the stream is running, with its picture and its sound on. Off: rooms do not follow what you watch or show what plays, and you are not on the watchlog, for anyone. What you watched is kept for when you take part again."
+        checked={!me.value?.watchlogOff} disabled={busy} onChange={take} />
+      {error && <Notice tone="error" compact>{error}</Notice>}
+    </Section>
   )
 }
 
@@ -43,12 +72,7 @@ export function RoomSection({ room }: { room: RoomStore | null }) {
       <ToggleRow title="Show others when I am" description="Others see an icon on your picture while you have the sound off, the stream paused, or only the sound on."
         checked={prefs.shareMuted} onChange={(shareMuted) => updatePreferences({ shareMuted })} />
     </Section>
-    {serverSettings.value.watchlog && me.value && (
-      <Section title="Watchlog" description="Rooms notice the anime episodes played on their desktop and suggest marking them watched for the people who saw them.">
-        <ToggleRow title="Note what I watch" description="Counts you in while the stream is running here, with its picture and its sound on. Off: rooms never suggest an episode for you in this browser; you can still tick episodes yourself."
-          checked={prefs.trackWatching} onChange={(trackWatching) => updatePreferences({ trackWatching })} />
-      </Section>
-    )}
+    {serverSettings.value.watchlog && me.value && <WatchlogSection />}
     <Section title="While paused" description="Pausing stops the video and sound, and with them almost all the data the room uses.">
       <ToggleRow title="Chat takes the stream's place" description="The room becomes a chat, with a bar at the top to listen (sound only) or watch. Also with Sound only, and while the room's desktop is offline. Not in fullscreen."
         checked={prefs.chatViewOnPause} onChange={(chatViewOnPause) => updatePreferences({ chatViewOnPause })} />

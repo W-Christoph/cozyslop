@@ -20,19 +20,19 @@ import (
 
 // The watchlog (docs/architecture.md, "Watchlog"). While it is on, the room
 // follows what the VLC started by the play helper plays, or else Firefox,
-// and notes which part of an episode each person in the room saw. When the episode ends it
-// suggests marking it watched for those who saw most of it; the people in
-// the room can change the suggestion before it is saved.
+// and notes which part of an episode each person in the room saw. When the
+// episode ends, everyone who saw some of it is asked whether they watched
+// it, and sees only their own part. Accounts that left the watchlog are
+// neither followed nor told what plays.
 
 const (
 	watchInterval = 5 * time.Second
 	watchBucket   = 10 // seconds: an episode is seen in parts this long
 	watchMisses   = 3  // unanswered polls before the episode counts as ended
-	// Shares of an episode someone saw: to be listed in the suggestion, to
-	// be ticked in it, and that someone must have seen for a suggestion.
+	// Shares of an episode someone saw: to be asked about it, and for the
+	// answer to be yes unless they say no.
 	watchListed  = 0.2
 	watchChecked = 0.6
-	watchWorth   = 0.5
 	// A web page keeps a video that is over, paused at its end; one paused
 	// this far in, during the credits, counts as over too.
 	watchEnding = 0.9
@@ -116,7 +116,7 @@ func (w *watching) playing() *WatchPlaying {
 }
 
 // proposal suggests the episode for those who saw enough of it; nil if
-// nobody saw much. A page without a show suggests nothing: other videos
+// nobody did. A page without a show suggests nothing: other videos
 // have episodes too, and nobody said that this one is a show's.
 func (w *watching) proposal() *proposal {
 	if !w.known || w.length <= 0 || w.page && w.anime == nil {
@@ -126,10 +126,8 @@ func (w *watching) proposal() *proposal {
 	p := &proposal{alias: w.name.Alias(), users: make(map[string]int64)}
 	p.Episode, p.File = w.name.Episode, w.file
 	p.setAnime(w.anime, w.name.Title)
-	best := 0.0
 	for key, v := range w.seen {
 		share := min(1, float64(len(v.parts))/parts)
-		best = max(best, share)
 		if share < watchListed {
 			continue
 		}
@@ -137,7 +135,7 @@ func (w *watching) proposal() *proposal {
 			Coverage: math.Round(share*100) / 100, Checked: share >= watchChecked})
 		p.users[key] = v.userID
 	}
-	if best < watchWorth {
+	if len(p.Viewers) == 0 {
 		return nil
 	}
 	slices.SortFunc(p.Viewers, func(a, b WatchViewer) int {
@@ -161,14 +159,70 @@ func (p *proposal) saveable() bool {
 	return p.anime != nil && (p.Episodes == nil || p.Episode <= *p.Episodes)
 }
 
-// view is the proposal as sent; a copy, since sending may outlast the lock.
-func (p *proposal) view() *WatchProposal {
-	if p == nil {
+// viewer is the index of a viewer in p; -1 if they are not asked.
+func (p *proposal) viewer(key string) int {
+	return slices.IndexFunc(p.Viewers, func(v WatchViewer) bool { return v.Key == key })
+}
+
+// viewFor is the proposal as m is sent it: with m as its only viewer, and
+// nil for those who are not asked. A copy, since sending may outlast the
+// lock.
+func (p *proposal) viewFor(m *member) *WatchProposal {
+	if p == nil || !tracked(m) {
+		return nil
+	}
+	i := p.viewer(m.key)
+	if i < 0 {
 		return nil
 	}
 	v := p.WatchProposal
-	v.Viewers = slices.Clone(p.Viewers)
+	v.Viewers = []WatchViewer{p.Viewers[i]}
 	return &v
+}
+
+// tracked: the watchlog follows m, an account that did not leave it.
+func tracked(m *member) bool {
+	return m.user != nil && !m.user.WatchlogOff
+}
+
+// playingFor is what plays as m is told it: nothing for an account that
+// left the watchlog.
+func (w *watching) playingFor(m *member) *WatchPlaying {
+	if m.user != nil && m.user.WatchlogOff {
+		return nil
+	}
+	return w.playing()
+}
+
+// sendPlayingLocked tells everyone what plays now; nil w is nothing.
+func (r *Room) sendPlayingLocked(w *watching) {
+	for _, c := range r.clients {
+		c.send(playingMsg{Type: "playing", Playing: w.playingFor(c.m)})
+	}
+}
+
+// sendProposalLocked tells everyone about the open suggestion, as viewFor.
+func (r *Room) sendProposalLocked() {
+	for _, c := range r.clients {
+		c.send(watchMsg{Type: "watch", Proposal: r.proposal.viewFor(c.m)})
+	}
+}
+
+// watchlogLeftLocked forgets what m saw of the episode and their part of the
+// suggestion, which goes if nobody else is asked: m left the watchlog.
+func (r *Room) watchlogLeftLocked(m *member) {
+	if r.watch != nil {
+		delete(r.watch.seen, m.key)
+	}
+	if p := r.proposal; p != nil {
+		if i := p.viewer(m.key); i >= 0 {
+			p.Viewers = slices.Delete(p.Viewers, i, i+1)
+			delete(p.users, m.key)
+		}
+		if len(p.Viewers) == 0 {
+			r.takeProposalLocked()
+		}
+	}
 }
 
 // seesStreamLocked: a tab of m shows the stream, playing. The tab says so
@@ -247,7 +301,7 @@ func (r *Room) checkPlayback(ctx context.Context) {
 	}
 	part := st.Time / watchBucket
 	for key, m := range r.members {
-		if m.user == nil || !seesStreamLocked(m) {
+		if !tracked(m) || !seesStreamLocked(m) {
 			continue
 		}
 		v := w.seen[key]
@@ -272,7 +326,7 @@ func (r *Room) startWatching(ctx context.Context, file, key string, name episode
 	defer r.mu.Unlock()
 	r.watch = w
 	if w.known {
-		r.broadcastLocked(playingMsg{Type: "playing", Playing: w.playing()}, nil)
+		r.sendPlayingLocked(w)
 	}
 	return w
 }
@@ -359,7 +413,7 @@ func (r *Room) endWatching(ctx context.Context) {
 	}
 	r.watch = nil
 	if w.known {
-		r.broadcastLocked(playingMsg{Type: "playing"}, nil)
+		r.sendPlayingLocked(nil)
 	}
 	p := w.proposal()
 	var old *proposal
@@ -369,7 +423,7 @@ func (r *Room) endWatching(ctx context.Context) {
 		p.ID = r.proposalSeq
 		r.proposal = p
 		r.scheduleLocked(p)
-		r.broadcastLocked(watchMsg{Type: "watch", Proposal: p.view()}, nil)
+		r.sendProposalLocked()
 	}
 	r.mu.Unlock()
 	if old != nil {
@@ -385,12 +439,12 @@ func (r *Room) dropWatching() {
 	defer r.mu.Unlock()
 	if r.watch != nil {
 		if r.watch.known {
-			r.broadcastLocked(playingMsg{Type: "playing"}, nil)
+			r.sendPlayingLocked(nil)
 		}
 		r.watch = nil
 	}
 	if r.takeProposalLocked() != nil {
-		r.broadcastLocked(watchMsg{Type: "watch"}, nil)
+		r.sendProposalLocked()
 	}
 }
 
@@ -424,16 +478,23 @@ func (r *Room) scheduleLocked(p *proposal) {
 			return
 		}
 		p := r.takeProposalLocked()
-		r.broadcastLocked(watchMsg{Type: "watch"}, nil)
+		r.sendProposalLocked()
 		r.mu.Unlock()
 		r.saveProposal(context.Background(), p)
 	})
 }
 
 // saveProposal records the episode for the ticked viewers, and the show
-// for the file name's title. One that is not saveable is dropped.
+// for the file name's title. One that is not saveable, or that nobody
+// watched, is dropped.
 func (r *Room) saveProposal(ctx context.Context, p *proposal) error {
-	if !p.saveable() {
+	var ids []int64
+	for _, v := range p.Viewers {
+		if v.Checked {
+			ids = append(ids, p.users[v.Key])
+		}
+	}
+	if !p.saveable() || len(ids) == 0 {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -443,12 +504,6 @@ func (r *Room) saveProposal(ctx context.Context, p *proposal) error {
 		err = r.hub.Watchlog.SaveAlias(ctx, p.alias, p.anime.ID)
 	}
 	if err == nil {
-		var ids []int64
-		for _, v := range p.Viewers {
-			if v.Checked {
-				ids = append(ids, p.users[v.Key])
-			}
-		}
 		err = r.hub.Watchlog.MarkWatched(ctx, ids, p.anime.ID, p.Episode)
 	}
 	if err != nil {
@@ -457,53 +512,45 @@ func (r *Room) saveProposal(ctx context.Context, p *proposal) error {
 	return err
 }
 
-var errProposalGone = &userError{"That suggestion is gone."}
+var (
+	errProposalGone = &userError{"That suggestion is gone."}
+	errNotAsked     = &userError{"You are not asked about that episode."}
+)
 
-// editProposal handles watch_check, watch_answer, watch_episode, watch_save
-// and watch_dismiss. Anyone in the room with an account may correct the
-// episode and say whether they watched it themselves (watch_answer): that
-// is the end of it for them, and for everyone once all have answered.
-// Admins tick anyone, and settle it for everyone.
+// editProposal handles watch_answer and watch_episode, from those asked
+// about the episode: whether they watched it themselves (watch_answer) is
+// the end of it for them, and for everyone once all have answered; anyone
+// asked may correct the episode.
 func (r *Room) editProposal(ctx context.Context, c *Client, msg ClientMsg) error {
 	r.mu.Lock()
-	if c.m.user == nil {
-		r.mu.Unlock()
-		return ErrNotAllowed
-	}
 	p := r.proposal
 	if p == nil || p.ID != msg.ID {
 		r.mu.Unlock()
 		return errProposalGone
 	}
+	i := p.viewer(c.m.key)
+	if !tracked(c.m) || i < 0 {
+		r.mu.Unlock()
+		return errNotAsked
+	}
 	switch msg.Type {
-	case "watch_check":
-		i := slices.IndexFunc(p.Viewers, func(v WatchViewer) bool { return v.Key == msg.Key })
-		if i < 0 {
-			r.mu.Unlock()
-			return &userError{"That person is not in the suggestion."}
-		}
-		// Whether someone watched it is theirs to say, or an admin's.
-		if msg.Key != c.m.key && !c.m.rights.Admin {
-			r.mu.Unlock()
-			return ErrNotAllowed
-		}
-		p.Viewers[i].Checked = msg.Checked
 	case "watch_answer":
-		i := slices.IndexFunc(p.Viewers, func(v WatchViewer) bool { return v.Key == c.m.key })
-		if i < 0 {
+		// Yes needs the show, and an episode it has: there is nothing to
+		// save it to before.
+		if msg.Checked && !p.saveable() {
 			r.mu.Unlock()
-			return &userError{"That person is not in the suggestion."}
+			return &userError{"Pick the show first."}
 		}
 		p.Viewers[i].Checked, p.Viewers[i].Answered = msg.Checked, true
 		// With everyone's answer there is nothing left to wait for. An
 		// answer does not put the saving off, as a correction does.
-		if p.saveable() && !slices.ContainsFunc(p.Viewers, func(v WatchViewer) bool { return !v.Answered }) {
+		if !slices.ContainsFunc(p.Viewers, func(v WatchViewer) bool { return !v.Answered }) {
 			r.takeProposalLocked()
-			r.broadcastLocked(watchMsg{Type: "watch"}, nil)
+			r.sendProposalLocked()
 			r.mu.Unlock()
 			return r.saveProposal(ctx, p)
 		}
-		r.broadcastLocked(watchMsg{Type: "watch", Proposal: p.view()}, nil)
+		r.sendProposalLocked()
 		r.mu.Unlock()
 		return nil
 	case "watch_episode":
@@ -512,49 +559,25 @@ func (r *Room) editProposal(ctx context.Context, c *Client, msg ClientMsg) error
 			return &userError{"The show has no such episode."}
 		}
 		p.Episode = msg.Episode
-	case "watch_save":
-		if !c.m.rights.Admin {
-			r.mu.Unlock()
-			return ErrNotAllowed
-		}
-		if p.anime == nil {
-			r.mu.Unlock()
-			return &userError{"Pick the show first."}
-		}
-		if !p.saveable() {
-			r.mu.Unlock()
-			return &userError{"The show has no such episode."}
-		}
-		r.takeProposalLocked()
-		r.broadcastLocked(watchMsg{Type: "watch"}, nil)
-		r.mu.Unlock()
-		return r.saveProposal(ctx, p)
-	case "watch_dismiss":
-		if !c.m.rights.Admin {
-			r.mu.Unlock()
-			return ErrNotAllowed
-		}
-		r.takeProposalLocked()
-		r.broadcastLocked(watchMsg{Type: "watch"}, nil)
-		r.mu.Unlock()
-		return nil
 	}
 	r.scheduleLocked(p)
-	r.broadcastLocked(watchMsg{Type: "watch", Proposal: p.view()}, nil)
+	r.sendProposalLocked()
 	r.mu.Unlock()
 	return nil
 }
 
-// changeProposalShow picks another show for the suggestion (watch_anime).
+// changeProposalShow picks another show for the suggestion (watch_anime),
+// for one asked about it.
 func (r *Room) changeProposalShow(ctx context.Context, c *Client, id, animeID int64) error {
 	r.mu.Lock()
-	user, key, p := c.m.user, c.m.key, r.proposal
+	key, p := c.m.key, r.proposal
+	asked := p != nil && tracked(c.m) && p.viewer(key) >= 0
 	r.mu.Unlock()
-	if user == nil {
-		return ErrNotAllowed
-	}
 	if p == nil || p.ID != id {
 		return errProposalGone
+	}
+	if !asked {
+		return errNotAsked
 	}
 	if !r.showLimit.Allow(key) {
 		return ErrRateLimited
@@ -570,7 +593,7 @@ func (r *Room) changeProposalShow(ctx context.Context, c *Client, id, animeID in
 	}
 	p.setAnime(a, p.Title)
 	r.scheduleLocked(p)
-	r.broadcastLocked(watchMsg{Type: "watch", Proposal: p.view()}, nil)
+	r.sendProposalLocked()
 	return nil
 }
 
@@ -599,12 +622,13 @@ func (r *Room) showByID(ctx context.Context, animeID int64) (*store.Anime, error
 // linkPlaying says which show the episode playing is of (watch_link), for
 // one that was not recognised or was taken for another. The name it goes
 // by is that show's from then on: for its other episodes, in every room,
-// without asking AniList. Anyone in the room with an account may.
+// without asking AniList. Anyone in the room with an account that takes
+// part in the watchlog may.
 func (r *Room) linkPlaying(ctx context.Context, c *Client, animeID int64) error {
 	r.mu.Lock()
-	user, key, w := c.m.user, c.m.key, r.watch
+	allowed, key, w := tracked(c.m), c.m.key, r.watch
 	r.mu.Unlock()
-	if user == nil {
+	if !allowed {
 		return ErrNotAllowed
 	}
 	if w == nil || !w.known {
@@ -631,7 +655,7 @@ func (r *Room) linkPlaying(ctx context.Context, c *Client, animeID int64) error 
 	defer r.mu.Unlock()
 	if r.watch == w {
 		w.anime, w.linked = a, true
-		r.broadcastLocked(playingMsg{Type: "playing", Playing: w.playing()}, nil)
+		r.sendPlayingLocked(w)
 	}
 	return nil
 }

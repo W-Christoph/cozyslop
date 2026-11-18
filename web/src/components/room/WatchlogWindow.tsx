@@ -10,7 +10,8 @@ export function WatchlogWindow({ onClose }: { onClose: () => void }) {
   const store = useRoomStore()
   const user = me.value
   const users = store.users.value
-  const present = useMemo(() => [...users.values()].filter((u) => !u.anonymous)
+  // Who left the watchlog is not on it, here either.
+  const present = useMemo(() => [...users.values()].filter((u) => !u.anonymous && !u.watchlogOff)
     .map((u) => ({ username: u.username, nickname: u.nickname, nameColor: u.nameColor, avatarUrl: u.avatarUrl })), [users])
   // A suggestion that goes was saved or dismissed: ask again, once the
   // server has written it down.

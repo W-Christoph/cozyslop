@@ -65,6 +65,7 @@ export interface Me {
   avatarUrl: string
   admin: boolean
   verified: boolean
+  watchlogOff: boolean // left the watchlog: not followed, not on it for anyone
 }
 
 export interface ServerSettings {

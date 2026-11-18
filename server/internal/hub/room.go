@@ -621,8 +621,8 @@ func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
 		Desktop:  r.desktopStateLocked(),
 
 		WindowTitle: r.title,
-		Playing:     r.watch.playing(),
-		Watch:       r.proposal.view(),
+		Playing:     r.watch.playingFor(m),
+		Watch:       r.proposal.viewFor(m),
 	})
 	var resync []*Client
 	if isNew {
@@ -738,7 +738,19 @@ func (r *Room) refreshUser(ctx context.Context, userID int64) {
 		return
 	}
 	before := r.userLocked(m)
+	left := u.WatchlogOff != m.user.WatchlogOff
 	m.user, m.perm = u, perm
+	if left {
+		// Out of the watchlog, or back: what plays and the suggestion as
+		// they see them now. The others' views do not change.
+		if u.WatchlogOff {
+			r.watchlogLeftLocked(m)
+		}
+		for _, c := range m.clients {
+			c.send(playingMsg{Type: "playing", Playing: r.watch.playingFor(m)})
+			c.send(watchMsg{Type: "watch", Proposal: r.proposal.viewFor(m)})
+		}
+	}
 	in := rights.Input{Room: r.settings, User: u, Perm: perm, Grant: m.grant, Now: time.Now().Unix()}
 	if d := rights.Admit(in); d != nil {
 		r.kickLocked(m, kickedMsg{Type: "kicked", Reason: d.Reason, BannedUntil: d.BannedUntil})
@@ -1238,6 +1250,7 @@ func (r *Room) userLocked(m *member) User {
 	u.Listening = hearing && listening
 	if m.user != nil {
 		u.Username, u.Nickname, u.NameColor, u.AvatarURL = m.user.Username, m.user.Nickname, m.user.NameColor, avatarURL(m.user)
+		u.WatchlogOff = m.user.WatchlogOff
 	} else {
 		u.Nickname, u.NameColor, u.AvatarURL = "Anonymous", anonColor(m.anonID), "/png/default_avatar_on_alpha.png"
 	}

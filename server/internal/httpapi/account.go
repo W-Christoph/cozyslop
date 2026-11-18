@@ -34,6 +34,8 @@ type me struct {
 	AvatarURL string `json:"avatarUrl"`
 	Admin     bool   `json:"admin"`
 	Verified  bool   `json:"verified"`
+	// WatchlogOff: the account left the watchlog (PUT /api/me/watchlog).
+	WatchlogOff bool `json:"watchlogOff"`
 }
 
 func toMe(u *store.User) me {
@@ -44,6 +46,8 @@ func toMe(u *store.User) me {
 		AvatarURL: avatarURL(u),
 		Admin:     u.Admin,
 		Verified:  u.Verified,
+
+		WatchlogOff: u.WatchlogOff,
 	}
 }
 
@@ -232,6 +236,28 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u.Nickname, u.NameColor = req.Nickname, req.NameColor
+	s.hub.UserChanged(r.Context(), u.ID)
+	writeJSON(w, http.StatusOK, map[string]any{"user": toMe(u)})
+}
+
+// setWatchlogTaking takes the account out of the watchlog, or back in. Out,
+// rooms stop following what it watches and drop it from what is open.
+func (s *Server) setWatchlogTaking(w http.ResponseWriter, r *http.Request) {
+	u := s.requireUser(w, r)
+	if u == nil {
+		return
+	}
+	var req struct {
+		Off bool `json:"off"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.store.SetWatchlogOff(r.Context(), u.ID, req.Off); err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	u.WatchlogOff = req.Off
 	s.hub.UserChanged(r.Context(), u.ID)
 	writeJSON(w, http.StatusOK, map[string]any{"user": toMe(u)})
 }

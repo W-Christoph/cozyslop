@@ -116,6 +116,26 @@ func TestWatchlog(t *testing.T) {
 		t.Fatalf("watchlog: %+v", log)
 	}
 
+	// Bob leaves the watchlog: he is not on it for anyone, and cannot use
+	// it, until he takes part again. What he watched is kept.
+	bob := a.login("bob")
+	var me struct{ User struct{ WatchlogOff bool } }
+	a.call(bob, "PUT", "/api/me/watchlog", map[string]any{"off": true}, 200, &me)
+	if !me.User.WatchlogOff {
+		t.Fatalf("me: %+v", me)
+	}
+	a.error(bob, "GET", "/api/watchlog", nil, 403, "You left the watchlog. Take part again in the settings.")
+	a.error(admin, "PUT", "/api/watchlog/progress/154587/bob", map[string]any{"from": 3, "watched": true}, 404, "Unknown user.")
+	a.call(alice, "GET", "/api/watchlog", nil, 200, &log)
+	if len(log.People) != 1 || len(log.Progress) != 1 || log.Progress[0].Username != "alice" {
+		t.Fatalf("without bob: %+v", log)
+	}
+	a.call(bob, "PUT", "/api/me/watchlog", map[string]any{"off": false}, 200, nil)
+	a.call(alice, "GET", "/api/watchlog", nil, 200, &log)
+	if len(log.People) != 2 || len(log.Progress) != 2 {
+		t.Fatalf("bob back: %+v", log)
+	}
+
 	// Bob stopped following it: alice may not say so, bob and admins may.
 	a.error(alice, "PUT", "/api/watchlog/follow/154587/bob", map[string]any{"mode": "dropped"}, 403, "You can only change your own progress.")
 	a.error(admin, "PUT", "/api/watchlog/follow/1/bob", map[string]any{"mode": "dropped"}, 404, "That show is not on the watchlog.")

@@ -24,6 +24,8 @@ type User struct {
 	Paused    bool   `json:"paused"`    // not listening because the stream is paused; implies Muted
 	Listening bool   `json:"listening"` // the sound without the picture; never with Muted
 	JoinedAt  int64  `json:"joinedAt"`
+	// The account left the watchlog: it is not on it, for anyone.
+	WatchlogOff bool `json:"watchlogOff"`
 }
 
 // ChatMessage is a chat line as sent to browsers.
@@ -220,8 +222,7 @@ type ClientMsg struct {
 	Watching  bool   `json:"watching"`  // watching: the stream runs in this tab, with its picture
 	To        string `json:"to"`        // whisper: identity key
 	Name      string `json:"name"`      // file_delete, file_play: a file in the desktop's Downloads
-	Key       string `json:"key"`       // watch_check: identity key
-	Checked   bool   `json:"checked"`   // watch_check, watch_answer
+	Checked   bool   `json:"checked"`   // watch_answer
 	Episode   int    `json:"episode"`   // watch_episode
 	AnimeID   int64  `json:"animeId"`   // watch_anime, watch_link: AniList id
 }

@@ -52,6 +52,7 @@ for account invites and `/access/<code>` for temporary room-access invites.
 | `POST /api/auth/register` | Anyone | `{"username":"alice","password":"…","inviteCode":"…"}`; code optional in open mode | 201 `{"user":<own account>}`; creates account and starts a session; an account invite also grants its room permission atomically | 400 username/password validation or `"That invite is invalid or has expired."`; 403 `"Registration requires an invite."` when invite-only and no code; 409 `"That username is taken."`; 429 registration rate limit |
 | `GET /api/me` | Anyone | None | 200 `{"user":<own account>}` or `{"user":null}` | Invalid sessions become anonymous |
 | `PATCH /api/me` | Account | `{"nickname":"Alice","nameColor":"#f90"}`; both required | 200 `{"user":<own account>}` | 400 invalid nickname/colour; 409 `"That nickname is another account's username."` |
+| `PUT /api/me/watchlog` | Account | `{"off":true}`: leave the watchlog, or with `false` take part again | 200 `{"user":<own account>}` with `watchlogOff`; rooms stop following the account at once and drop its part of an open suggestion | |
 | `POST /api/me/password` | Account | `{"current":"…","new":"…"}` | 204; keeps the current session and its room tabs; ends every other session and closes its room tabs | 403 `"Your current password is wrong."`; 400 invalid new password; 429 attempt rate limit |
 | `POST /api/me/avatar` | Account | Multipart form field `avatar`; PNG, JPEG, GIF or WebP, at most 5 MiB | 200 `{"user":<own account>}`; saves a 256×256 PNG and deletes the previous avatar if no account still references it | 415 `"Use a PNG, JPEG, GIF or WebP image."`; 413 `"File is too large."`; 400 malformed multipart or missing/duplicate field |
 | `DELETE /api/me/avatar` | Account | None | 200 `{"user":<own account>}`; clears the avatar and deletes its file if no account still references it | Common account errors |
@@ -231,8 +232,10 @@ most recently joined live tab; a plain kick removes only the target identity.
 
 How far each account has watched which anime (see
 [architecture](architecture.md#watchlog)). Every endpoint needs an account
-(401 `"Please log in."`) and the `watchlog` setting on (404 `"The watchlog is
-off."`). Shows are `{"id":<AniList id>,"title":"…","titleEnglish":"…","episodes":28|null,"coverUrl":"…","addedAt":<unix s>}`;
+(401 `"Please log in."`), the `watchlog` setting on (404 `"The watchlog is
+off."`), and that the account did not leave the watchlog (403 `"You left the
+watchlog. Take part again in the settings."`). An account that left it is left
+out of everything listed, and an admin's change to its progress is 404 `"Unknown user."`. Shows are `{"id":<AniList id>,"title":"…","titleEnglish":"…","episodes":28|null,"coverUrl":"…","addedAt":<unix s>}`;
 progress is `{"username":"…","animeId":…,"watched":[[1,4],[6,6]]}`: the episodes someone has watched of a show, as ranges in order.
 
 | Method and path | Caller | Request body | Response | Notable errors |
@@ -308,28 +311,31 @@ linked to the show before and the show is not AniList's guess; `animeId` `0` whe
 show was not recognised; `null` when nothing is) and `welcome.watch` the open
 suggestion to mark an episode watched (`null` when there is none);
 `{"type":"playing","playing":…}` and `{"type":"watch","proposal":…}` follow
-when they change, `proposal` `null` once it was saved or dismissed. A
-suggestion is `{"id","animeId","title","coverUrl","episodes","episode","file","applyAt","viewers":[{"key","nickname","coverage","checked","answered"}]}`:
-`coverage` is the share of the episode that person saw (0 to 1), `answered`
+when they change, `proposal` `null` once it was saved, or for those it does
+not ask. An account that left the watchlog (`watchlogOff` on its user) gets
+`playing` and `watch` as `null` always. A
+suggestion is `{"id","animeId","title","coverUrl","episodes","episode","file","applyAt","viewers":[{"key","nickname","coverage","checked","answered"}]}`,
+and `viewers` is only the one it is sent to: nobody sees the others.
+`coverage` is the share of the episode they saw (0 to 1); `checked`, their
+answer if they do not give one (yes from 60%, no from 20%); `answered`
 that they said themselves whether they watched it, `applyAt`
 when it is saved by itself (unix ms; `0` while `animeId` is `0` or `episode`
-is past the show's `episodes`, and `watch_save` then fails). A tab sends `{"type":"watching","watching":true}` while the stream runs in it
+is past the show's `episodes`). A tab sends `{"type":"watching","watching":true}` while the stream runs in it
 with its picture and its sound (not paused, not sound only, not muted), and `false` when it stops:
-only such tabs count as having seen an episode. Nobody else is told. Accounts in
-the room send `{"type":"watch_check","id":…,"key":"<identity key>","checked":true}`,
+only such tabs count as having seen an episode. Nobody else is told. Those
+a suggestion asks send
 `{"type":"watch_episode","id":…,"episode":6}`,
-`{"type":"watch_anime","id":…,"animeId":<AniList id>}`,
+`{"type":"watch_anime","id":…,"animeId":<AniList id>}` and
+`{"type":"watch_answer","id":…,"checked":true}` (whether they watched it
+themselves; once everyone asked has answered it is saved; `error` "Pick the
+show first." for yes without a show that has the episode); anyone else gets
+`error` "You are not asked about that episode.". A change of the episode or
+the show restarts the wait before it saves by itself. Accounts in the room
+that take part in the watchlog send
 `{"type":"watch_link","animeId":<AniList id>}` (the show of the episode that
 plays, remembered for the name it goes by; `error` "No episode is playing."
-without one),
-`{"type":"watch_answer","id":…,"checked":true}` (whether they watched it
-themselves; once everyone listed has answered it is saved), and admins
-`{"type":"watch_save","id":…}` and `{"type":"watch_dismiss","id":…}`, which
-others get `error` "You are not allowed to do that." for; a change of the
-episode, the show or a tick restarts the wait before it saves by itself.
-Anonymous users get `error` "You are not allowed to do that.", and so does
-`watch_check` for someone else's `key` unless an admin sends it; a suggestion
-that is gone `error` "That suggestion is gone.".
+without one); others get `error` "You are not allowed to do that.". A
+suggestion that is gone is `error` "That suggestion is gone.".
 An unknown room upgrades successfully, sends
 `{"type":"kicked","reason":"not_found"}`, then closes with code 4000.
 Other `kicked.reason` values are `banned`, `account`, `verified`, `invite`,

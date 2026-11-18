@@ -15,13 +15,14 @@ import (
 )
 
 // The watchlog: which episodes of which anime each account has watched
-// (docs/architecture.md, "Watchlog"). Every endpoint needs an account and
-// the watchlog setting on.
+// (docs/architecture.md, "Watchlog"). Every endpoint needs an account that
+// takes part in it and the watchlog setting on. One that left it is not
+// there for the others either.
 
 const maxEpisode = 9999
 
-// watchlogUser returns the logged-in account if the watchlog is on, or
-// answers 401/404 and returns nil.
+// watchlogUser returns the logged-in account if the watchlog is on and it
+// takes part, or answers 401/403/404 and returns nil.
 func (s *Server) watchlogUser(w http.ResponseWriter, r *http.Request) *store.User {
 	u := s.requireUser(w, r)
 	if u == nil {
@@ -34,6 +35,21 @@ func (s *Server) watchlogUser(w http.ResponseWriter, r *http.Request) *store.Use
 	}
 	if !set.Watchlog || s.watchlog == nil {
 		writeError(w, http.StatusNotFound, "The watchlog is off.")
+		return nil
+	}
+	if u.WatchlogOff {
+		writeError(w, http.StatusForbidden, "You left the watchlog. Take part again in the settings.")
+		return nil
+	}
+	return u
+}
+
+// watchlogTarget is the account of the path's username for an admin's
+// change, or answers 404: one that left the watchlog is not on it.
+func (s *Server) watchlogTarget(w http.ResponseWriter, r *http.Request) *store.User {
+	u := s.userByPath(w, r)
+	if u != nil && u.WatchlogOff {
+		writeError(w, http.StatusNotFound, "Unknown user.")
 		return nil
 	}
 	return u
@@ -75,7 +91,8 @@ func (s *Server) getWatchlog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The watchlog knows accounts by id only. Those it has anything from
-	// are listed, by username; disabled (and deleted) ones are left out.
+	// are listed, by username; disabled (and deleted) ones and those that
+	// left the watchlog are left out.
 	users, err := s.store.ListUsers(ctx)
 	if err != nil {
 		s.internalError(w, r, err)
@@ -83,7 +100,7 @@ func (s *Server) getWatchlog(w http.ResponseWriter, r *http.Request) {
 	}
 	names := map[int64]string{}
 	for _, u := range users {
-		if !u.Disabled {
+		if !u.Disabled && !u.WatchlogOff {
 			names[u.ID] = u.Username
 		}
 	}
@@ -280,7 +297,7 @@ func (s *Server) setProgress(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusForbidden, "You can only change your own progress.")
 			return
 		}
-		if target = s.userByPath(w, r); target == nil {
+		if target = s.watchlogTarget(w, r); target == nil {
 			return
 		}
 	}
@@ -344,7 +361,7 @@ func (s *Server) setFollow(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusForbidden, "You can only change your own progress.")
 			return
 		}
-		if target = s.userByPath(w, r); target == nil {
+		if target = s.watchlogTarget(w, r); target == nil {
 			return
 		}
 	}

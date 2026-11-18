@@ -21,7 +21,7 @@ export function Header() {
       </a>
       <nav class={styles.nav} aria-label="Main navigation">
         {link('/', 'Rooms')}
-        {user && serverSettings.value.watchlog && link('/watchlog', 'Watchlog')}
+        {user && !user.watchlogOff && serverSettings.value.watchlog && link('/watchlog', 'Watchlog')}
         {user?.admin && link('/admin/accounts', 'Admin', path.startsWith('/admin'))}
       </nav>
       <div class={styles.actions}>

@@ -10,7 +10,8 @@ export function WatchlogPage() {
   return (
     <div class={styles.page}>
       <PageLayout wide title="Watchlog" subtitle="Who has watched how far, and what you can watch together.">
-        {user ? <WatchlogView user={user} /> : <>
+        {user?.watchlogOff ? <Notice>You left the watchlog. Take part again in the settings, under Room.</Notice>
+          : user ? <WatchlogView user={user} /> : <>
           <Notice>Log in to see the watchlog.</Notice>
           <div class={styles.login}><ButtonLink variant="primary" href="/login">Log in</ButtonLink></div>
         </>}

@@ -150,8 +150,10 @@ func TestMigrateUserIDs(t *testing.T) {
 				}
 				wantSeq = 21
 			}
-			queries := []string{"PRAGMA table_info(users)", "PRAGMA index_list(users)"}
-			for _, table := range []string{"users", "sessions", "room_permissions", "invites", "invite_redemptions", "chat_messages", "settings", "anon_bans"} {
+			// A later migration adds a column to users; the others stay.
+			queries := []string{"SELECT * FROM pragma_table_info('users') WHERE name != 'watchlog_off'", "PRAGMA index_list(users)",
+				"SELECT id, username, password_hash, nickname, name_color, avatar, admin, verified, disabled, created_at FROM users ORDER BY 1, 2"}
+			for _, table := range []string{"sessions", "room_permissions", "invites", "invite_redemptions", "chat_messages", "settings", "anon_bans"} {
 				queries = append(queries, "SELECT * FROM "+table+" ORDER BY 1, 2")
 			}
 			// A later migration drops a column of rooms; the others stay.

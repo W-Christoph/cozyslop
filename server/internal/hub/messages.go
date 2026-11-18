@@ -76,7 +76,7 @@ func (r *Room) Handle(ctx context.Context, c *Client, msg ClientMsg) {
 	case "file_delete", "file_play":
 		go r.fileAction(ctx, c, strings.TrimPrefix(msg.Type, "file_"), msg.Name)
 		return
-	case "watch_check", "watch_answer", "watch_episode", "watch_save", "watch_dismiss":
+	case "watch_answer", "watch_episode":
 		err = r.editProposal(ctx, c, msg)
 	case "watch_anime":
 		go func() { r.report(c, msg.Type, r.changeProposalShow(ctx, c, msg.ID, msg.AnimeID)) }()

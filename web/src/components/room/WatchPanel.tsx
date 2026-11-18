@@ -46,11 +46,11 @@ function WatchPlayingBar() {
 }
 
 // The watchlog at the top of the chat: the bar of what plays and, once an
-// episode ended, under it and of a piece with it the suggestion to mark it
-// watched. Whoever saw it is asked about themselves, once, and their answer
-// closes it for them alone; an admin gets everyone to tick, and settles it
-// for the room. The bar is left out over the stream in fullscreen, where it
-// would cover the picture for the whole episode.
+// episode ended, under it and of a piece with it the question whether you
+// watched it. Everyone who saw some of it is asked about themselves alone,
+// and sees only how much they saw; their answer closes it for them. The bar
+// is left out over the stream in fullscreen, where it would cover the
+// picture for the whole episode.
 export function WatchPanel({ bar }: { bar: boolean }) {
   const store = useRoomStore()
   const proposal = store.watchProposal.value
@@ -59,20 +59,22 @@ export function WatchPanel({ bar }: { bar: boolean }) {
   // Keyed: a new suggestion starts without the last one's show search open.
   return <>
     {bar && <WatchPlayingBar />}
-    {proposal && self?.anonymous === false && (store.rights.value.admin
-      ? <WatchCard key={proposal.id} proposal={proposal} />
-      : mine && !mine.answered && <WatchAsk key={proposal.id} proposal={proposal} viewer={mine} />)}
+    {proposal && mine && !mine.answered && <WatchAsk key={proposal.id} proposal={proposal} viewer={mine} />}
   </>
 }
 
 // "Did you watch it?", for one who saw some of it. Unanswered, it is saved
-// as suggested: marked for who saw most of the episode.
+// as suggested: marked if they saw most of the episode (60%), not if less.
+// The suggested answer is the highlighted button.
 function WatchAsk({ proposal: p, viewer }: { proposal: WatchProposal; viewer: WatchViewer }) {
   const store = useRoomStore()
   const [fixing, setFixing] = useState(false)
   const left = useCountdown(p.applyAt)
   const max = p.episodes ?? 9999
   const known = p.animeId !== 0
+  // Yes needs a show, and an episode it has.
+  const saveable = known && p.episode <= max
+  const yes = viewer.checked && saveable
   return (
     <section class={styles.card} aria-label="Mark episode watched">
       <div class={styles.head}>
@@ -97,65 +99,14 @@ function WatchAsk({ proposal: p, viewer }: { proposal: WatchProposal; viewer: Wa
         : <button type="button" class={styles.link} onClick={() => setFixing(true)}>Wrong show or episode?</button>}
       <div class={styles.foot}>
         <span class={styles.muted}>
-          {!known ? 'Saved once the show is picked.' : !p.applyAt ? `The show has ${p.episodes} episodes.`
-            : viewer.checked ? `Marked for you in ${left}` : 'Not marked unless you say yes'}
+          {!known ? 'Pick the show to say yes.' : !saveable ? `The show has ${p.episodes} episodes.`
+            : yes ? `Marked for you in ${left}` : 'Not marked unless you say yes'}
         </span>
         <span class={styles.answers}>
-          <button type="button" class={styles.no} onClick={() => store.answerWatch(p.id, false)}>No</button>
-          <button type="button" class={styles.save} onClick={() => store.answerWatch(p.id, true)}>Yes, mark it</button>
+          <button type="button" class={yes ? styles.no : styles.save} onClick={() => store.answerWatch(p.id, false)}>No</button>
+          <button type="button" class={yes ? styles.save : styles.no} disabled={!saveable}
+            onClick={() => store.answerWatch(p.id, true)}>Yes, mark it</button>
         </span>
-      </div>
-    </section>
-  )
-}
-
-// The suggestion for an admin: who saw it, to tick, and saving or dropping
-// it for everyone.
-function WatchCard({ proposal: p }: { proposal: WatchProposal }) {
-  const store = useRoomStore()
-  const [picking, setPicking] = useState(false)
-  const left = useCountdown(p.applyAt)
-  const max = p.episodes ?? 9999
-  const fits = p.episode <= max // a file numbered past the show's end waits to be fixed
-  return (
-    <section class={styles.card} aria-label="Mark episode watched">
-      <div class={styles.head}>
-        {p.animeId !== 0 && <Cover anime={p} size={48} />}
-        <div class={styles.headText}>
-          <span class={styles.label}>Watched</span>
-          <strong class={styles.title} title={p.file}>{p.animeId === 0 ? 'Which show was this?' : p.title}</strong>
-          <div class={styles.episode}>
-            Episode
-            <button type="button" class={styles.step} aria-label="Episode before" disabled={p.episode <= 1}
-              onClick={() => store.setWatchEpisode(p.id, p.episode - 1)}>−</button>
-            <span class={styles.number}>{p.episode}</span>
-            <button type="button" class={styles.step} aria-label="Episode after" disabled={p.episode >= max}
-              onClick={() => store.setWatchEpisode(p.id, p.episode + 1)}>+</button>
-          </div>
-        </div>
-        <button type="button" class={styles.close} aria-label="Dismiss" title="Don’t save, for everyone"
-          onClick={() => store.settleWatch(p.id, false)}><Icon name="x" size={16} /></button>
-      </div>
-      {p.animeId === 0 && <p class={styles.file} title={p.file}>{p.file}</p>}
-      {picking || p.animeId === 0
-        ? <AnimeSearch autoFocus={picking} placeholder="Search AniList…" onPick={(anime) => { store.setWatchAnime(p.id, anime.id); setPicking(false) }} />
-        : <button type="button" class={styles.link} onClick={() => setPicking(true)}>Wrong show?</button>}
-      <ul class={styles.viewers} aria-label="Who saw it">
-        {p.viewers.map((v) => (
-          <li key={v.key}>
-            <label class={styles.viewer}>
-              <input type="checkbox" checked={v.checked}
-                onChange={(e) => store.checkWatcher(p.id, v.key, e.currentTarget.checked)} />
-              <span class={styles.name}>{v.nickname}</span>
-              <span class={styles.muted}>{v.answered ? (v.checked ? 'said yes · ' : 'said no · ') : ''}{Math.round(v.coverage * 100)}%</span>
-            </label>
-          </li>
-        ))}
-      </ul>
-      <div class={styles.foot}>
-        <span class={styles.muted}>{p.applyAt ? `Saves in ${left}` : p.animeId === 0 ? 'Pick the show to save.' : `The show has ${p.episodes} episodes.`}</span>
-        <button type="button" class={styles.save} disabled={p.animeId === 0 || !fits}
-          onClick={() => store.settleWatch(p.id, true)}>Save</button>
       </div>
     </section>
   )

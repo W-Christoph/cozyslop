@@ -204,14 +204,9 @@ export class RoomStore {
   }
 
   // The watchlog's suggestion: say whether I watched it, change the episode
-  // or the show (an AniList id); as an admin tick a viewer, save it now or
-  // drop it for everyone.
+  // or the show (an AniList id).
   answerWatch(id: number, checked: boolean) {
     this.socket.send({ type: 'watch_answer', id, checked })
-  }
-
-  checkWatcher(id: number, key: string, checked: boolean) {
-    this.socket.send({ type: 'watch_check', id, key, checked })
   }
 
   setWatchEpisode(id: number, episode: number) {
@@ -225,10 +220,6 @@ export class RoomStore {
 
   setWatchAnime(id: number, animeId: number) {
     this.socket.send({ type: 'watch_anime', id, animeId })
-  }
-
-  settleWatch(id: number, save: boolean) {
-    this.socket.send({ type: save ? 'watch_save' : 'watch_dismiss', id })
   }
 
   takeRemote() {

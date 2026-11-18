@@ -36,6 +36,7 @@ export interface User {
   paused: boolean // not listening because the stream is paused; implies muted
   listening: boolean // the sound without the picture; never with muted
   joinedAt: number
+  watchlogOff: boolean // left the watchlog: not on it, for anyone
 }
 
 export interface ChatMessage {
@@ -139,9 +140,7 @@ export type ClientMessage =
   | { type: 'neko_token' }
   | { type: 'preview' } // a still of the desktop, for the chat view while paused
   | { type: 'file_delete' | 'file_play'; name: string } // a file in the desktop's Downloads
-  | { type: 'watch_check'; id: number; key: string; checked: boolean }
   | { type: 'watch_answer'; id: number; checked: boolean } // whether I watched it
   | { type: 'watch_episode'; id: number; episode: number }
   | { type: 'watch_anime'; id: number; animeId: number } // AniList id
   | { type: 'watch_link'; animeId: number } // the show of what plays, remembered for its name
-  | { type: 'watch_save' | 'watch_dismiss'; id: number }

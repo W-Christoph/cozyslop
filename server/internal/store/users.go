@@ -23,14 +23,17 @@ type User struct {
 	Verified     bool   `json:"verified"`
 	Disabled     bool   `json:"disabled"`
 	CreatedAt    int64  `json:"createdAt"`
+	// WatchlogOff: the account left the watchlog. Rooms do not follow what
+	// it watches, and the watchlog leaves it out.
+	WatchlogOff bool `json:"watchlogOff"`
 }
 
-const userColumns = "id, username, password_hash, nickname, name_color, avatar, admin, verified, disabled, created_at"
+const userColumns = "id, username, password_hash, nickname, name_color, avatar, admin, verified, disabled, created_at, watchlog_off"
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var u User
 	err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Nickname, &u.NameColor,
-		&u.Avatar, &u.Admin, &u.Verified, &u.Disabled, &u.CreatedAt)
+		&u.Avatar, &u.Admin, &u.Verified, &u.Disabled, &u.CreatedAt, &u.WatchlogOff)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -101,6 +104,11 @@ func (s *Store) CountAdmins(ctx context.Context) (int, error) {
 // UpdateProfile changes the user-editable profile fields.
 func (s *Store) UpdateProfile(ctx context.Context, id int64, nickname, nameColor string) error {
 	return s.execOne(ctx, "UPDATE users SET nickname = ?, name_color = ? WHERE id = ?", nickname, nameColor, id)
+}
+
+// SetWatchlogOff takes the account out of the watchlog, or back in.
+func (s *Store) SetWatchlogOff(ctx context.Context, id int64, off bool) error {
+	return s.execOne(ctx, "UPDATE users SET watchlog_off = ? WHERE id = ?", off, id)
 }
 
 func (s *Store) UpdateAvatar(ctx context.Context, id int64, avatar string) error {

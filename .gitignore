@@ -6,3 +6,5 @@ server/webui/dist/*
 !server/webui/dist/.gitkeep
 import/
 cozycast-room.tar.gz
+# Pictures of the UI made by `npm run snapshots` in web/
+/snapshots/

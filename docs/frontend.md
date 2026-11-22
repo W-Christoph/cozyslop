@@ -123,6 +123,23 @@ web/public/           static files served at / (svg/, png/, audio/), same paths 
   while closed. Avatar cards show identity, remote and sound state
   on hover, focus or tap. The volume track shows its current level.
 
+## Snapshots
+
+Parts of the UI drawn from made-up data, to look at a state that is hard to
+reach for real (a suggestion needs an episode to end). `web/snapshots.html`
+shows every scene of `src/snapshots/` under `npm run dev`
+(`/snapshots.html`, `?scene=<name>`, `?theme=light`); it is not part of the
+build. `npm run snapshots` makes a PNG of each in `snapshots/` (ignored by
+git), `npm run snapshots -- watch-ask --theme=light` of some. It uses an
+installed Chrome or Edge, or the browser `CHROME_PATH` names (for example
+one from `npx @puppeteer/browsers install chrome-headless-shell@stable`); the
+pictures use the fonts the computer has.
+
+A scene (`Scene` in `src/snapshots/scene.tsx`) has a name, which is its
+file's, a width and a `render` function; `Variants` puts several states side by side, and `fakeRoom`
+stands in for a `RoomStore` with the signals given. Add a file of scenes
+per area and list it in `src/snapshots/main.tsx`.
+
 ## Admin rooms
 
 The Rooms tab at `/admin/rooms` lists room sources, connection state (Online,

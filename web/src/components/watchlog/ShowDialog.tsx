@@ -8,7 +8,7 @@ import { Input } from '../ui/Field'
 import { Icon } from '../ui/Icon'
 import { Notice } from '../ui/Notice'
 import { Cover } from './AnimeSearch'
-import { airsIn, airsOn } from './airing'
+import { airsIn, airsOn, latestPage } from './airing'
 import { EpisodeBar } from './EpisodeBar'
 import { FollowSelect } from './FollowSelect'
 import { countEpisodes, finished, firstMissing } from './episodes'
@@ -17,9 +17,10 @@ import styles from './ShowDialog.module.css'
 // One show with everything to do about it: who has watched how far, with
 // the next episode to tick and how they follow it for each person one may
 // change;
-// when its next episode airs, where it is watched; and the show itself, to
+// when its next episode airs, where it is watched, with its latest episode
+// to open there (as Watch next opens the next); and the show itself, to
 // bring up to date from AniList or take off the list.
-export function ShowDialog({ anime, people, self, playing, busy, watchedOf, modeOf, mayChange, mayRemove, names, onUnlink, onEpisodes, onSet, onFollow, onAddress, onRefresh, onRemove, onClose }: {
+export function ShowDialog({ anime, people, self, playing, busy, watchedOf, modeOf, mayChange, mayRemove, names, links, onUnlink, onEpisodes, onSet, onFollow, onAddress, onPlay, onRefresh, onRemove, onClose }: {
   anime: WatchAnime
   people: WatchPerson[] // me, those selected and everyone who has watched some of it
   self: string // my username
@@ -30,11 +31,13 @@ export function ShowDialog({ anime, people, self, playing, busy, watchedOf, mode
   mayChange: (username: string) => boolean
   mayRemove: boolean
   names: string[] // what plays under these names is recognised as this show
+  links?: boolean // without onPlay, an episode opens in a tab of this browser
   onUnlink?: (name: string) => void // admins: forget one linked by mistake
   onEpisodes: (person: WatchPerson) => void
   onSet: (username: string, episode: number) => void // ticks one episode
   onFollow: (username: string, mode: WatchMode) => void
   onAddress: (url: string) => Promise<void> // where it is watched; throws what is wrong with it
+  onPlay?: (episode: number) => void // opens the episode in the room's Firefox
   onRefresh: () => void
   onRemove: () => void
   onClose: () => void
@@ -64,6 +67,8 @@ export function ShowDialog({ anime, people, self, playing, busy, watchedOf, mode
     }
   }
   const airs = anime.nextEpisode !== null && anime.nextAiringAt !== null ? { episode: anime.nextEpisode, at: anime.nextAiringAt } : null
+  const latest = onPlay || links ? latestPage(anime) : null
+  const site = latest ? hostOf(latest.address) : ''
   return (
     <Modal title={anime.title} size="md" onClose={onClose}>
       <div class={styles.head}>
@@ -122,6 +127,14 @@ export function ShowDialog({ anime, people, self, playing, busy, watchedOf, mode
         </ul>
       </>}
       <h3 class={styles.label}>Where to watch</h3>
+      {latest && (
+        <div class={styles.latest}>
+          <span class={styles.latestText}>Episode {latest.episode} on <span class={styles.site} title={latest.address}>{site}</span></span>
+          {onPlay
+            ? <Button size="sm" icon="play" title={`Open episode ${latest.episode} in the room’s Firefox, for everyone here`} onClick={() => onPlay(latest.episode)}>Open ep {latest.episode}</Button>
+            : <ButtonLink size="sm" icon="play" title={latest.address} href={latest.address} target="_blank" rel="noreferrer noopener">Open ep {latest.episode}</ButtonLink>}
+        </div>
+      )}
       <form class={styles.address} onSubmit={(e) => { void saveAddress(e) }}>
         <Input type="url" value={address} placeholder="https://…/show-episode-{ep}" aria-label="Address of an episode’s page"
           onInput={(e) => setAddress(e.currentTarget.value)} />
@@ -130,7 +143,7 @@ export function ShowDialog({ anime, people, self, playing, busy, watchedOf, mode
       {addressError && <Notice tone="error" compact class={styles.addressError}>{addressError}</Notice>}
       <p class={styles.note}>
         The page of any episode, or one with <code>{'{ep}'}</code> where the number goes. It is learned by itself when an episode plays in a room’s Firefox;
-        Watch next then opens the next episode there.
+        Watch next then opens the next episode there. Where a site’s addresses don’t say the episode, only the page of the latest one played is known.
       </p>
       <h3 class={styles.label}>Manage the show</h3>
       <div class={styles.manage}>
@@ -141,4 +154,13 @@ export function ShowDialog({ anime, people, self, playing, busy, watchedOf, mode
       {!mayRemove && <p class={styles.note}>Only admins can remove a show someone has watched.</p>}
     </Modal>
   )
+}
+
+// The site of an address: "site.example".
+function hostOf(address: string) {
+  try {
+    return new URL(address).host
+  } catch {
+    return address
+  }
 }

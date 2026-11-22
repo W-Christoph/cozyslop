@@ -182,13 +182,45 @@ func (n Name) Query() string {
 }
 
 // Placeholder stands for the episode number in a show's address (Template).
+// A site that counts differently has the difference in it: "{ep+1}" where
+// its episode 10 is the show's 9th.
 const Placeholder = "{ep}"
+
+var placeholder = regexp.MustCompile(`\{ep(?:([+-])(\d{1,4}))?\}`)
+
+// IsTemplate says whether an address has a Placeholder.
+func IsTemplate(address string) bool { return placeholder.MatchString(address) }
 
 // Template is the address of a page that plays episode n with its number
 // replaced by Placeholder, for the show's other episodes: where it is said
-// as ParsePage reads it, "?ep=5" or ".../show-episode-5". "" if the
-// address does not say n, or is not a web page's.
+// as ParsePage reads it, "?ep=5" or ".../show-episode-5". An address that
+// says another number counts the episodes differently: the placeholder has
+// the difference. "" if the address says no number, or is not a web page's.
 func Template(address string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if t := template(address, n, Placeholder); t != "" {
+		return t
+	}
+	u, err := url.Parse(address)
+	if err != nil {
+		return ""
+	}
+	_, m := pageSlug(u)
+	if m <= 0 || m == n {
+		return ""
+	}
+	d := strconv.Itoa(m - n)
+	if m > n {
+		d = "+" + d
+	}
+	return template(address, m, "{ep"+d+"}")
+}
+
+// template is address with the number n where it says the episode replaced
+// by p; "" if it does not say n.
+func template(address string, n int, p string) string {
 	u, err := url.Parse(address)
 	if err != nil || u.Scheme != "http" && u.Scheme != "https" || u.Host == "" || n <= 0 {
 		return ""
@@ -199,7 +231,7 @@ func Template(address string, n int) string {
 	query := strings.Split(u.RawQuery, "&")
 	for i, part := range query {
 		if key, value, _ := strings.Cut(part, "="); (key == "ep" || key == "episode") && value == number {
-			query[i] = key + "=" + Placeholder
+			query[i] = key + "=" + p
 			u.RawQuery = ""
 			return strings.TrimSuffix(u.String(), "?") + "?" + strings.Join(query, "&")
 		}
@@ -208,7 +240,7 @@ func Template(address string, n int) string {
 	parts := strings.Split(path, "/")
 	for i := len(parts) - 1; i >= 0; i-- {
 		if m := pathEpisode.FindStringSubmatchIndex(parts[i]); m != nil && parts[i][m[2]:m[3]] == number {
-			parts[i] = parts[i][:m[2]] + Placeholder + parts[i][m[3]:]
+			parts[i] = parts[i][:m[2]] + p + parts[i][m[3]:]
 			out := u.Scheme + "://" + u.Host + strings.Join(parts, "/")
 			if u.RawQuery != "" {
 				out += "?" + u.RawQuery
@@ -232,5 +264,12 @@ func TemplateOf(address string) string {
 
 // Fill is a show's address (Template) for episode n.
 func Fill(template string, n int) string {
-	return strings.ReplaceAll(template, Placeholder, strconv.Itoa(n))
+	return placeholder.ReplaceAllStringFunc(template, func(p string) string {
+		m := placeholder.FindStringSubmatch(p)
+		d, _ := strconv.Atoi(m[2])
+		if m[1] == "-" {
+			d = -d
+		}
+		return strconv.Itoa(n + d)
+	})
 }

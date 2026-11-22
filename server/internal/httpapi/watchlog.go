@@ -220,7 +220,8 @@ func (s *Server) addAnime(w http.ResponseWriter, r *http.Request) {
 }
 
 // setAnimeAddress says where a show is watched, for opening its episodes in
-// a room: an episode's page with "{ep}" where its number goes, or the page
+// a room: an episode's page with "{ep}" where its number goes ("{ep+1}"
+// where the site counts one more), or the page
 // of any episode where the address says which (".../show-episode-5",
 // "?ep=5"); "" for nowhere. Anyone on the watchlog, as rooms learn it
 // from whoever watches there.
@@ -235,7 +236,7 @@ func (s *Server) setAnimeAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	address := strings.TrimSpace(req.URL)
-	if !strings.Contains(address, episode.Placeholder) {
+	if !episode.IsTemplate(address) {
 		address = episode.TemplateOf(address)
 	} else if u, err := url.Parse(episode.Fill(address, 1)); err != nil || u.Scheme != "http" && u.Scheme != "https" || u.Host == "" {
 		address = ""

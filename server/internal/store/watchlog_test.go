@@ -40,12 +40,16 @@ func TestWatchlog(t *testing.T) {
 	if err := s.SetWatchURL(ctx, 9, "x"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("address of an unknown show: %v", err)
 	}
+	if err := s.SetPage(ctx, 1, "https://site.example/watch/abc", 7); err != nil {
+		t.Fatal(err)
+	}
 	eight, at := 8, int64(1700000000)
 	if ids, err := s.AiringAnime(ctx); err != nil || len(ids) != 1 {
 		t.Fatalf("airing, length unknown: %v %v", ids, err)
 	}
 	b := &Anime{ID: 1, Title: "Sousou no Frieren", Episodes: &twelve, NextEpisode: &eight, NextAiringAt: &at}
-	if err := s.SaveAnime(ctx, b); err != nil || b.WatchURL != "https://site.example/frieren-episode-{ep}" {
+	if err := s.SaveAnime(ctx, b); err != nil || b.WatchURL != "https://site.example/frieren-episode-{ep}" ||
+		b.PageURL != "https://site.example/watch/abc" || b.PageEpisode != 7 {
 		t.Fatalf("save keeps the address: %v %+v", err, b)
 	}
 	if got, err := s.Anime(ctx, 1); err != nil || *got.NextEpisode != 8 || *got.NextAiringAt != at || got.WatchURL != b.WatchURL {

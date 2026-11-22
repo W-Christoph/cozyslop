@@ -549,6 +549,75 @@ func TestWatchOpensEpisodeWhereItPlayed(t *testing.T) {
 	requireEqual(t, got.WatchURL, "https://other.example/watch?v=abc&ep={ep}")
 }
 
+// A site whose addresses do not say the episode: only the page of the
+// latest one is known, for opening that episode again.
+func TestWatchRemembersPageWithoutEpisode(t *testing.T) {
+	f, d := newWatchFixture(t)
+	viewer := f.user("alice")
+	f.permission(viewer, store.Permission{Remote: true})
+	alice, a := f.join(viewer)
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watching", Watching: true})
+
+	page := playStatus{State: "playing", Source: "firefox", Length: 100, Title: "Sousou no Frieren Episode 11 - Site", URL: "https://site.example/watch/G4VUQ1/the-journeys-end"}
+	for page.Time = 0; page.Time < 100; page.Time += watchBucket {
+		d.set(page)
+		f.r.checkPlayback(f.ctx)
+	}
+	page.State = "stopped"
+	d.set(page)
+	f.r.checkPlayback(f.ctx)
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_answer", ID: lastProposal(t, a).ID, Checked: true})
+	got, err := f.h.Watchlog.Anime(f.ctx, 1)
+	requireOK(t, err)
+	requireEqual(t, got.WatchURL, "")
+	requireEqual(t, got.PageURL, page.URL)
+	requireEqual(t, got.PageEpisode, 11)
+
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_open", AnimeID: 1, Episode: 12})
+	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "Only the page of episode 11 of Sousou no Frieren is known.")
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_open", AnimeID: 1, Episode: 11})
+	opened := func() string { d.mu.Lock(); defer d.mu.Unlock(); return strings.Join(d.opened, " ") }
+	for i := 0; i < 100 && opened() == ""; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	requireEqual(t, opened(), page.URL)
+
+	// The next episode, the name linked now, is remembered as it starts.
+	page = playStatus{State: "playing", Source: "firefox", Length: 100, Title: "Sousou no Frieren Episode 12 - Site", URL: "https://site.example/watch/G4VUQ2/a-new-start"}
+	d.set(page)
+	f.r.checkPlayback(f.ctx)
+	got, err = f.h.Watchlog.Anime(f.ctx, 1)
+	requireOK(t, err)
+	requireEqual(t, got.PageURL, page.URL)
+	requireEqual(t, got.PageEpisode, 12)
+}
+
+// A page whose title and address say different episodes: the address
+// follows the episode as corrected.
+func TestWatchAddressFollowsCorrectedEpisode(t *testing.T) {
+	f, d := newWatchFixture(t)
+	alice, a := f.join(f.user("alice"))
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watching", Watching: true})
+
+	page := playStatus{State: "playing", Source: "firefox", Length: 100, Title: "Sousou no Frieren Episode 10 - Site", URL: "https://site.example/watch/AbC/sousou-no-frieren?ep=9"}
+	for page.Time = 0; page.Time < 100; page.Time += watchBucket {
+		d.set(page)
+		f.r.checkPlayback(f.ctx)
+	}
+	page.State = "stopped"
+	d.set(page)
+	f.r.checkPlayback(f.ctx)
+	p := lastProposal(t, a)
+	requireEqual(t, p.Episode, 10)
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_episode", ID: p.ID, Episode: 9})
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_answer", ID: newestProposal(t, a).ID, Checked: true})
+	got, err := f.h.Watchlog.Anime(f.ctx, 1)
+	requireOK(t, err)
+	requireEqual(t, got.WatchURL, "https://site.example/watch/AbC/sousou-no-frieren?ep={ep}")
+	requireEqual(t, got.PageEpisode, 9)
+	requireEqual(t, f.progress()["alice"], "9")
+}
+
 func TestWatchlogFollowsAiring(t *testing.T) {
 	f, _ := newWatchFixture(t)
 	// Airing, its length not known: AniList knows it now. One that has

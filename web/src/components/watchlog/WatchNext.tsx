@@ -4,7 +4,7 @@ import { Button, ButtonLink } from '../Button'
 import { Avatar } from '../ui/Avatar'
 import { Icon, type IconName } from '../ui/Icon'
 import { Cover } from './AnimeSearch'
-import { airsIn, airsOn, episodeAddress } from './airing'
+import { airsIn, airsOn, episodeAddress, latestPage } from './airing'
 import { countEpisodes, finished, firstMissing } from './episodes'
 import { watchOptions, watchStates, type WatchOption, type WatchState } from './together'
 import styles from './WatchNext.module.css'
@@ -99,22 +99,32 @@ export function WatchNext({ anime, here, people, progress, self, playing, layout
   const whoseNext = (o: WatchOption) =>
     o.needs.length !== 1 || o.needs.length === o.watching.length ? 'Next' : o.needs[0] === self ? 'Your next' : `${name(o.needs[0])}’s next`
 
-  // The next episode where the show is watched: in the room's Firefox, or
-  // a tab of this browser. Where nobody knows the address yet, the show's
-  // window, where it is set.
+  // Episode n where the show is watched: in the room's Firefox, or a tab
+  // of this browser.
+  const open = (o: WatchOption, n: number, address: string, variant: 'primary' | 'secondary' | 'ghost', about: string) => {
+    // The visible text starts the accessible name.
+    const label = `Open ep ${n}: ${o.anime.title}${onPlay ? ', for everyone here' : ''}`
+    return onPlay
+      ? <Button size="sm" icon="play" variant={variant} aria-label={label} title={`${about}Open episode ${n} in the room’s Firefox, for everyone here`} onClick={() => onPlay(o.anime, n)}>Open ep {n}</Button>
+      : <ButtonLink size="sm" icon="play" variant={variant} aria-label={label} title={`${about}${address}`} href={address} target="_blank" rel="noreferrer noopener">Open ep {n}</ButtonLink>
+  }
+
+  // The next episode where the show is watched. Where only the latest one's
+  // page is known (the site's addresses do not say the episode), that one,
+  // whose site leads on; where nothing is, the show's window, where the
+  // address is set. A show whose next episode is not out offers the latest.
   const openButton = (o: WatchOption) => {
     if (!onPlay && !links) return null
-    const address = episodeAddress(o.anime, o.next)
-    if (!address) {
-      return <Button size="sm" variant="ghost" icon="link" title="Set the address of an episode’s page, to open the next one from here"
-        aria-label={`Where to watch ${o.anime.title}?`} onClick={() => onShow(o.anime)}>Where to watch?</Button>
+    const address = o.state === 'airing' ? '' : episodeAddress(o.anime, o.next)
+    if (address) return open(o, o.next, address, o.state === 'together' || o.state === 'some' ? 'primary' : 'secondary', '')
+    const latest = latestPage(o.anime)
+    if (latest && latest.episode !== o.next) {
+      const about = o.state === 'airing' ? `Episode ${o.next} is not out yet. ` : `Only episode ${latest.episode}’s page is known; the site leads on from there. `
+      return open(o, latest.episode, latest.address, 'ghost', about)
     }
-    // The visible text starts the accessible name.
-    const label = `Open ep ${o.next}: ${o.anime.title}${onPlay ? ', for everyone here' : ''}`
-    const variant = o.state === 'together' || o.state === 'some' ? 'primary' : 'secondary'
-    return onPlay
-      ? <Button size="sm" icon="play" variant={variant} aria-label={label} title={`Open episode ${o.next} in the room’s Firefox, for everyone here`} onClick={() => onPlay(o.anime, o.next)}>Open ep {o.next}</Button>
-      : <ButtonLink size="sm" icon="play" variant={variant} aria-label={label} title={address} href={address} target="_blank" rel="noreferrer noopener">Open ep {o.next}</ButtonLink>
+    if (o.state === 'airing') return null
+    return <Button size="sm" variant="ghost" icon="link" title="Set the address of an episode’s page, to open the next one from here"
+      aria-label={`Where to watch ${o.anime.title}?`} onClick={() => onShow(o.anime)}>Where to watch?</Button>
   }
 
   // When the next episode airs, where AniList says: it is the one announced.
@@ -212,6 +222,7 @@ export function WatchNext({ anime, here, people, progress, self, playing, layout
     const now = o.state === 'together' || o.state === 'some'
     const length = o.anime.episodes !== null ? `of ${o.anime.episodes}` : 'ongoing'
     const airs = airTime(o)
+    const side = openButton(o)
     return (
       <li key={a} class={`${styles.item} ${styles[o.state]} ${a === playing ? styles.playing : ''}`}>
         {/* The title opens the show too: the cover is for the mouse only. */}
@@ -254,7 +265,7 @@ export function WatchNext({ anime, here, people, progress, self, playing, layout
               </small>
             )}
           </p>
-          {o.state !== 'airing' && <div class={styles.side}>{openButton(o)}</div>}
+          {side && <div class={styles.side}>{side}</div>}
         </div>
       </li>
     )

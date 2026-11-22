@@ -85,7 +85,9 @@ export interface WatchAnime {
   coverUrl: string
   addedAt?: number // unix seconds; not in search results
   year?: number | null // search results only
-  watchUrl?: string // an episode's page with {ep} for its number; "" if nobody knows. Not in search results
+  watchUrl?: string // an episode's page with {ep} for its number ({ep+1} where the site counts one more); "" if nobody knows. Not in search results
+  pageUrl?: string // the page the latest episode played on in a room, and which one; "" and 0 if none has
+  pageEpisode?: number
   nextEpisode: number | null // the next to air, and when (unix seconds); null if none is announced
   nextAiringAt: number | null
 }

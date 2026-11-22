@@ -271,7 +271,8 @@ export function WatchlogView({ user, present, playing, version, onPlay }: {
         mayRemove={user.admin || !data.progress.some((p) => p.animeId === shown.id && p.watched.length > 0)}
         names={data.aliases.filter((l) => l.animeId === shown.id).map((l) => l.alias)} onUnlink={user.admin ? (alias) => { void unlink(alias) } : undefined}
         onEpisodes={(person) => episodesOf(shown, person)} onSet={(u, episode) => { void setWatched(shown.id, u, episode, episode, true) }}
-        onFollow={(u, mode) => { void setFollow(shown.id, u, mode) }} onAddress={(url) => setAddress(shown.id, url)} onRefresh={() => { void add(shown.id) }}
+        onFollow={(u, mode) => { void setFollow(shown.id, u, mode) }} onAddress={(url) => setAddress(shown.id, url)}
+        links={!present} onPlay={onPlay ? (episode) => onPlay(shown, episode) : undefined} onRefresh={() => { void add(shown.id) }}
         onRemove={() => setRemoving(shown)} onClose={() => { setShow(null); relayout() }} />
     )}
     {detailAnime && detailPerson && (

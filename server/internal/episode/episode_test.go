@@ -84,8 +84,10 @@ func TestTemplate(t *testing.T) {
 		{"https://site.example/sousou-no-frieren-episode-5", 5, "https://site.example/sousou-no-frieren-episode-{ep}"},
 		{"https://site.example/watch/kaiju-no-8-19145/episode-4.html?s=1", 4, "https://site.example/watch/kaiju-no-8-19145/episode-{ep}.html?s=1"},
 		{"https://site.example/anime/dandadan-season-2/ep-7", 7, "https://site.example/anime/dandadan-season-2/ep-{ep}"},
-		// Not the episode's number, or not said: nothing to go on.
-		{"https://site.example/frieren-episode-5", 6, ""},
+		// A site that counts differently: its episode 10 is the show's 9th.
+		{"https://site.example/watch/sRD4L/steel-ball-run?ep=10", 9, "https://site.example/watch/sRD4L/steel-ball-run?ep={ep+1}"},
+		{"https://site.example/frieren-episode-5", 6, "https://site.example/frieren-episode-{ep-1}"},
+		// Not said: nothing to go on.
 		{"https://site.example/watch/frieren-18542?ep=107257", 5, ""},
 		{"https://site.example/watch/AbC123", 5, ""},
 		{"file:///home/x/frieren-episode-5.mkv", 5, ""},
@@ -99,5 +101,14 @@ func TestTemplate(t *testing.T) {
 	}
 	if got := Fill("https://site.example/frieren-episode-{ep}", 6); got != "https://site.example/frieren-episode-6" {
 		t.Errorf("fill: %q", got)
+	}
+	if got := Fill("https://site.example/w?ep={ep+1}", 10); got != "https://site.example/w?ep=11" {
+		t.Errorf("fill ahead: %q", got)
+	}
+	if got := Fill("https://site.example/frieren-episode-{ep-12}", 14); got != "https://site.example/frieren-episode-2" {
+		t.Errorf("fill behind: %q", got)
+	}
+	if !IsTemplate("https://site.example/w?ep={ep+1}") || IsTemplate("https://site.example/w?ep=1") {
+		t.Error("is template")
 	}
 }

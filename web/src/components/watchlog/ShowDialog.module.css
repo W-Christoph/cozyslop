@@ -16,6 +16,9 @@
    the bars line up and ticking moves nothing. */
 .actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-1); min-width: min(100%, 260px); }
 .watched { min-width: calc(15ch + 42px); }
+.latest { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+.latestText { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }
+.site { color: var(--text-muted); }
 .address { display: flex; gap: var(--space-2); }
 .address > input { flex: 1; min-width: 0; }
 .addressError { margin-top: var(--space-2); }

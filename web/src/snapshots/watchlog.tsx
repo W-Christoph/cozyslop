@@ -75,33 +75,35 @@ export const watchlogScenes: Scene[] = [
   },
   {
     name: 'watch-next',
-    about: 'Watch next for two people: one show to open where it is watched, and shows whose next episode is not out.',
+    about: 'Watch next for two people: one show to open where it is watched, one where only the latest episode’s page is known, and shows whose next episode is not out (one with the latest episode to open).',
     width: 860,
     surface: 'page',
     render: () => (
       <WatchNext heading="h3" self="me" here={people} people={people}
         anime={[
           show(1, 'Sousou no Frieren', { episodes: 28, watchUrl: 'https://site.example/sousou-no-frieren-episode-{ep}' }),
-          show(2, 'Dandadan Season 2', { nextEpisode: 8, nextAiringAt: now / 1000 + 2 * 86400 + 5 * 3600 }),
+          show(2, 'Dandadan Season 2', { nextEpisode: 8, nextAiringAt: now / 1000 + 2 * 86400 + 5 * 3600, pageUrl: 'https://stream.example/watch/G4VUQ1/the-curse', pageEpisode: 7 }),
+          show(5, 'Kusuriya no Hitorigoto', { episodes: 24, pageUrl: 'https://stream.example/watch/GX9Q2/the-banquet', pageEpisode: 3 }),
           show(3, 'Kaiju No. 8', { nextEpisode: 5, nextAiringAt: now / 1000 + 3 * 3600 + 20 * 60 }),
           show(4, 'One Piece', { nextEpisode: 1120, nextAiringAt: now / 1000 + 4 * 86400 }),
         ]}
         progress={[watched(1, 'me', 8), watched(1, 'mika', 8), watched(2, 'me', 7), watched(2, 'mika', 7),
-          watched(3, 'me', 4), watched(4, 'me', 1100), watched(4, 'mika', 1110)]}
+          watched(3, 'me', 4), watched(4, 'me', 1100), watched(4, 'mika', 1110), watched(5, 'me', 3), watched(5, 'mika', 3)]}
         modeOf={() => 'following'} onShow={() => {}} onOpen={() => {}} onPlay={() => {}} />
     ),
   },
   ...[
     { name: 'show-window', about: 'A show’s window, where it is watched learned from the room’s Firefox: the address can be changed here.', address: 'https://site.example/sousou-no-frieren-episode-{ep}' },
     { name: 'show-window-no-address', about: 'A show’s window before anyone watched it in Firefox: an episode’s page is pasted here.', address: '' },
-  ].map(({ name, about, address }): Scene => ({
+    { name: 'show-window-page', about: 'A show’s window for a site whose addresses do not say the episode: only the latest episode’s page, to open again.', address: '', page: 'https://stream.example/watch/G4VUQ1/the-journeys-end' },
+  ].map(({ name, about, address, page }): Scene => ({
     name, about, width: 900, surface: 'page', window: { height: 1150 },
     render: () => (
       <ShowDialog self="me" playing={false} busy={false} mayRemove={false} mayChange={(u) => u === 'me'}
-        anime={show(2, 'Sousou no Frieren', { titleEnglish: 'Frieren: Beyond Journey’s End', nextEpisode: 10, nextAiringAt: now / 1000 + 86400 * 3 + 3600 * 4, watchUrl: address })}
+        anime={show(2, 'Sousou no Frieren', { titleEnglish: 'Frieren: Beyond Journey’s End', nextEpisode: 10, nextAiringAt: now / 1000 + 86400 * 3 + 3600 * 4, watchUrl: address, pageUrl: page ?? '', pageEpisode: page ? 9 : 0 })}
         people={people} watchedOf={(u) => (u === 'me' ? [[1, 8]] : [[1, 9]])} modeOf={() => 'following'}
         names={address ? ['sousou no frieren'] : []} onEpisodes={() => {}} onSet={() => {}} onFollow={() => {}}
-        onAddress={async () => {}} onRefresh={() => {}} onRemove={() => {}} onClose={() => {}} />
+        onAddress={async () => {}} onPlay={() => {}} onRefresh={() => {}} onRemove={() => {}} onClose={() => {}} />
     ),
   })),
 ]

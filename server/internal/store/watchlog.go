@@ -51,6 +51,11 @@ type Anime struct {
 	// WatchURL is where the show is watched: an episode's page with "{ep}"
 	// for its number (SetWatchURL); "" if nobody knows. SaveAnime leaves it.
 	WatchURL string `json:"watchUrl"`
+	// PageURL is the page the latest episode played on in a room's Firefox,
+	// and PageEpisode which one (SetPage); "" and 0 if none has. Sites whose
+	// addresses do not say the episode have only this. SaveAnime leaves it.
+	PageURL     string `json:"pageUrl"`
+	PageEpisode int    `json:"pageEpisode"`
 	// The next episode to air and when (unix seconds); nil while AniList
 	// announces none.
 	NextEpisode  *int   `json:"nextEpisode"`
@@ -84,12 +89,12 @@ type Follow struct {
 	Mode     string `json:"mode"` // casual | dropped
 }
 
-const animeColumns = "id, title, title_english, episodes, cover_url, added_at, watch_url, next_episode, next_airing_at"
+const animeColumns = "id, title, title_english, episodes, cover_url, added_at, watch_url, page_url, page_episode, next_episode, next_airing_at"
 
 func scanAnime(row interface{ Scan(...any) error }) (*Anime, error) {
 	var a Anime
 	var episodes, next, airing sql.NullInt64
-	err := row.Scan(&a.ID, &a.Title, &a.TitleEnglish, &episodes, &a.CoverURL, &a.AddedAt, &a.WatchURL, &next, &airing)
+	err := row.Scan(&a.ID, &a.Title, &a.TitleEnglish, &episodes, &a.CoverURL, &a.AddedAt, &a.WatchURL, &a.PageURL, &a.PageEpisode, &next, &airing)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -104,30 +109,29 @@ func scanAnime(row interface{ Scan(...any) error }) (*Anime, error) {
 	return &a, err
 }
 
-// SaveAnime adds a show, or updates what AniList says about it. AddedAt and
-// WatchURL are filled in.
+// SaveAnime adds a show, or updates what AniList says about it. AddedAt,
+// WatchURL and the page are filled in.
 func (s *Watchlog) SaveAnime(ctx context.Context, a *Anime) error {
 	return s.db.QueryRowContext(ctx,
 		`INSERT INTO anime (id, title, title_english, episodes, cover_url, added_at, next_episode, next_airing_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (id) DO UPDATE SET title = excluded.title, title_english = excluded.title_english,
 		   episodes = excluded.episodes, cover_url = excluded.cover_url,
 		   next_episode = excluded.next_episode, next_airing_at = excluded.next_airing_at
-		 RETURNING added_at, watch_url`,
-		a.ID, a.Title, a.TitleEnglish, a.Episodes, a.CoverURL, s.unix(), a.NextEpisode, a.NextAiringAt).Scan(&a.AddedAt, &a.WatchURL)
+		 RETURNING added_at, watch_url, page_url, page_episode`,
+		a.ID, a.Title, a.TitleEnglish, a.Episodes, a.CoverURL, s.unix(), a.NextEpisode, a.NextAiringAt).Scan(&a.AddedAt, &a.WatchURL, &a.PageURL, &a.PageEpisode)
 }
 
 // SetWatchURL says where a show is watched: an episode's page with "{ep}"
 // for its number, or "" for nowhere known. ErrNotFound if the show is not
 // on the watchlog.
 func (s *Watchlog) SetWatchURL(ctx context.Context, id int64, url string) error {
-	res, err := s.db.ExecContext(ctx, "UPDATE anime SET watch_url = ? WHERE id = ?", url, id)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return execOne(ctx, s.db, "UPDATE anime SET watch_url = ? WHERE id = ?", url, id)
+}
+
+// SetPage says which page episode n of a show played on last. ErrNotFound
+// if the show is not on the watchlog.
+func (s *Watchlog) SetPage(ctx context.Context, id int64, url string, n int) error {
+	return execOne(ctx, s.db, "UPDATE anime SET page_url = ?, page_episode = ? WHERE id = ?", url, n, id)
 }
 
 // AiringAnime returns the shows AniList may have news of: those whose

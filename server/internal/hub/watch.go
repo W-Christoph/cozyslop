@@ -90,6 +90,7 @@ type watching struct {
 	// template is a page's address for the show's other episodes
 	// (episode.Template); "" if it does not say the episode.
 	template string
+	pageURL  string // the page's address, if it is a web address
 	length   int
 	seen     map[string]*viewer // by identity key
 }
@@ -105,7 +106,7 @@ type viewer struct {
 type proposal struct {
 	WatchProposal
 	alias    string           // the file name's title, remembered for its show on save
-	template string           // the page's address, remembered for its show on save
+	pageURL  string           // the page's address, remembered for its show on save
 	anime    *store.Anime     // nil while no show is picked
 	users    map[string]int64 // account ids of the viewers, by identity key
 	timer    *time.Timer
@@ -130,7 +131,7 @@ func (w *watching) proposal() *proposal {
 		return nil
 	}
 	parts := float64((w.length + watchBucket - 1) / watchBucket)
-	p := &proposal{alias: w.name.Alias(), template: w.template, users: make(map[string]int64)}
+	p := &proposal{alias: w.name.Alias(), pageURL: w.pageURL, users: make(map[string]int64)}
 	p.Episode, p.File = w.name.Episode, w.file
 	p.setAnime(w.anime, w.name.Title)
 	for key, v := range w.seen {
@@ -356,11 +357,14 @@ func (r *Room) startWatching(ctx context.Context, file, key string, name episode
 	}
 	if page && known {
 		w.template = episode.Template(file, name.Episode)
+		if u, err := url.Parse(file); err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" {
+			w.pageURL = file
+		}
 	}
 	// A show the name was linked to is the one this page plays: it is
 	// watched here now. AniList's guess waits until someone says yes.
-	if w.linked && w.template != "" {
-		r.saveWatchURL(ctx, w.anime.ID, w.template)
+	if w.linked {
+		r.saveAddress(ctx, w.anime.ID, w.template, w.pageURL, w.name.Episode)
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -547,8 +551,12 @@ func (r *Room) saveProposal(ctx context.Context, p *proposal) error {
 	if err == nil && p.alias != "" {
 		err = r.hub.Watchlog.SaveAlias(ctx, p.alias, p.anime.ID)
 	}
-	if err == nil && p.template != "" {
-		err = r.hub.Watchlog.SetWatchURL(ctx, p.anime.ID, p.template)
+	// The episode as corrected, where the page's title and address differ.
+	if t := episode.Template(p.pageURL, p.Episode); err == nil && t != "" {
+		err = r.hub.Watchlog.SetWatchURL(ctx, p.anime.ID, t)
+	}
+	if err == nil && p.pageURL != "" {
+		err = r.hub.Watchlog.SetPage(ctx, p.anime.ID, p.pageURL, p.Episode)
 	}
 	for _, id := range earlier {
 		if err == nil && p.Episode > 1 {
@@ -713,9 +721,7 @@ func (r *Room) linkPlaying(ctx context.Context, c *Client, animeID int64) error 
 			return err
 		}
 	}
-	if w.template != "" {
-		r.saveWatchURL(ctx, a.ID, w.template)
-	}
+	r.saveAddress(ctx, a.ID, w.template, w.pageURL, w.name.Episode)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.watch == w {
@@ -725,10 +731,19 @@ func (r *Room) linkPlaying(ctx context.Context, c *Client, animeID int64) error 
 	return nil
 }
 
-// saveWatchURL remembers where a show on the watchlog is watched. A show
-// that is not on it (yet) has nothing to remember it for.
-func (r *Room) saveWatchURL(ctx context.Context, animeID int64, template string) {
-	if err := r.hub.Watchlog.SetWatchURL(ctx, animeID, template); err != nil && !errors.Is(err, store.ErrNotFound) {
+// saveAddress remembers where a show on the watchlog is watched: the
+// address for its episodes, where the page's says which (template), and
+// the page episode n played on. A show that is not on it (yet) has nothing
+// to remember them for.
+func (r *Room) saveAddress(ctx context.Context, animeID int64, template, page string, n int) {
+	var err error
+	if template != "" {
+		err = r.hub.Watchlog.SetWatchURL(ctx, animeID, template)
+	}
+	if err == nil && page != "" {
+		err = r.hub.Watchlog.SetPage(ctx, animeID, page, n)
+	}
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		r.log.Warn("watchlog address", "err", err)
 	}
 }
@@ -760,13 +775,20 @@ func (r *Room) openEpisode(ctx context.Context, c *Client, animeID int64, n int)
 	if err != nil {
 		return err
 	}
-	if a.WatchURL == "" {
+	// Where the address does not say the episode, only the page of the
+	// latest one is known.
+	address := a.PageURL
+	if a.WatchURL != "" {
+		address = episode.Fill(a.WatchURL, n)
+	} else if a.PageURL == "" {
 		return &userError{"Nobody has said where " + a.Title + " is watched yet. Set its address in the show's window."}
+	} else if n != a.PageEpisode {
+		return &userError{"Only the page of episode " + strconv.Itoa(a.PageEpisode) + " of " + a.Title + " is known."}
 	}
 	if r.openURL == "" {
 		return &userError{"This room's desktop cannot open pages."}
 	}
-	status, err := r.postHelper(ctx, r.openURL+"?url="+url.QueryEscape(episode.Fill(a.WatchURL, n)))
+	status, err := r.postHelper(ctx, r.openURL+"?url="+url.QueryEscape(address))
 	switch {
 	case err != nil || status == http.StatusNotFound:
 		// Restarting, or a room image from before /open.

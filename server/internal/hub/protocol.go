@@ -91,6 +91,12 @@ type WatchViewer struct {
 	Coverage float64 `json:"coverage"` // share of the episode seen, 0 to 1
 	Checked  bool    `json:"checked"`
 	Answered bool    `json:"answered"` // they said themselves whether they watched it
+	// Earlier is how many of the episodes before this one they have not
+	// marked: they may say they saw those too.
+	Earlier int `json:"earlier"`
+	// EarlierToo: they asked for those to be marked too, with their yes
+	// (watch_earlier). Nothing is marked by it alone.
+	EarlierToo bool `json:"earlierToo"`
 }
 
 type playingMsg struct {
@@ -223,6 +229,7 @@ type ClientMsg struct {
 	To        string `json:"to"`        // whisper: identity key
 	Name      string `json:"name"`      // file_delete, file_play: a file in the desktop's Downloads
 	Checked   bool   `json:"checked"`   // watch_answer
-	Episode   int    `json:"episode"`   // watch_episode
-	AnimeID   int64  `json:"animeId"`   // watch_anime, watch_link: AniList id
+	Earlier   bool   `json:"earlier"`   // watch_earlier: mark the earlier episodes not marked too, with yes
+	Episode   int    `json:"episode"`   // watch_episode, watch_open
+	AnimeID   int64  `json:"animeId"`   // watch_anime, watch_link, watch_open: AniList id
 }

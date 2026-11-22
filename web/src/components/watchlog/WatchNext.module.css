@@ -31,11 +31,13 @@
 .nextEp small:first-child { font-weight: 600; white-space: nowrap; }
 .nextEp strong { color: var(--text); font-size: var(--text-2xl); font-weight: 700; white-space: nowrap; }
 .held strong { color: var(--text-secondary); }
-.hold { display: inline-flex; align-items: center; gap: 3px; }
+.hold { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
 .held .of { display: none; }
 .hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .side { grid-area: side; display: flex; flex-direction: column; align-items: stretch; gap: var(--space-1); min-width: 0; }
-.side > button { justify-content: center; }
+.side > button, .side > a { justify-content: center; }
+/* Without buttons (not out yet) the next episode takes their place too. */
+.item:not(:has(.side)) .nextEp { grid-column: next / side; }
 /* Wide: where everyone stands gets a column of its own between the title
    and the next episode, so that the line uses its width and the chips line
    up from show to show. */

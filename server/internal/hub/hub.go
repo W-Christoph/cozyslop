@@ -66,6 +66,9 @@ type RoomConfig struct {
 	// StatusURL says what the VLC the play helper started plays, or Firefox,
 	// for requests that carry PlayToken; "" if the room has no such helper.
 	StatusURL string
+	// OpenURL opens a web page in the desktop's Firefox, for requests that
+	// carry PlayToken; "" if the room has no such helper.
+	OpenURL string
 	// HibernateURL pauses and continues the programs on the room's desktop
 	// (worker/hibernate.py), for requests that carry PlayToken; "" if the
 	// room has no such helper.
@@ -124,6 +127,7 @@ func (h *Hub) Start(ctx context.Context) error {
 		h.startRoom(r)
 	}
 	go h.sweepChat(ctx)
+	go h.refreshAiring(ctx)
 	return nil
 }
 
@@ -213,7 +217,7 @@ func (h *Hub) makeRoom(rc RoomConfig) *Room {
 	}
 	r.restart, r.defaultScreen, r.titleURL = rc.Restart, rc.DefaultScreen, rc.TitleURL
 	r.start, r.stop, r.running = rc.Start, rc.Stop, rc.Running
-	r.playURL, r.playToken, r.statusURL = rc.PlayURL, rc.PlayToken, rc.StatusURL
+	r.playURL, r.playToken, r.statusURL, r.openURL = rc.PlayURL, rc.PlayToken, rc.StatusURL, rc.OpenURL
 	r.hibernateURL = rc.HibernateURL
 	return r
 }
@@ -267,4 +271,67 @@ func (h *Hub) Remove(name, reason string) bool {
 		close(r.done)
 	}
 	return true
+}
+
+// AniList is asked about the shows that still air this often, and soon
+// after one of their episodes airs. Variables for tests.
+var (
+	airingEvery = 6 * time.Hour
+	airingLate  = 15 * time.Minute // after an episode's time, for AniList to know it aired
+)
+
+// refreshAiring keeps what AniList says of the watchlog's shows that still
+// air up to date, while the watchlog is on: their next episode and when it
+// airs, and their length once it is known.
+func (h *Hub) refreshAiring(ctx context.Context) {
+	for {
+		wait := airingEvery
+		if h.watchlog.Load() && h.AniList != nil {
+			if next := h.updateAiring(ctx); !next.IsZero() {
+				wait = min(wait, max(time.Minute, time.Until(next.Add(airingLate))))
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+	}
+}
+
+// updateAiring asks AniList about the shows that still air, and answers
+// when the next of their episodes airs; zero if none is announced or
+// AniList did not answer.
+func (h *Hub) updateAiring(ctx context.Context) (next time.Time) {
+	ids, err := h.Watchlog.AiringAnime(ctx)
+	if err != nil {
+		h.log.Warn("watchlog airing", "err", err)
+		return time.Time{}
+	}
+	for len(ids) > 0 {
+		batch := ids[:min(len(ids), anilist.MaxIDs)]
+		ids = ids[len(batch):]
+		actx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		found, err := h.AniList.GetMany(actx, batch)
+		cancel()
+		if err != nil {
+			h.log.Warn("anilist airing", "err", err)
+			return time.Time{}
+		}
+		for _, m := range found {
+			a := m.Anime()
+			if err := h.Watchlog.SaveAnime(ctx, a); err != nil {
+				h.log.Warn("watchlog airing", "err", err)
+				return time.Time{}
+			}
+			if a.NextAiringAt == nil {
+				continue
+			}
+			// One AniList has not moved past yet is not waited for again.
+			if at := time.Unix(*a.NextAiringAt, 0); at.After(time.Now()) && (next.IsZero() || at.Before(next)) {
+				next = at
+			}
+		}
+	}
+	return next
 }

@@ -19,6 +19,7 @@ type fakeDesktop struct {
 	mu       sync.Mutex
 	status   playStatus
 	searches int
+	opened   []string // the pages /open was asked to open
 }
 
 func (d *fakeDesktop) set(st playStatus) { d.mu.Lock(); d.status = st; d.mu.Unlock() }
@@ -35,6 +36,11 @@ func newWatchFixture(t *testing.T) (*fixture, *fakeDesktop) {
 		}
 		d.mu.Lock()
 		defer d.mu.Unlock()
+		if r.URL.Path == "/open" && r.Method == http.MethodPost {
+			d.opened = append(d.opened, r.URL.Query().Get("url"))
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		json.NewEncoder(w).Encode(d.status)
 	}))
 	t.Cleanup(helper.Close)
@@ -74,7 +80,7 @@ func newWatchFixture(t *testing.T) (*fixture, *fakeDesktop) {
 	t.Cleanup(ani.Close)
 
 	f := newFixture(t, store.RoomSettings{})
-	f.r.statusURL, f.r.playToken = helper.URL+"/status", "secret"
+	f.r.statusURL, f.r.openURL, f.r.playToken = helper.URL+"/status", helper.URL+"/open", "secret"
 	f.h.AniList = anilist.New()
 	f.h.AniList.URL = ani.URL
 	wl, err := store.OpenWatchlog(f.ctx, ":memory:")
@@ -182,10 +188,10 @@ func TestWatchSuggestsAndSaves(t *testing.T) {
 	requireEqual(t, p.Episode, 5)
 	requireEqual(t, *p.Episodes, 28)
 	requireEqual(t, len(p.Viewers), 1)
-	requireEqual(t, p.Viewers[0], WatchViewer{Key: alice.m.key, Nickname: "alice nick", Coverage: 1, Checked: true})
+	requireEqual(t, p.Viewers[0], WatchViewer{Key: alice.m.key, Nickname: "alice nick", Coverage: 1, Checked: true, Earlier: 4})
 	pb := lastProposal(t, b)
 	requireEqual(t, len(pb.Viewers), 1)
-	requireEqual(t, pb.Viewers[0], WatchViewer{Key: bob.m.key, Nickname: "bob nick", Coverage: 0.5, Checked: false})
+	requireEqual(t, pb.Viewers[0], WatchViewer{Key: bob.m.key, Nickname: "bob nick", Coverage: 0.5, Checked: false, Earlier: 4})
 	requireEqual(t, lastProposal(t, c) == nil, true)
 	requireEqual(t, lastProposal(t, g) == nil, true)
 	requireEqual(t, lastProposal(t, ad) == nil, true)
@@ -377,7 +383,7 @@ func TestWatchFollowsFirefox(t *testing.T) {
 	p := lastProposal(t, a)
 	requireEqual(t, p.Episode, 5)
 	requireEqual(t, p.File, page.URL)
-	requireEqual(t, p.Viewers[0], WatchViewer{Key: alice.m.key, Nickname: "alice nick", Coverage: 1, Checked: true})
+	requireEqual(t, p.Viewers[0], WatchViewer{Key: alice.m.key, Nickname: "alice nick", Coverage: 1, Checked: true, Earlier: 4})
 	f.r.checkPlayback(f.ctx) // still paused there: not another one
 	requireEqual(t, a.count("watch"), 1)
 
@@ -452,4 +458,109 @@ func TestWatchLinksWhatPlaysToAShow(t *testing.T) {
 	requireEqual(t, a.wait(t, "playing").(playingMsg).Playing == nil, true)
 	requireEqual(t, *a.wait(t, "playing").(playingMsg).Playing, WatchPlaying{AnimeID: 2, Title: "Frieren 2", Episode: 6, Linked: true})
 	requireEqual(t, d.searched(), searches)
+}
+
+func TestWatchMarksEarlierEpisodes(t *testing.T) {
+	f, d := newWatchFixture(t)
+	alice, a := f.join(f.user("alice"))
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watching", Watching: true})
+	bob, b := f.join(f.user("bob"))
+	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watching", Watching: true})
+	// Bob marked 2 and 3 before; alice nothing.
+	twentyEight := 28
+	requireOK(t, f.h.Watchlog.SaveAnime(f.ctx, &store.Anime{ID: 1, Title: "Sousou no Frieren", Episodes: &twentyEight}))
+	requireOK(t, f.h.Watchlog.SetWatched(f.ctx, bob.m.user.ID, 1, 2, 3, true, "manual"))
+
+	f.play(d, "[SubsPlease] Sousou no Frieren - 05 (1080p).mkv", nil)
+	p := lastProposal(t, a)
+	requireEqual(t, p.Viewers[0].Earlier, 4)
+	requireEqual(t, lastProposal(t, b).Viewers[0].Earlier, 2)
+	// Another episode counts again.
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_episode", ID: p.ID, Episode: 6})
+	requireEqual(t, newestProposal(t, a).Viewers[0].Earlier, 5)
+	requireEqual(t, newestProposal(t, b).Viewers[0].Earlier, 3)
+
+	// Asking for them marks nothing by itself, and can be taken back.
+	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watch_earlier", ID: p.ID, Earlier: true})
+	requireEqual(t, newestProposal(t, b).Viewers[0].EarlierToo, true)
+	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watch_earlier", ID: p.ID, Earlier: false})
+	requireEqual(t, newestProposal(t, b).Viewers[0].EarlierToo, false)
+	// Alice saw them elsewhere: they are marked with her yes. Bob says yes
+	// to this one only.
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_earlier", ID: p.ID, Earlier: true})
+	requireEqual(t, newestProposal(t, a).Viewers[0].EarlierToo, true)
+	requireEqual(t, f.progress()["alice"], "")
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_answer", ID: p.ID, Checked: true})
+	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watch_answer", ID: p.ID, Checked: true})
+	requireEqual(t, f.progress()["alice"], "1-6")
+	requireEqual(t, f.progress()["bob"], "2-3 6")
+}
+
+func TestWatchOpensEpisodeWhereItPlayed(t *testing.T) {
+	f, d := newWatchFixture(t)
+	viewer := f.user("alice")
+	f.permission(viewer, store.Permission{Remote: true})
+	alice, a := f.join(viewer)
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watching", Watching: true})
+	bob, b := f.join(f.user("bob"))
+
+	// AniList's guess learns nothing until alice says yes.
+	page := playStatus{State: "playing", Source: "firefox", Length: 100, Title: "Some title", URL: "https://site.example/sousou-no-frieren-episode-5"}
+	for page.Time = 0; page.Time < 100; page.Time += watchBucket {
+		d.set(page)
+		f.r.checkPlayback(f.ctx)
+	}
+	page.State = "stopped"
+	d.set(page)
+	f.r.checkPlayback(f.ctx)
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_open", AnimeID: 1, Episode: 6})
+	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "That show is not on the watchlog.")
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_answer", ID: lastProposal(t, a).ID, Checked: true})
+	got, err := f.h.Watchlog.Anime(f.ctx, 1)
+	requireOK(t, err)
+	requireEqual(t, got.WatchURL, "https://site.example/sousou-no-frieren-episode-{ep}")
+
+	// The next episode opens there, for who may use the remote.
+	f.r.Handle(f.ctx, bob, ClientMsg{Type: "watch_open", AnimeID: 1, Episode: 6})
+	requireEqual(t, b.wait(t, "error").(errorMsg).Message, "You are not allowed to do that.")
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_open", AnimeID: 1, Episode: 6})
+	opened := func() string { d.mu.Lock(); defer d.mu.Unlock(); return strings.Join(d.opened, " ") }
+	for i := 0; i < 100 && opened() == ""; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	requireEqual(t, opened(), "https://site.example/sousou-no-frieren-episode-6")
+
+	// A show nobody watched in Firefox has no address.
+	requireOK(t, f.h.Watchlog.SaveAnime(f.ctx, &store.Anime{ID: 2, Title: "Frieren 2"}))
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_open", AnimeID: 2, Episode: 1})
+	requireEqual(t, a.wait(t, "error").(errorMsg).Message, "Nobody has said where Frieren 2 is watched yet. Set its address in the show's window.")
+
+	// A page linked to a show is that show's: its address is learned at once.
+	page = playStatus{State: "playing", Source: "firefox", Length: 100, Title: "Some Podcast Episode 5 - Site", URL: "https://other.example/watch?v=abc&ep=5"}
+	d.set(page)
+	f.r.checkPlayback(f.ctx)
+	f.r.Handle(f.ctx, alice, ClientMsg{Type: "watch_link", AnimeID: 2})
+	a.wait(t, "playing")
+	for i := 0; i < 100 && got.WatchURL != "https://other.example/watch?v=abc&ep={ep}"; i++ {
+		time.Sleep(10 * time.Millisecond)
+		got, err = f.h.Watchlog.Anime(f.ctx, 2)
+		requireOK(t, err)
+	}
+	requireEqual(t, got.WatchURL, "https://other.example/watch?v=abc&ep={ep}")
+}
+
+func TestWatchlogFollowsAiring(t *testing.T) {
+	f, _ := newWatchFixture(t)
+	// Airing, its length not known: AniList knows it now. One that has
+	// finished is not asked about.
+	requireOK(t, f.h.Watchlog.SaveAnime(f.ctx, &store.Anime{ID: 1, Title: "Frieren"}))
+	twelve := 12
+	requireOK(t, f.h.Watchlog.SaveAnime(f.ctx, &store.Anime{ID: 5, Title: "Done", Episodes: &twelve}))
+	requireEqual(t, f.h.updateAiring(f.ctx).IsZero(), true) // nothing more announced
+	got, err := f.h.Watchlog.Anime(f.ctx, 1)
+	requireOK(t, err)
+	requireEqual(t, *got.Episodes, 28)
+	ids, err := f.h.Watchlog.AiringAnime(f.ctx)
+	requireOK(t, err)
+	requireEqual(t, len(ids), 0)
 }

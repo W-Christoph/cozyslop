@@ -33,6 +33,30 @@ func TestWatchlog(t *testing.T) {
 	if got, err := s.Anime(ctx, 1); err != nil || got.Title != "Sousou no Frieren" || got.Episodes != nil || got.AddedAt != added {
 		t.Fatalf("updated: %v %+v", err, got)
 	}
+	// Where it is watched is the watchlog's own: AniList's news keep it.
+	if err := s.SetWatchURL(ctx, 1, "https://site.example/frieren-episode-{ep}"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetWatchURL(ctx, 9, "x"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("address of an unknown show: %v", err)
+	}
+	eight, at := 8, int64(1700000000)
+	if ids, err := s.AiringAnime(ctx); err != nil || len(ids) != 1 {
+		t.Fatalf("airing, length unknown: %v %v", ids, err)
+	}
+	b := &Anime{ID: 1, Title: "Sousou no Frieren", Episodes: &twelve, NextEpisode: &eight, NextAiringAt: &at}
+	if err := s.SaveAnime(ctx, b); err != nil || b.WatchURL != "https://site.example/frieren-episode-{ep}" {
+		t.Fatalf("save keeps the address: %v %+v", err, b)
+	}
+	if got, err := s.Anime(ctx, 1); err != nil || *got.NextEpisode != 8 || *got.NextAiringAt != at || got.WatchURL != b.WatchURL {
+		t.Fatalf("airing: %v %+v", err, got)
+	}
+	if err := s.SaveAnime(ctx, &Anime{ID: 1, Title: "Sousou no Frieren", Episodes: &twelve}); err != nil {
+		t.Fatal(err)
+	}
+	if ids, err := s.AiringAnime(ctx); err != nil || len(ids) != 0 {
+		t.Fatalf("finished airing: %v %v", ids, err)
+	}
 
 	// Alice watched 1 to 5 and unticks 2; a room then saw 4 (which she has)
 	// and 7, with Bob.

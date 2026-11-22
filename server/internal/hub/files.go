@@ -44,8 +44,8 @@ func (r *Room) doFileAction(ctx context.Context, c *Client, action, name string)
 	// Playing changes what everyone watches, like the remote does: it needs
 	// that right too, and respects who owns the remote.
 	owner := ""
-	if host := r.clients[r.hostID]; action == "play" && r.settings.RemoteOwnership && host != nil && host.m != c.m {
-		owner = r.userLocked(host.m).Nickname
+	if action == "play" {
+		owner = r.remoteOwnerLocked(c)
 	}
 	r.mu.Unlock()
 	if !rt.Upload || (action == "play" && !rt.Remote) {
@@ -64,30 +64,49 @@ func (r *Room) doFileAction(ctx context.Context, c *Client, action, name string)
 	return r.playFile(ctx, name)
 }
 
+// remoteOwnerLocked is the nickname of who owns the remote, where the room
+// respects that and it is not c's person; "" if nobody stands in c's way.
+func (r *Room) remoteOwnerLocked(c *Client) string {
+	if host := r.clients[r.hostID]; r.settings.RemoteOwnership && host != nil && host.m != c.m {
+		return r.userLocked(host.m).Nickname
+	}
+	return ""
+}
+
 // playFile asks the helper in the room's container (worker/play.py) to play
 // the file on the desktop.
 func (r *Room) playFile(ctx context.Context, name string) error {
 	if r.playURL == "" {
 		return &userError{"This room's desktop cannot play files."}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.playURL+"?name="+url.QueryEscape(name), nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+r.playToken)
-	res, err := (&http.Client{Timeout: 15 * time.Second, Transport: r.neko.Transport()}).Do(req)
+	status, err := r.postHelper(ctx, r.playURL+"?name="+url.QueryEscape(name))
 	if err != nil {
 		// Restarting, or a room image from before the helper.
 		r.log.Warn("play file", "err", err)
 		return &userError{"The room's desktop did not answer. It may need a newer room image."}
 	}
-	defer res.Body.Close()
-	switch res.StatusCode {
+	switch status {
 	case http.StatusNoContent:
 		return nil
 	case http.StatusNotFound:
 		return neko.ErrNotFound
 	default:
-		return fmt.Errorf("play helper: %s", res.Status)
+		return fmt.Errorf("play helper: %d", status)
 	}
+}
+
+// postHelper posts to the play helper at address, with its token, and
+// answers the status of its answer.
+func (r *Room) postHelper(ctx context.Context, address string) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, address, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+r.playToken)
+	res, err := (&http.Client{Timeout: 15 * time.Second, Transport: r.neko.Transport()}).Do(req)
+	if err != nil {
+		return 0, err
+	}
+	res.Body.Close()
+	return res.StatusCode, nil
 }

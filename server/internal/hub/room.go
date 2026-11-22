@@ -82,6 +82,7 @@ type Room struct {
 	title    string // of the window in front on the desktop
 
 	playURL, playToken string // the desktop's helper that plays files; set before run
+	openURL            string // the same helper, to open a page in Firefox
 
 	// The watchlog (watch.go). statusURL asks the play helper what VLC
 	// plays; set before run. watch is the episode playing, proposal the

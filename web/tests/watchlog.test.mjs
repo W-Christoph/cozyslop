@@ -3,9 +3,10 @@ import assert from 'node:assert/strict'
 import { createServer } from 'vite'
 
 const server = await createServer({ configFile: false, server: { middlewareMode: true } })
-let episodes, together, watchNext, watchOptions
+let episodes, together, watchNext, watchOptions, airing
 try {
   episodes = await server.ssrLoadModule('/src/components/watchlog/episodes.ts')
+  airing = await server.ssrLoadModule('/src/components/watchlog/airing.ts')
   ; ({ together, watchNext, watchOptions } = await server.ssrLoadModule('/src/components/watchlog/together.ts'))
 } finally { await server.close() }
 
@@ -105,4 +106,26 @@ test('who watches a show casually is not waited for and holds nobody back', () =
   assert.equal(watchOptions(anime, ['me', 'bob', 'cas'], progress, () => 'following')[0].next, 1)
   // Nobody who follows it is here: it is not theirs to watch on.
   assert.deepEqual(watchOptions(anime, ['cas'], progress, mode), [])
+})
+
+test('a show whose next episode has not aired waits for it, soonest first', () => {
+  const now = Date.now() / 1000
+  const show = (id, nextEpisode, inHours) => ({ id, title: `Show ${id}`, titleEnglish: '', episodes: null, coverUrl: '', addedAt: id,
+    nextEpisode, nextAiringAt: nextEpisode === null ? null : now + inHours * 3600 })
+  const later = show(1, 8, 48), soon = show(2, 8, 2), out = show(3, 8, -1), upcoming = show(4, 1, 24)
+  assert.equal(airing.aired(later, 7), true)
+  assert.equal(airing.aired(later, 8), false)
+  assert.equal(airing.aired(out, 8), true)
+  assert.equal(airing.aired(out, 9), false)
+  assert.equal(airing.aired(show(5, null), 99), true)
+  assert.equal(airing.airsIn(now + 2 * 86400 + 5 * 3600 + 1), 'in 2d 5h')
+  assert.equal(airing.airsIn(now + 3 * 3600 + 20 * 60), 'in 3h 20m')
+  assert.equal(airing.airsIn(now + 60 * 12), 'in 12m')
+  assert.equal(airing.episodeAddress({ watchUrl: 'https://site/show?ep={ep}' }, 9), 'https://site/show?ep=9')
+  assert.equal(airing.episodeAddress({ watchUrl: '' }, 9), '')
+
+  // Everyone has seen 1 to 7.
+  const progress = [1, 2, 3].map((animeId) => ({ animeId, username: 'a', watched: [[1, 7]], watchedAt: 1 }))
+  const options = watchOptions([later, soon, out, upcoming], ['a'], progress, () => 'following')
+  assert.deepEqual(options.map((o) => [o.anime.id, o.state, o.next]), [[3, 'together', 8], [2, 'airing', 8], [4, 'airing', 1], [1, 'airing', 8]])
 })

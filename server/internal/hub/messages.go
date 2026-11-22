@@ -76,13 +76,16 @@ func (r *Room) Handle(ctx context.Context, c *Client, msg ClientMsg) {
 	case "file_delete", "file_play":
 		go r.fileAction(ctx, c, strings.TrimPrefix(msg.Type, "file_"), msg.Name)
 		return
-	case "watch_answer", "watch_episode":
+	case "watch_answer", "watch_earlier", "watch_episode":
 		err = r.editProposal(ctx, c, msg)
 	case "watch_anime":
 		go func() { r.report(c, msg.Type, r.changeProposalShow(ctx, c, msg.ID, msg.AnimeID)) }()
 		return
 	case "watch_link":
 		go func() { r.report(c, msg.Type, r.linkPlaying(ctx, c, msg.AnimeID)) }()
+		return
+	case "watch_open":
+		go func() { r.report(c, msg.Type, r.openEpisode(ctx, c, msg.AnimeID, msg.Episode)) }()
 		return
 	default:
 		c.send(errorMsg{Type: "error", Message: "Unknown message type."})

@@ -72,3 +72,32 @@ func TestAliasAndQuery(t *testing.T) {
 		t.Fatalf("%q %q", n.Alias(), n.Query())
 	}
 }
+
+func TestTemplate(t *testing.T) {
+	for _, c := range []struct {
+		address string
+		n       int
+		want    string
+	}{
+		{"https://site.example/watch/AbC_123/sousou-no-frieren?ep=5", 5, "https://site.example/watch/AbC_123/sousou-no-frieren?ep={ep}"},
+		{"https://site.example/w?id=abc&episode=12&lang=sub#top", 12, "https://site.example/w?id=abc&episode={ep}&lang=sub"},
+		{"https://site.example/sousou-no-frieren-episode-5", 5, "https://site.example/sousou-no-frieren-episode-{ep}"},
+		{"https://site.example/watch/kaiju-no-8-19145/episode-4.html?s=1", 4, "https://site.example/watch/kaiju-no-8-19145/episode-{ep}.html?s=1"},
+		{"https://site.example/anime/dandadan-season-2/ep-7", 7, "https://site.example/anime/dandadan-season-2/ep-{ep}"},
+		// Not the episode's number, or not said: nothing to go on.
+		{"https://site.example/frieren-episode-5", 6, ""},
+		{"https://site.example/watch/frieren-18542?ep=107257", 5, ""},
+		{"https://site.example/watch/AbC123", 5, ""},
+		{"file:///home/x/frieren-episode-5.mkv", 5, ""},
+	} {
+		if got := Template(c.address, c.n); got != c.want {
+			t.Errorf("%q %d: got %q, want %q", c.address, c.n, got, c.want)
+		}
+	}
+	if got := TemplateOf("https://site.example/watch?id=abc&ep=12"); got != "https://site.example/watch?id=abc&ep={ep}" {
+		t.Errorf("of: %q", got)
+	}
+	if got := Fill("https://site.example/frieren-episode-{ep}", 6); got != "https://site.example/frieren-episode-6" {
+		t.Errorf("fill: %q", got)
+	}
+}

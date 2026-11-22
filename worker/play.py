@@ -7,7 +7,9 @@ GET /status says what that VLC is playing and how far it is, from VLC's own
 web interface, which only listens on this machine and wants a password made
 up for each VLC. While that VLC plays nothing it says what Firefox plays
 instead, as Firefox tells the desktop's media keys (MPRIS, on the session
-bus): the page's title and address, not a file.
+bus): the page's title and address, not a file. POST /open?url=<address>
+opens a web page in a new tab of the desktop's Firefox, for the watchlog's
+"open the next episode".
 
 supervisord runs this as the desktop's user: VLC has to open on their
 desktop, and whoever holds the remote can start it by hand anyway. Every
@@ -67,6 +69,35 @@ def play(path):
             start_new_session=True)
         # Reap it when it is closed on the desktop.
         threading.Thread(target=player.wait, daemon=True).start()
+
+
+def firefox_running():
+    """Whether the Firefox supervisord runs, with the default profile, is up."""
+    for pid in os.listdir("/proc"):
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                args = f.read().split(b"\0")
+        except OSError:
+            continue
+        if args and os.path.basename(args[0]).startswith(b"firefox") and b"-contentproc" not in args \
+                and b"-P" in args and b"default" in args:
+            return True
+    return False
+
+
+def open_page(address):
+    """Opens address, a web page's, in a new tab of the Firefox supervisord
+    runs: a second Firefox with its profile hands it over and exits. Without
+    that Firefox up it would stay, holding the profile, and is not started.
+    "bad" if it is not a web page's address, "down" if Firefox is not up."""
+    parts = urlsplit(address)
+    if parts.scheme not in ("http", "https") or not parts.netloc or len(address) > 2000:
+        return "bad"
+    if not firefox_running():
+        return "down"
+    subprocess.run(["firefox", "-P", "default", "--new-tab", address],
+                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+    return "opened"
 
 
 def status():
@@ -181,10 +212,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         url = urlsplit(self.path)
-        if url.path != "/play":
+        if url.path not in ("/play", "/open"):
             return self.answer(404, "Unknown action.")
         if not self.allowed():
             return self.answer(403, "Not allowed.")
+        if url.path == "/open":
+            try:
+                result = open_page(parse_qs(url.query).get("url", [""])[0])
+            except (OSError, subprocess.TimeoutExpired) as e:
+                return self.answer(500, getattr(e, "strerror", None) or "Failed.")
+            if result == "bad":
+                return self.answer(400, "Not a web page's address.")
+            if result == "down":
+                return self.answer(503, "Firefox is not running.")
+            return self.answer(204, "")
         path = path_of(parse_qs(url.query).get("name", [""])[0])
         if path is None:
             return self.answer(404, "That file is not in Downloads.")

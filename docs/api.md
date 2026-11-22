@@ -235,7 +235,8 @@ How far each account has watched which anime (see
 (401 `"Please log in."`), the `watchlog` setting on (404 `"The watchlog is
 off."`), and that the account did not leave the watchlog (403 `"You left the
 watchlog. Take part again in the settings."`). An account that left it is left
-out of everything listed, and an admin's change to its progress is 404 `"Unknown user."`. Shows are `{"id":<AniList id>,"title":"…","titleEnglish":"…","episodes":28|null,"coverUrl":"…","addedAt":<unix s>}`;
+out of everything listed, and an admin's change to its progress is 404 `"Unknown user."`. Shows are `{"id":<AniList id>,"title":"…","titleEnglish":"…","episodes":28|null,"coverUrl":"…","addedAt":<unix s>,"watchUrl":"…","nextEpisode":8|null,"nextAiringAt":<unix s>|null}`:
+`watchUrl` is where it is watched, an episode's page with `{ep}` for its number (`""` if nobody knows), and `nextEpisode` the next to air at `nextAiringAt`, as AniList says;
 progress is `{"username":"…","animeId":…,"watched":[[1,4],[6,6]]}`: the episodes someone has watched of a show, as ranges in order.
 
 | Method and path | Caller | Request body | Response | Notable errors |
@@ -243,6 +244,7 @@ progress is `{"username":"…","animeId":…,"watched":[[1,4],[6,6]]}`: the epis
 | `GET /api/watchlog` | Account | None | 200 `{"anime":[…],"people":[{"username","nickname","nameColor","avatarUrl"}],"progress":[{"username","animeId","watched":[[1,4],[6,6]],"watchedAt":<unix s>}],"follows":[{"username","animeId","mode"}]}`; shows by title; `watched` is the episodes as ranges, in order; `follows` lists who follows a show as `casual` or `dropped` (everyone else is `following`); `aliases` (`[{"alias","animeId"}]`) are the names of files and pages that count as a show; people are the enabled accounts with any progress | |
 | `GET /api/watchlog/search?q=<text>` | Account | None | 200 up to 10 shows from AniList, best match first, each with `year` (or `null`) | 400 `"Search for 2 to 100 characters."`; 429 `"Asking AniList too fast. Wait a moment."` (searches and added shows together: 10 in a burst, then one more every 2 seconds); 502 `"AniList did not answer. Try again."`; 503 AniList unavailable |
 | `POST /api/watchlog/anime` | Account | `{"id":<AniList id>}` | 200 the show, added or refreshed from AniList | 404 `"AniList has no such anime."`; 429 as for search; 502 AniList unreachable |
+| `PUT /api/watchlog/anime/{id}/address` | Account | `{"url":"…"}`: the page of an episode with `{ep}` where its number goes, or of any episode whose address says which (`…/show-episode-5`, `?ep=5`), or `""` for none | 200 the show, its `watchUrl` with `{ep}` | 400 `"Give the address of an episode's page, with {ep} where its number goes."` (not an http(s) address, or no episode in it); 404 `"That show is not on the watchlog."` |
 | `DELETE /api/watchlog/anime/{id}` | Admin; any account while nobody has watched an episode of the show | None | 204; removes the show, everyone's progress in it and the file names matched to it | 403 `"Someone has watched this show: only admins can remove it."`; 404 `"That show is not on the watchlog."` |
 | `DELETE /api/watchlog/aliases/{alias}` | Admin | None | 204; the name no longer means a show, and what plays under it is matched anew | 403 `"Only admins can unlink a name."`; 404 `"That name is not linked to a show."` |
 | `PUT /api/watchlog/progress/{animeId}/{username}` | That account, or an admin | `{"from":3,"to":5,"watched":true}`: the episodes 3 to 5 are watched, or with `false` are not; `to` may be left out for one episode | 200 `{"username","animeId","watched":[[1,5]]}`: what is watched now | 400 `"The show has no such episode."` (below 1, `to` below `from`, over 9999, or ticking past the show's episode count); 403 `"You can only change your own progress."`; 404 unknown show or user |
@@ -314,17 +316,22 @@ suggestion to mark an episode watched (`null` when there is none);
 when they change, `proposal` `null` once it was saved, or for those it does
 not ask. An account that left the watchlog (`watchlogOff` on its user) gets
 `playing` and `watch` as `null` always. A
-suggestion is `{"id","animeId","title","coverUrl","episodes","episode","file","applyAt","viewers":[{"key","nickname","coverage","checked","answered"}]}`,
+suggestion is `{"id","animeId","title","coverUrl","episodes","episode","file","applyAt","viewers":[{"key","nickname","coverage","checked","answered","earlier","earlierToo"}]}`,
 and `viewers` is only the one it is sent to: nobody sees the others.
 `coverage` is the share of the episode they saw (0 to 1); `checked`, their
 answer if they do not give one (yes from 60%, no from 20%); `answered`
-that they said themselves whether they watched it, `applyAt`
+that they said themselves whether they watched it, `earlier` how many of
+the show's episodes before this one they have not marked, `earlierToo`
+that those are marked with their yes, `applyAt`
 when it is saved by itself (unix ms; `0` while `animeId` is `0` or `episode`
 is past the show's `episodes`). A tab sends `{"type":"watching","watching":true}` while the stream runs in it
 with its picture and its sound (not paused, not sound only, not muted), and `false` when it stops:
 only such tabs count as having seen an episode. Nobody else is told. Those
 a suggestion asks send
 `{"type":"watch_episode","id":…,"episode":6}`,
+`{"type":"watch_earlier","id":…,"earlier":true}` (the episodes before it
+they have not marked are marked too when it is saved with their yes;
+`false` takes that back; neither answers nor delays it),
 `{"type":"watch_anime","id":…,"animeId":<AniList id>}` and
 `{"type":"watch_answer","id":…,"checked":true}` (whether they watched it
 themselves; once everyone asked has answered it is saved; `error` "Pick the
@@ -334,7 +341,11 @@ the show restarts the wait before it saves by itself. Accounts in the room
 that take part in the watchlog send
 `{"type":"watch_link","animeId":<AniList id>}` (the show of the episode that
 plays, remembered for the name it goes by; `error` "No episode is playing."
-without one); others get `error` "You are not allowed to do that.". A
+without one); others get `error` "You are not allowed to do that.". Those
+of them with the remote right (and the remote, where the room respects who
+holds it) send `{"type":"watch_open","animeId":…,"episode":8}`: the
+episode opens in a new tab of the desktop's Firefox, at the show's
+`watchUrl` (`error` for a show without one, or a desktop that cannot). A
 suggestion that is gone is `error` "That suggestion is gone.".
 An unknown room upgrades successfully, sends
 `{"type":"kicked","reason":"not_found"}`, then closes with code 4000.

@@ -203,10 +203,15 @@ export class RoomStore {
     this.socket.send({ type: 'whisper', to, body })
   }
 
-  // The watchlog's suggestion: say whether I watched it, change the episode
-  // or the show (an AniList id).
+  // The watchlog's suggestion: say whether I watched it, have the episodes
+  // before it I have not marked marked with my yes (or not), change the
+  // episode or the show (an AniList id).
   answerWatch(id: number, checked: boolean) {
     this.socket.send({ type: 'watch_answer', id, checked })
+  }
+
+  setWatchEarlier(id: number, earlier: boolean) {
+    this.socket.send({ type: 'watch_earlier', id, earlier })
   }
 
   setWatchEpisode(id: number, episode: number) {
@@ -220,6 +225,12 @@ export class RoomStore {
 
   setWatchAnime(id: number, animeId: number) {
     this.socket.send({ type: 'watch_anime', id, animeId })
+  }
+
+  // Opens an episode of a show on the watchlog in the desktop's Firefox,
+  // where the show is watched.
+  openWatch(animeId: number, episode: number) {
+    this.socket.send({ type: 'watch_open', animeId, episode })
   }
 
   takeRemote() {

@@ -9,7 +9,7 @@ import { Notice } from '../ui/Notice'
 import { Spinner } from '../ui/Spinner'
 import { AnimeSearch } from './AnimeSearch'
 import { EpisodesDialog } from './EpisodesDialog'
-import { hasEpisode, withRange } from './episodes'
+import { withRange } from './episodes'
 import { ShowDialog } from './ShowDialog'
 import { WatchNext } from './WatchNext'
 import { WatchTable } from './WatchTable'
@@ -59,12 +59,14 @@ const key = (animeId: number, username: string) => `${animeId}:${username}`
 // (WatchNext), and who has watched how far (WatchTable). A show opens with
 // everything to do about it (ShowDialog). In a room (present is given) it
 // starts out on what to watch, with the people who are there and the show
-// that plays first; and asks again when version changes.
-export function WatchlogView({ user, present, playing, version }: {
+// that plays first; and asks again when version changes. A show's next
+// episode opens in the room's Firefox (onPlay), or outside a room in a tab.
+export function WatchlogView({ user, present, playing, version, onPlay }: {
   user: Me
   present?: WatchPerson[] // the accounts in the room
   playing?: number // the anime the room is watching
   version?: unknown
+  onPlay?: (anime: WatchAnime, episode: number) => void // in a room, for who may use the remote
 }) {
   const [data, setData] = useState<Watchlog | null>(null)
   const [error, setError] = useState('')
@@ -79,8 +81,6 @@ export function WatchlogView({ user, present, playing, version }: {
   const relayout = () => setLayout((n) => n + 1)
   const [refreshing, setRefreshing] = useState(false)
   const [removing, setRemoving] = useState<WatchAnime | null>(null)
-  // What was just ticked from a card, to take back.
-  const [marked, setMarked] = useState<{ anime: WatchAnime; episode: number; usernames: string[] } | null>(null)
   // Whose episodes of which show are open.
   const [detail, setDetail] = useState<{ animeId: number; username: string } | null>(null)
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : 'Something went wrong.')
@@ -114,7 +114,6 @@ export function WatchlogView({ user, present, playing, version }: {
 
   function open(next: Tab) {
     setTab(next)
-    setMarked(null)
     if (present) return
     try {
       localStorage.setItem(TAB_KEY, next)
@@ -139,27 +138,6 @@ export function WatchlogView({ user, present, playing, version }: {
     } finally {
       setRefreshing(false)
     }
-  }
-
-  // Ticks an episode for those who have not seen it, to be taken back.
-  function mark(anime: WatchAnime, episode: number, usernames: string[]) {
-    const fresh = usernames.filter((u) => !hasEpisode(watchedOf(anime.id, u), episode))
-    if (fresh.length === 0) return
-    setMarked({ anime, episode, usernames: fresh })
-    for (const u of fresh) void setWatched(anime.id, u, episode, episode, true)
-  }
-
-  // The offer to take it back goes by itself.
-  useEffect(() => {
-    if (!marked) return
-    const timer = window.setTimeout(() => setMarked(null), 10000)
-    return () => window.clearTimeout(timer)
-  }, [marked])
-
-  function unmark() {
-    if (!marked) return
-    for (const u of marked.usernames) void setWatched(marked.anime.id, u, marked.episode, marked.episode, false)
-    setMarked(null)
   }
 
   // Shown at once; asked again if the server says no.
@@ -193,6 +171,12 @@ export function WatchlogView({ user, present, playing, version }: {
     }
   }
 
+  // Where a show is watched; what is wrong with it is the dialog's to say.
+  async function setAddress(animeId: number, url: string) {
+    const changed = await watchlog.setAddress(animeId, url)
+    setData((d) => d && { ...d, anime: d.anime.map((a) => (a.id === animeId ? changed : a)) })
+  }
+
   async function unlink(alias: string) {
     setError('')
     try {
@@ -206,7 +190,6 @@ export function WatchlogView({ user, present, playing, version }: {
   async function remove(anime: WatchAnime) {
     setRemoving(null)
     setShow(null)
-    setMarked(null)
     setError('')
     try {
       await watchlog.remove(anime.id)
@@ -223,7 +206,6 @@ export function WatchlogView({ user, present, playing, version }: {
   const detailAnime = detail && data?.anime.find((a) => a.id === detail.animeId)
   const detailPerson = detail && people.find((p) => p.username === detail.username)
   const shown = show !== null && data?.anime.find((a) => a.id === show)
-  const name = (username: string) => (username === user.username ? 'you' : people.find((p) => p.username === username)?.nickname ?? username)
   const episodesOf = (anime: WatchAnime, person: WatchPerson) => setDetail({ animeId: anime.id, username: person.username })
   return <>
     <div class={styles.top}>
@@ -246,14 +228,6 @@ export function WatchlogView({ user, present, playing, version }: {
       <Button variant="primary" icon="plus" onClick={() => setAdding(true)}>Add show</Button>
     </div>
     {error && <Notice tone="error" class={styles.notice}>{error}</Notice>}
-    {marked && (
-      <div key={`${marked.anime.id}:${marked.episode}`} class={styles.undo} role="status">
-        <Icon name="check" size={16} />
-        <span>Marked episode {marked.episode} of <strong>{marked.anime.title}</strong> as watched for {marked.usernames.map(name).join(', ')}.</span>
-        <Button size="sm" onClick={unmark}>Undo</Button>
-        <Button size="sm" variant="ghost" icon="x" aria-label="Dismiss" onClick={() => setMarked(null)} />
-      </div>
-    )}
     {!data && !error && <Spinner label="Loading the watchlog…" />}
     {data && data.anime.length === 0 && (
       <EmptyState icon="monitor" title="No shows yet">
@@ -274,8 +248,8 @@ export function WatchlogView({ user, present, playing, version }: {
           <button type="button" class={styles.everyone} disabled={!chosen} onClick={() => { setChosen(null); keep(null) }}>Everyone</button>
         </div>
         {tab === 'next' ? (
-          <WatchNext anime={data.anime} here={selected} people={people} progress={data.progress} self={user.username} admin={user.admin}
-            playing={playing} layout={layout} heading={present ? 'h3' : 'h2'} modeOf={modeOf} onShow={(anime) => setShow(anime.id)} onOpen={episodesOf} onMark={mark} />
+          <WatchNext anime={data.anime} here={selected} people={people} progress={data.progress} self={user.username}
+            playing={playing} layout={layout} heading={present ? 'h3' : 'h2'} links={!present} modeOf={modeOf} onShow={(anime) => setShow(anime.id)} onOpen={episodesOf} onPlay={onPlay} />
         ) : (
           <WatchTable anime={data.anime} people={selected} self={user.username} playing={playing}
             watchedOf={watchedOf} modeOf={modeOf} onOpen={episodesOf} onShow={(anime) => setShow(anime.id)} />
@@ -297,7 +271,7 @@ export function WatchlogView({ user, present, playing, version }: {
         mayRemove={user.admin || !data.progress.some((p) => p.animeId === shown.id && p.watched.length > 0)}
         names={data.aliases.filter((l) => l.animeId === shown.id).map((l) => l.alias)} onUnlink={user.admin ? (alias) => { void unlink(alias) } : undefined}
         onEpisodes={(person) => episodesOf(shown, person)} onSet={(u, episode) => { void setWatched(shown.id, u, episode, episode, true) }}
-        onFollow={(u, mode) => { void setFollow(shown.id, u, mode) }} onRefresh={() => { void add(shown.id) }}
+        onFollow={(u, mode) => { void setFollow(shown.id, u, mode) }} onAddress={(url) => setAddress(shown.id, url)} onRefresh={() => { void add(shown.id) }}
         onRemove={() => setRemoving(shown)} onClose={() => { setShow(null); relayout() }} />
     )}
     {detailAnime && detailPerson && (

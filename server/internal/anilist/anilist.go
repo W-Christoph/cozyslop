@@ -40,15 +40,26 @@ type Media struct {
 	CoverImage struct {
 		Medium string `json:"medium"`
 	} `json:"coverImage"`
+	// The next episode to air, and when (unix seconds); nil if none is
+	// announced.
+	NextAiringEpisode *struct {
+		Episode  int   `json:"episode"`
+		AiringAt int64 `json:"airingAt"`
+	} `json:"nextAiringEpisode"`
 }
 
 // Anime is m as the watchlog stores it.
 func (m Media) Anime() *store.Anime {
-	return &store.Anime{ID: m.ID, Title: m.Title.Romaji, TitleEnglish: m.Title.English,
+	a := &store.Anime{ID: m.ID, Title: m.Title.Romaji, TitleEnglish: m.Title.English,
 		Episodes: m.Episodes, CoverURL: m.CoverImage.Medium}
+	if next := m.NextAiringEpisode; next != nil && next.Episode > 0 {
+		episode, at := next.Episode, next.AiringAt
+		a.NextEpisode, a.NextAiringAt = &episode, &at
+	}
+	return a
 }
 
-const fields = "id title { romaji english } episodes seasonYear coverImage { medium }"
+const fields = "id title { romaji english } episodes seasonYear coverImage { medium } nextAiringEpisode { episode airingAt }"
 
 // Search returns up to 10 anime matching text, best match first.
 func (c *Client) Search(ctx context.Context, text string) ([]Media, error) {
@@ -76,6 +87,22 @@ func (c *Client) Get(ctx context.Context, id int64) (Media, error) {
 		return Media{}, err
 	}
 	return *out.Media, nil
+}
+
+// MaxIDs is how many anime GetMany asks for at a time.
+const MaxIDs = 50
+
+// GetMany returns the anime with the AniList ids, up to MaxIDs of them; those
+// AniList does not know are left out.
+func (c *Client) GetMany(ctx context.Context, ids []int64) ([]Media, error) {
+	var out struct {
+		Page struct {
+			Media []Media `json:"media"`
+		} `json:"Page"`
+	}
+	err := c.query(ctx, `query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids, type: ANIME) { `+fields+` } } }`,
+		map[string]any{"ids": ids[:min(len(ids), MaxIDs)]}, &out)
+	return out.Page.Media, err
 }
 
 func (c *Client) query(ctx context.Context, query string, vars map[string]any, out any) error {

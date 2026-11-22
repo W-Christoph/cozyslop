@@ -89,6 +89,23 @@ func TestWatchlog(t *testing.T) {
 	a.error(alice, "POST", "/api/watchlog/anime", map[string]any{"id": 1}, 404, "AniList has no such anime.")
 	a.call(alice, "POST", "/api/watchlog/anime", map[string]any{"id": 154587}, 200, nil)
 
+	// Where it is watched: an address with {ep}, or any episode's page.
+	var addressed store.Anime
+	for given, want := range map[string]string{
+		"https://site.example/watch?id=7&ep={ep}":   "https://site.example/watch?id=7&ep={ep}",
+		" https://site.example/frieren-episode-12 ": "https://site.example/frieren-episode-{ep}",
+		"": "",
+	} {
+		a.call(alice, "PUT", "/api/watchlog/anime/154587/address", map[string]any{"url": given}, 200, &addressed)
+		if addressed.WatchURL != want {
+			t.Fatalf("address %q: %+v", given, addressed)
+		}
+	}
+	for _, bad := range []string{"https://site.example/watch/AbC123", "javascript:alert({ep})", "frieren-episode-5"} {
+		a.error(alice, "PUT", "/api/watchlog/anime/154587/address", map[string]any{"url": bad}, 400, "Give the address of an episode's page, with {ep} where its number goes.")
+	}
+	a.error(alice, "PUT", "/api/watchlog/anime/1/address", map[string]any{"url": ""}, 404, "That show is not on the watchlog.")
+
 	// Alice watched 1 to 5 but not 3.
 	var changed store.Progress
 	a.call(alice, "PUT", "/api/watchlog/progress/154587/alice", map[string]any{"from": 1, "to": 5, "watched": true}, 200, nil)

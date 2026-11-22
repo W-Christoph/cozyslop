@@ -180,3 +180,57 @@ func (n Name) Query() string {
 	}
 	return n.Title
 }
+
+// Placeholder stands for the episode number in a show's address (Template).
+const Placeholder = "{ep}"
+
+// Template is the address of a page that plays episode n with its number
+// replaced by Placeholder, for the show's other episodes: where it is said
+// as ParsePage reads it, "?ep=5" or ".../show-episode-5". "" if the
+// address does not say n, or is not a web page's.
+func Template(address string, n int) string {
+	u, err := url.Parse(address)
+	if err != nil || u.Scheme != "http" && u.Scheme != "https" || u.Host == "" || n <= 0 {
+		return ""
+	}
+	number := strconv.Itoa(n)
+	u.Fragment, u.RawFragment = "", ""
+	// The query as it is written, for the site: only the number changes.
+	query := strings.Split(u.RawQuery, "&")
+	for i, part := range query {
+		if key, value, _ := strings.Cut(part, "="); (key == "ep" || key == "episode") && value == number {
+			query[i] = key + "=" + Placeholder
+			u.RawQuery = ""
+			return strings.TrimSuffix(u.String(), "?") + "?" + strings.Join(query, "&")
+		}
+	}
+	path := u.EscapedPath()
+	parts := strings.Split(path, "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		if m := pathEpisode.FindStringSubmatchIndex(parts[i]); m != nil && parts[i][m[2]:m[3]] == number {
+			parts[i] = parts[i][:m[2]] + Placeholder + parts[i][m[3]:]
+			out := u.Scheme + "://" + u.Host + strings.Join(parts, "/")
+			if u.RawQuery != "" {
+				out += "?" + u.RawQuery
+			}
+			return out
+		}
+	}
+	return ""
+}
+
+// TemplateOf is Template for the address of an episode's page, whichever
+// episode it says.
+func TemplateOf(address string) string {
+	u, err := url.Parse(address)
+	if err != nil {
+		return ""
+	}
+	_, n := pageSlug(u)
+	return Template(address, n)
+}
+
+// Fill is a show's address (Template) for episode n.
+func Fill(template string, n int) string {
+	return strings.ReplaceAll(template, Placeholder, strconv.Itoa(n))
+}

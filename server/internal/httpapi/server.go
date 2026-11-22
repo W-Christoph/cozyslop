@@ -199,6 +199,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/watchlog/search", s.searchAnime)
 	mux.HandleFunc("POST /api/watchlog/anime", s.addAnime)
 	mux.HandleFunc("DELETE /api/watchlog/anime/{id}", s.deleteAnime)
+	mux.HandleFunc("PUT /api/watchlog/anime/{id}/address", s.setAnimeAddress)
 	mux.HandleFunc("DELETE /api/watchlog/aliases/{alias}", s.deleteAlias)
 	mux.HandleFunc("PUT /api/watchlog/progress/{anime}/{username}", s.setProgress)
 	mux.HandleFunc("PUT /api/watchlog/follow/{anime}/{username}", s.setFollow)

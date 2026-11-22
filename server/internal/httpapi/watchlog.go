@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"cozycast/internal/anilist"
+	"cozycast/internal/episode"
 	"cozycast/internal/store"
 )
 
@@ -211,6 +213,49 @@ func (s *Server) addAnime(w http.ResponseWriter, r *http.Request) {
 	}
 	a := m.Anime()
 	if err := s.watchlog.SaveAnime(r.Context(), a); err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+// setAnimeAddress says where a show is watched, for opening its episodes in
+// a room: an episode's page with "{ep}" where its number goes, or the page
+// of any episode where the address says which (".../show-episode-5",
+// "?ep=5"); "" for nowhere. Anyone on the watchlog, as rooms learn it
+// from whoever watches there.
+func (s *Server) setAnimeAddress(w http.ResponseWriter, r *http.Request) {
+	if s.watchlogUser(w, r) == nil {
+		return
+	}
+	var req struct {
+		URL string `json:"url"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	address := strings.TrimSpace(req.URL)
+	if !strings.Contains(address, episode.Placeholder) {
+		address = episode.TemplateOf(address)
+	} else if u, err := url.Parse(episode.Fill(address, 1)); err != nil || u.Scheme != "http" && u.Scheme != "https" || u.Host == "" {
+		address = ""
+	}
+	if strings.TrimSpace(req.URL) != "" && (address == "" || len(address) > 1000) {
+		writeError(w, http.StatusBadRequest, "Give the address of an episode's page, with {ep} where its number goes.")
+		return
+	}
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	err := s.watchlog.SetWatchURL(r.Context(), id, address)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "That show is not on the watchlog.")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	a, err := s.watchlog.Anime(r.Context(), id)
+	if err != nil {
 		s.internalError(w, r, err)
 		return
 	}

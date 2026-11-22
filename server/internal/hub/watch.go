@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -23,7 +25,8 @@ import (
 // and notes which part of an episode each person in the room saw. When the
 // episode ends, everyone who saw some of it is asked whether they watched
 // it, and sees only their own part. Accounts that left the watchlog are
-// neither followed nor told what plays.
+// neither followed nor told what plays. A page's address is remembered for
+// its show, to open its next episode there (openEpisode).
 
 const (
 	watchInterval = 5 * time.Second
@@ -84,8 +87,11 @@ type watching struct {
 	page   bool         // a page of Firefox's, not a file
 	anime  *store.Anime // nil if not recognised
 	linked bool         // the name was linked to the show before: not AniList's guess
-	length int
-	seen   map[string]*viewer // by identity key
+	// template is a page's address for the show's other episodes
+	// (episode.Template); "" if it does not say the episode.
+	template string
+	length   int
+	seen     map[string]*viewer // by identity key
 }
 
 // viewer is the parts of an episode one account saw.
@@ -98,10 +104,11 @@ type viewer struct {
 // proposal is a suggestion to mark an episode watched.
 type proposal struct {
 	WatchProposal
-	alias string           // the file name's title, remembered for its show on save
-	anime *store.Anime     // nil while no show is picked
-	users map[string]int64 // account ids of the viewers, by identity key
-	timer *time.Timer
+	alias    string           // the file name's title, remembered for its show on save
+	template string           // the page's address, remembered for its show on save
+	anime    *store.Anime     // nil while no show is picked
+	users    map[string]int64 // account ids of the viewers, by identity key
+	timer    *time.Timer
 }
 
 func (w *watching) playing() *WatchPlaying {
@@ -123,7 +130,7 @@ func (w *watching) proposal() *proposal {
 		return nil
 	}
 	parts := float64((w.length + watchBucket - 1) / watchBucket)
-	p := &proposal{alias: w.name.Alias(), users: make(map[string]int64)}
+	p := &proposal{alias: w.name.Alias(), template: w.template, users: make(map[string]int64)}
 	p.Episode, p.File = w.name.Episode, w.file
 	p.setAnime(w.anime, w.name.Title)
 	for key, v := range w.seen {
@@ -151,6 +158,31 @@ func (p *proposal) setAnime(a *store.Anime, title string) {
 		return
 	}
 	p.AnimeID, p.Title, p.CoverURL, p.Episodes = a.ID, a.Title, a.CoverURL, a.Episodes
+}
+
+// countEarlierLocked notes for each viewer how many episodes of the show
+// before the one suggested they have not marked: someone who watched those
+// elsewhere may say so with their answer. None while there is no show.
+func (r *Room) countEarlierLocked(ctx context.Context, p *proposal) {
+	for i := range p.Viewers {
+		v := &p.Viewers[i]
+		v.Earlier = 0
+		if p.anime == nil || p.Episode <= 1 {
+			continue
+		}
+		watched, err := r.hub.Watchlog.Watched(ctx, p.users[v.Key], p.anime.ID)
+		if err != nil {
+			r.log.Warn("watchlog progress", "err", err)
+			continue
+		}
+		v.Earlier = p.Episode - 1
+		for _, w := range watched {
+			v.Earlier -= max(0, min(w[1], p.Episode-1)-w[0]+1)
+		}
+	}
+	for i := range p.Viewers {
+		p.Viewers[i].EarlierToo = p.Viewers[i].EarlierToo && p.Viewers[i].Earlier > 0
+	}
 }
 
 // saveable: p has a show, and the episode is one it has. A file numbered
@@ -322,6 +354,14 @@ func (r *Room) startWatching(ctx context.Context, file, key string, name episode
 	if w.known {
 		w.anime, w.linked = r.findAnime(ctx, w.name)
 	}
+	if page && known {
+		w.template = episode.Template(file, name.Episode)
+	}
+	// A show the name was linked to is the one this page plays: it is
+	// watched here now. AniList's guess waits until someone says yes.
+	if w.linked && w.template != "" {
+		r.saveWatchURL(ctx, w.anime.ID, w.template)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.watch = w
@@ -422,6 +462,7 @@ func (r *Room) endWatching(ctx context.Context) {
 		r.proposalSeq++
 		p.ID = r.proposalSeq
 		r.proposal = p
+		r.countEarlierLocked(ctx, p)
 		r.scheduleLocked(p)
 		r.sendProposalLocked()
 	}
@@ -488,10 +529,13 @@ func (r *Room) scheduleLocked(p *proposal) {
 // for the file name's title. One that is not saveable, or that nobody
 // watched, is dropped.
 func (r *Room) saveProposal(ctx context.Context, p *proposal) error {
-	var ids []int64
+	var ids, earlier []int64
 	for _, v := range p.Viewers {
 		if v.Checked {
 			ids = append(ids, p.users[v.Key])
+			if v.EarlierToo {
+				earlier = append(earlier, p.users[v.Key])
+			}
 		}
 	}
 	if !p.saveable() || len(ids) == 0 {
@@ -502,6 +546,14 @@ func (r *Room) saveProposal(ctx context.Context, p *proposal) error {
 	err := r.hub.Watchlog.SaveAnime(ctx, p.anime)
 	if err == nil && p.alias != "" {
 		err = r.hub.Watchlog.SaveAlias(ctx, p.alias, p.anime.ID)
+	}
+	if err == nil && p.template != "" {
+		err = r.hub.Watchlog.SetWatchURL(ctx, p.anime.ID, p.template)
+	}
+	for _, id := range earlier {
+		if err == nil && p.Episode > 1 {
+			err = r.hub.Watchlog.SetWatched(ctx, id, p.anime.ID, 1, p.Episode-1, true, "manual")
+		}
 	}
 	if err == nil {
 		err = r.hub.Watchlog.MarkWatched(ctx, ids, p.anime.ID, p.Episode)
@@ -517,10 +569,12 @@ var (
 	errNotAsked     = &userError{"You are not asked about that episode."}
 )
 
-// editProposal handles watch_answer and watch_episode, from those asked
-// about the episode: whether they watched it themselves (watch_answer) is
-// the end of it for them, and for everyone once all have answered; anyone
-// asked may correct the episode.
+// editProposal handles watch_answer, watch_earlier and watch_episode, from
+// those asked about the episode: whether they watched it themselves
+// (watch_answer) is the end of it for them, and for everyone once all have
+// answered. Each may ask for the episodes before it that they have not
+// marked to be marked with their yes (watch_earlier), and take that back:
+// it marks nothing by itself. Anyone asked may correct the episode.
 func (r *Room) editProposal(ctx context.Context, c *Client, msg ClientMsg) error {
 	r.mu.Lock()
 	p := r.proposal
@@ -553,12 +607,19 @@ func (r *Room) editProposal(ctx context.Context, c *Client, msg ClientMsg) error
 		r.sendProposalLocked()
 		r.mu.Unlock()
 		return nil
+	case "watch_earlier":
+		// Neither an answer nor a correction: the wait goes on as it was.
+		p.Viewers[i].EarlierToo = msg.Earlier && p.Viewers[i].Earlier > 0
+		r.sendProposalLocked()
+		r.mu.Unlock()
+		return nil
 	case "watch_episode":
 		if msg.Episode < 1 || msg.Episode > maxEpisode || p.Episodes != nil && msg.Episode > *p.Episodes {
 			r.mu.Unlock()
 			return &userError{"The show has no such episode."}
 		}
 		p.Episode = msg.Episode
+		r.countEarlierLocked(ctx, p)
 	}
 	r.scheduleLocked(p)
 	r.sendProposalLocked()
@@ -592,6 +653,7 @@ func (r *Room) changeProposalShow(ctx context.Context, c *Client, id, animeID in
 		return errProposalGone
 	}
 	p.setAnime(a, p.Title)
+	r.countEarlierLocked(ctx, p)
 	r.scheduleLocked(p)
 	r.sendProposalLocked()
 	return nil
@@ -651,12 +713,71 @@ func (r *Room) linkPlaying(ctx context.Context, c *Client, animeID int64) error 
 			return err
 		}
 	}
+	if w.template != "" {
+		r.saveWatchURL(ctx, a.ID, w.template)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.watch == w {
 		w.anime, w.linked = a, true
 		r.sendPlayingLocked(w)
 	}
+	return nil
+}
+
+// saveWatchURL remembers where a show on the watchlog is watched. A show
+// that is not on it (yet) has nothing to remember it for.
+func (r *Room) saveWatchURL(ctx context.Context, animeID int64, template string) {
+	if err := r.hub.Watchlog.SetWatchURL(ctx, animeID, template); err != nil && !errors.Is(err, store.ErrNotFound) {
+		r.log.Warn("watchlog address", "err", err)
+	}
+}
+
+// openEpisode opens an episode of a show on the watchlog in the desktop's
+// Firefox (watch_open), at the show's address. It changes what everyone
+// watches, as playing a file does: it needs the remote, respects who owns
+// it, and an account that takes part in the watchlog.
+func (r *Room) openEpisode(ctx context.Context, c *Client, animeID int64, n int) error {
+	if !r.hub.watchlog.Load() {
+		return &userError{"The watchlog is off."}
+	}
+	r.mu.Lock()
+	allowed, owner := tracked(c.m) && c.m.rights.Remote, r.remoteOwnerLocked(c)
+	r.mu.Unlock()
+	if !allowed {
+		return ErrNotAllowed
+	}
+	if owner != "" {
+		return &userError{owner + " owns the remote."}
+	}
+	if n < 1 || n > maxEpisode {
+		return &userError{"The show has no such episode."}
+	}
+	a, err := r.hub.Watchlog.Anime(ctx, animeID)
+	if errors.Is(err, store.ErrNotFound) {
+		return &userError{"That show is not on the watchlog."}
+	}
+	if err != nil {
+		return err
+	}
+	if a.WatchURL == "" {
+		return &userError{"Nobody has said where " + a.Title + " is watched yet. Set its address in the show's window."}
+	}
+	if r.openURL == "" {
+		return &userError{"This room's desktop cannot open pages."}
+	}
+	status, err := r.postHelper(ctx, r.openURL+"?url="+url.QueryEscape(episode.Fill(a.WatchURL, n)))
+	switch {
+	case err != nil || status == http.StatusNotFound:
+		// Restarting, or a room image from before /open.
+		r.log.Warn("open page", "err", err, "status", status)
+		return &userError{"The room's desktop did not open it. It may need a newer room image."}
+	case status == http.StatusServiceUnavailable:
+		return &userError{"The room's Firefox is not running. Try again in a moment."}
+	case status != http.StatusNoContent:
+		return fmt.Errorf("play helper: open: %d", status)
+	}
+	r.log.Info("open episode", "client", c.ID, "anime", a.ID, "episode", n)
 	return nil
 }
 

@@ -1,10 +1,14 @@
-import { useRef } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import type { WatchAnime, WatchMode, WatchPerson, WatchRange } from '../../api'
 import { Button, ButtonLink } from '../Button'
 import { Modal } from '../Modal'
 import { Avatar } from '../ui/Avatar'
 import { Badge } from '../ui/Badge'
+import { Input } from '../ui/Field'
+import { Icon } from '../ui/Icon'
+import { Notice } from '../ui/Notice'
 import { Cover } from './AnimeSearch'
+import { airsIn, airsOn } from './airing'
 import { EpisodeBar } from './EpisodeBar'
 import { FollowSelect } from './FollowSelect'
 import { countEpisodes, finished, firstMissing } from './episodes'
@@ -13,8 +17,9 @@ import styles from './ShowDialog.module.css'
 // One show with everything to do about it: who has watched how far, with
 // the next episode to tick and how they follow it for each person one may
 // change;
-// and the show itself, to bring up to date from AniList or take off the list.
-export function ShowDialog({ anime, people, self, playing, busy, watchedOf, modeOf, mayChange, mayRemove, names, onUnlink, onEpisodes, onSet, onFollow, onRefresh, onRemove, onClose }: {
+// when its next episode airs, where it is watched; and the show itself, to
+// bring up to date from AniList or take off the list.
+export function ShowDialog({ anime, people, self, playing, busy, watchedOf, modeOf, mayChange, mayRemove, names, onUnlink, onEpisodes, onSet, onFollow, onAddress, onRefresh, onRemove, onClose }: {
   anime: WatchAnime
   people: WatchPerson[] // me, those selected and everyone who has watched some of it
   self: string // my username
@@ -29,6 +34,7 @@ export function ShowDialog({ anime, people, self, playing, busy, watchedOf, mode
   onEpisodes: (person: WatchPerson) => void
   onSet: (username: string, episode: number) => void // ticks one episode
   onFollow: (username: string, mode: WatchMode) => void
+  onAddress: (url: string) => Promise<void> // where it is watched; throws what is wrong with it
   onRefresh: () => void
   onRemove: () => void
   onClose: () => void
@@ -40,6 +46,24 @@ export function ShowDialog({ anime, people, self, playing, busy, watchedOf, mode
     last.current = Date.now()
     onSet(username, episode)
   }
+  const [address, setAddress] = useState(anime.watchUrl ?? '')
+  const [saving, setSaving] = useState(false)
+  const [addressError, setAddressError] = useState('')
+  // Learned in a room meanwhile, or saved as the server writes it.
+  useEffect(() => { setAddress(anime.watchUrl ?? '') }, [anime.watchUrl])
+  async function saveAddress(e: Event) {
+    e.preventDefault()
+    setSaving(true)
+    setAddressError('')
+    try {
+      await onAddress(address.trim())
+    } catch (err) {
+      setAddressError(err instanceof Error ? err.message : 'Something went wrong.')
+    } finally {
+      setSaving(false)
+    }
+  }
+  const airs = anime.nextEpisode !== null && anime.nextAiringAt !== null ? { episode: anime.nextEpisode, at: anime.nextAiringAt } : null
   return (
     <Modal title={anime.title} size="md" onClose={onClose}>
       <div class={styles.head}>
@@ -50,6 +74,12 @@ export function ShowDialog({ anime, people, self, playing, busy, watchedOf, mode
             {anime.episodes !== null ? `${anime.episodes} episode${anime.episodes === 1 ? '' : 's'}` : 'Length not known yet (still airing)'}
             {playing && <Badge tone="accent" icon="play">Watching now</Badge>}
           </span>
+          {airs && (
+            <span class={styles.length}>
+              <Icon name="bell" size={14} />
+              {airs.at * 1000 > Date.now() ? <span>Episode {airs.episode} airs {airsOn(airs.at)} · {airsIn(airs.at)}</span> : <span>Episode {airs.episode} is out</span>}
+            </span>
+          )}
         </div>
       </div>
       <h3 class={styles.label}>Who has watched what</h3>
@@ -91,6 +121,17 @@ export function ShowDialog({ anime, people, self, playing, busy, watchedOf, mode
           ))}
         </ul>
       </>}
+      <h3 class={styles.label}>Where to watch</h3>
+      <form class={styles.address} onSubmit={(e) => { void saveAddress(e) }}>
+        <Input type="url" value={address} placeholder="https://…/show-episode-{ep}" aria-label="Address of an episode’s page"
+          onInput={(e) => setAddress(e.currentTarget.value)} />
+        <Button size="sm" type="submit" disabled={saving || address.trim() === (anime.watchUrl ?? '')}>{saving ? 'Saving…' : 'Save'}</Button>
+      </form>
+      {addressError && <Notice tone="error" compact class={styles.addressError}>{addressError}</Notice>}
+      <p class={styles.note}>
+        The page of any episode, or one with <code>{'{ep}'}</code> where the number goes. It is learned by itself when an episode plays in a room’s Firefox;
+        Watch next then opens the next episode there.
+      </p>
       <h3 class={styles.label}>Manage the show</h3>
       <div class={styles.manage}>
         <ButtonLink size="sm" icon="link" href={`https://anilist.co/anime/${anime.id}`} target="_blank" rel="noreferrer noopener">Open on AniList</ButtonLink>

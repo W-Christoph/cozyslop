@@ -48,6 +48,13 @@ type Anime struct {
 	Episodes     *int   `json:"episodes"` // nil while unknown (still airing)
 	CoverURL     string `json:"coverUrl"`
 	AddedAt      int64  `json:"addedAt"`
+	// WatchURL is where the show is watched: an episode's page with "{ep}"
+	// for its number (SetWatchURL); "" if nobody knows. SaveAnime leaves it.
+	WatchURL string `json:"watchUrl"`
+	// The next episode to air and when (unix seconds); nil while AniList
+	// announces none.
+	NextEpisode  *int   `json:"nextEpisode"`
+	NextAiringAt *int64 `json:"nextAiringAt"`
 }
 
 // Progress is the episodes of a show an account has watched.
@@ -77,12 +84,12 @@ type Follow struct {
 	Mode     string `json:"mode"` // casual | dropped
 }
 
-const animeColumns = "id, title, title_english, episodes, cover_url, added_at"
+const animeColumns = "id, title, title_english, episodes, cover_url, added_at, watch_url, next_episode, next_airing_at"
 
 func scanAnime(row interface{ Scan(...any) error }) (*Anime, error) {
 	var a Anime
-	var episodes sql.NullInt64
-	err := row.Scan(&a.ID, &a.Title, &a.TitleEnglish, &episodes, &a.CoverURL, &a.AddedAt)
+	var episodes, next, airing sql.NullInt64
+	err := row.Scan(&a.ID, &a.Title, &a.TitleEnglish, &episodes, &a.CoverURL, &a.AddedAt, &a.WatchURL, &next, &airing)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -90,18 +97,56 @@ func scanAnime(row interface{ Scan(...any) error }) (*Anime, error) {
 		n := int(episodes.Int64)
 		a.Episodes = &n
 	}
+	if next.Valid && airing.Valid {
+		n := int(next.Int64)
+		a.NextEpisode, a.NextAiringAt = &n, &airing.Int64
+	}
 	return &a, err
 }
 
-// SaveAnime adds a show, or updates what AniList says about it. AddedAt is
-// filled in.
+// SaveAnime adds a show, or updates what AniList says about it. AddedAt and
+// WatchURL are filled in.
 func (s *Watchlog) SaveAnime(ctx context.Context, a *Anime) error {
 	return s.db.QueryRowContext(ctx,
-		`INSERT INTO anime (id, title, title_english, episodes, cover_url, added_at) VALUES (?, ?, ?, ?, ?, ?)
+		`INSERT INTO anime (id, title, title_english, episodes, cover_url, added_at, next_episode, next_airing_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (id) DO UPDATE SET title = excluded.title, title_english = excluded.title_english,
-		   episodes = excluded.episodes, cover_url = excluded.cover_url
-		 RETURNING added_at`,
-		a.ID, a.Title, a.TitleEnglish, a.Episodes, a.CoverURL, s.unix()).Scan(&a.AddedAt)
+		   episodes = excluded.episodes, cover_url = excluded.cover_url,
+		   next_episode = excluded.next_episode, next_airing_at = excluded.next_airing_at
+		 RETURNING added_at, watch_url`,
+		a.ID, a.Title, a.TitleEnglish, a.Episodes, a.CoverURL, s.unix(), a.NextEpisode, a.NextAiringAt).Scan(&a.AddedAt, &a.WatchURL)
+}
+
+// SetWatchURL says where a show is watched: an episode's page with "{ep}"
+// for its number, or "" for nowhere known. ErrNotFound if the show is not
+// on the watchlog.
+func (s *Watchlog) SetWatchURL(ctx context.Context, id int64, url string) error {
+	res, err := s.db.ExecContext(ctx, "UPDATE anime SET watch_url = ? WHERE id = ?", url, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// AiringAnime returns the shows AniList may have news of: those whose
+// length is not known, or that have an episode still to air.
+func (s *Watchlog) AiringAnime(ctx context.Context) ([]int64, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id FROM anime WHERE episodes IS NULL OR next_episode IS NOT NULL ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 func (s *Watchlog) Anime(ctx context.Context, id int64) (*Anime, error) {

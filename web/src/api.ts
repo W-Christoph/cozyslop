@@ -85,6 +85,9 @@ export interface WatchAnime {
   coverUrl: string
   addedAt?: number // unix seconds; not in search results
   year?: number | null // search results only
+  watchUrl?: string // an episode's page with {ep} for its number; "" if nobody knows. Not in search results
+  nextEpisode: number | null // the next to air, and when (unix seconds); null if none is announced
+  nextAiringAt: number | null
 }
 
 export interface WatchPerson { username: string; nickname: string; nameColor: string; avatarUrl: string }
@@ -116,6 +119,9 @@ export const watchlog = {
   search: (q: string) => api.get<WatchAnime[]>(`/api/watchlog/search?q=${encodeURIComponent(q)}`),
   add: (id: number) => api.post<WatchAnime>('/api/watchlog/anime', { id }),
   remove: (id: number) => api.del<void>(`/api/watchlog/anime/${id}`),
+  // Where the show is watched: an episode's page, with {ep} for its number
+  // or not; "" for nowhere.
+  setAddress: (id: number, url: string) => api.put<WatchAnime>(`/api/watchlog/anime/${id}/address`, { url }),
   unlink: (alias: string) => api.del<void>(`/api/watchlog/aliases/${encodeURIComponent(alias)}`),
   // Marks the episodes from..to as watched, or as not; answers what is
   // watched now.

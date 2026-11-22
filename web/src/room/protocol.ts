@@ -73,6 +73,8 @@ export interface WatchViewer {
   coverage: number // share of the episode they saw, 0 to 1
   checked: boolean // gets the episode on save
   answered: boolean // they said so themselves: they are not asked again
+  earlier: number // episodes before this one they have not marked; they may have those marked too
+  earlierToo: boolean // those are marked with their yes (watch_earlier)
 }
 
 export interface WatchProposal {
@@ -141,6 +143,8 @@ export type ClientMessage =
   | { type: 'preview' } // a still of the desktop, for the chat view while paused
   | { type: 'file_delete' | 'file_play'; name: string } // a file in the desktop's Downloads
   | { type: 'watch_answer'; id: number; checked: boolean } // whether I watched it
+  | { type: 'watch_earlier'; id: number; earlier: boolean } // mark the earlier episodes I have not marked too, with my yes
   | { type: 'watch_episode'; id: number; episode: number }
   | { type: 'watch_anime'; id: number; animeId: number } // AniList id
   | { type: 'watch_link'; animeId: number } // the show of what plays, remembered for its name
+  | { type: 'watch_open'; animeId: number; episode: number } // opens the episode in the desktop's Firefox, at the show's address

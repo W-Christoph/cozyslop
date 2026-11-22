@@ -399,16 +399,17 @@ lists the shows the people selected are in the middle of, each with the
 first episode one of them has not seen, in sections (`together.ts`,
 `watchOptions`): together (everyone selected follows it, perhaps with
 someone behind), some (only some of them follow it), waiting (held up by
-someone who is not selected), and not started yet (on the list, none of them
-has watched any). A show waits for someone of its group who is not selected only
+someone who is not selected), not out yet (the next episode has yet to
+air), and not started yet (on the list, none of them has watched any). A show waits for someone of its group who is not selected only
 if they have not seen that episode either. A show is a line:
 its cover; a verdict ("Ready for all 3 of you", "Mika is 1 behind", "Waiting
 for Tobi"); chips for where everyone stands (those selected who are level
 share one, then who is behind, who has finished, and after "Not here" who
 holds the show up and who does not); its next episode, and whose it is; and
-buttons that tick it for oneself, or as an admin for everyone it is new to.
-That can be taken back for some seconds. A show keeps its section until other people are selected,
-so that ticking moves nothing.
+"Open ep N" (below), or "Where to watch?" (the show's window) where nobody
+knows its address yet. Watch next ticks nothing: rooms do that, and the
+show's and the episodes window by hand. A show keeps its section until other
+people are selected, so that a change moves nothing.
 
 In a room the same view opens as a window over the stream
 (`WatchlogWindow`, from the toolbar or the "Watching" bar at the top of the
@@ -467,6 +468,28 @@ the show that plays comes first. Rooms also notice episodes (`hub/watch.go`):
   waits for one to be picked, and with an episode past the show's last one
   (a season matched by mistake) for it to be corrected. Saving also remembers the file name's title
   for that show, so the next episode is matched without asking AniList.
+- Someone asked about episode 9 who has not marked 1 to 8 (seen elsewhere,
+  before the watchlog) is told so (`earlier`), and may tick "Also mark
+  eps 1–8" (`watch_earlier`), and untick it. Ticking marks nothing: they
+  are marked when the episode is saved with their yes, given or by the
+  wait.
+- A page's address is remembered for its show (`anime.watch_url`), with
+  `{ep}` where the episode's number goes (`episode.Template`: `?ep=5`, or
+  `…/show-episode-5`): when a suggestion for it is saved, or someone links
+  the page to the show, or at once for a page whose name was linked before.
+  Anyone on the watchlog can also set it in the show's window. "Watch next"
+  then has "Open ep N": in a room, for who may use the remote, the play
+  helper opens it in a new tab of the desktop's Firefox (`POST /open?url=`;
+  `watch_open`, the address made by the server); on the Watchlog page in a
+  tab of one's own browser. Firefox runs without `--no-remote` for this: a
+  second `firefox -P default --new-tab` hands the page to it. The helper
+  starts none while that Firefox is down, as it would keep the profile.
+- AniList's next episode to air and its time are kept with each show
+  (`next_episode`, `next_airing_at`). The server asks AniList again about
+  the shows that still air (length unknown, or an episode announced) every
+  six hours, and a quarter of an hour after one of their episodes airs. A
+  show whose next episode for the people selected is not out yet is under
+  "Not out yet" in "Watch next", with when it airs, soonest first.
 - A new suggestion saves the previous one first. Turning the setting off
   drops the open suggestion unsaved.
 - An account can leave the watchlog (Settings, Room, "Take part in the

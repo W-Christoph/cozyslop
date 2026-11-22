@@ -1,9 +1,10 @@
 import { useRef, useState } from 'preact/hooks'
 import type { WatchAnime, WatchMode, WatchPerson, WatchProgress } from '../../api'
-import { Button } from '../Button'
+import { Button, ButtonLink } from '../Button'
 import { Avatar } from '../ui/Avatar'
 import { Icon, type IconName } from '../ui/Icon'
 import { Cover } from './AnimeSearch'
+import { airsIn, airsOn, episodeAddress } from './airing'
 import { countEpisodes, finished, firstMissing } from './episodes'
 import { watchOptions, watchStates, type WatchOption, type WatchState } from './together'
 import styles from './WatchNext.module.css'
@@ -12,6 +13,7 @@ const sections: Record<WatchState, { title: string; about: string; icon: IconNam
   together: { title: 'Watch together', about: 'Everyone here watches these. If someone is behind, start at their episode.', icon: 'users' },
   some: { title: 'Some of you could watch', about: 'Not everyone here watches these.', icon: 'user' },
   waiting: { title: 'Waiting for someone', about: 'Someone who watches this isn’t here. Watching on would leave them behind.', icon: 'clock' },
+  airing: { title: 'Not out yet', about: 'Your next episode of these hasn’t aired yet.', icon: 'bell' },
   new: { title: 'Not started yet', about: 'Nobody here has started these.', icon: 'plus' },
 }
 
@@ -20,23 +22,25 @@ const few: Partial<Record<WatchState, number>> = { some: 4, new: 6 }
 
 // What the people selected can watch now, sorted into what it takes: shows
 // all of them watch, shows some of them watch, shows held up by someone who
-// is away and shows yet to start (together.ts). A line per show says who has
-// seen how much of it and where that leaves me; it opens the show, a person
-// on it their episodes, and its buttons tick the next episode.
-export function WatchNext({ anime, here, people, progress, self, admin, playing, layout, heading: Heading = 'h2', modeOf, onShow, onOpen, onMark }: {
+// is away, shows whose next episode has yet to air and shows yet to start
+// (together.ts). A line per show says who has seen how much of it and where
+// that leaves me; it opens the show, a person on it their episodes, and its
+// button opens the next episode where the show is watched (rooms tick what
+// was watched by themselves).
+export function WatchNext({ anime, here, people, progress, self, playing, layout, heading: Heading = 'h2', links, modeOf, onShow, onOpen, onPlay }: {
   anime: WatchAnime[]
   here: WatchPerson[]
   people: WatchPerson[] // everyone, for those who are not here
   progress: WatchProgress[]
   self: string // my username
-  admin: boolean
   playing?: number // the anime being watched right now: first in its section, and marked
   layout?: unknown // a change sorts the shows into their sections again
   heading?: 'h2' | 'h3' // the sections' headings: h3 in a window, whose title is h2
+  links?: boolean // without onPlay, the next episode opens in a tab of this browser
   modeOf: (animeId: number, username: string) => WatchMode
   onShow: (anime: WatchAnime) => void
   onOpen: (anime: WatchAnime, person: WatchPerson) => void // someone's episodes
-  onMark: (anime: WatchAnime, episode: number, usernames: string[]) => void
+  onPlay?: (anime: WatchAnime, episode: number) => void // opens the episode in the room's Firefox
 }) {
   const [all, setAll] = useState<Partial<Record<WatchState, boolean>>>({}) // sections listed in full
   const person = new Map(people.map((p) => [p.username, p]))
@@ -80,11 +84,14 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
   const status = (o: WatchOption) => {
     const watching = o.watching
     const behind = o.behind.map((b) => `${names([b.username], 'is', 'are')} ${b.by} behind`).join(', ')
+    // Nobody here is behind on a show whose next episode is not out.
+    if (o.state === 'airing') return watching.length === 0 ? 'Not aired yet' : 'All caught up'
     if (o.state === 'new') return o.group.length > 0 ? `${names(o.group, 'watches', 'watch')} it` : 'Nobody here has started it'
     if (o.state === 'waiting') return [`Waiting for ${list(o.waiting.map(name))}`, behind].filter(Boolean).join(' · ')
     if (behind) return behind
     if (watching.length === 1) return watching[0] === self ? 'Only you watch this' : `Only ${name(watching[0])} watches this`
-    return watching.length + o.casual.length === here.length ? `Ready for all ${here.length} of you` : `Ready for ${list(watching.map(inText))}`
+    if (watching.length + o.casual.length === here.length) return here.length === 2 ? 'Ready for both of you' : `Ready for all ${here.length} of you`
+    return `Ready for ${list(watching.map(inText))}`
   }
 
   // Whose next episode the column shows: everyone's, or the one person's
@@ -92,28 +99,26 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
   const whoseNext = (o: WatchOption) =>
     o.needs.length !== 1 || o.needs.length === o.watching.length ? 'Next' : o.needs[0] === self ? 'Your next' : `${name(o.needs[0])}’s next`
 
-  // Marking the next episode: for me, and as an admin for everyone it is new
-  // to. Where it can be watched now one of them is filled: for an admin the
-  // group's, as a room ticks an episode for everyone at once. The visible
-  // label starts the accessible name.
-  const buttons = (o: WatchOption) => {
-    const mine = o.needs.includes(self), others = admin && o.needs.some((u) => u !== self)
-    const now = o.state === 'together' || o.state === 'some'
-    const of = `episode ${o.next} of ${o.anime.title}`
-    const who = list(o.needs.map(inText))
-    const forAll = o.needs.length > 2 ? (o.needs.length === here.length ? `Mark for all ${o.needs.length}` : `Mark for ${o.needs.length}`)
-      : `Mark for ${o.needs.map((u) => (u === self ? 'me' : name(u))).join(' & ')}`
-    return <>
-      {others && (
-        <Button size="sm" icon={mine ? 'users' : 'check'} variant={now ? 'primary' : 'secondary'} aria-label={`${forAll}: ${of}, for ${who}`}
-          title={`Mark episode ${o.next} as watched for ${who}`} onClick={() => onMark(o.anime, o.next, o.needs)}>{forAll}</Button>
-      )}
-      {mine && (
-        <Button size="sm" icon="check" variant={now && !others ? 'primary' : others ? 'ghost' : 'secondary'} aria-label={`${others ? 'Only me' : 'Mark watched'}: ${of}, for you`}
-          title={`Mark episode ${o.next} as watched for you`} onClick={() => onMark(o.anime, o.next, [self])}>{others ? 'Only me' : 'Mark watched'}</Button>
-      )}
-    </>
+  // The next episode where the show is watched: in the room's Firefox, or
+  // a tab of this browser. Where nobody knows the address yet, the show's
+  // window, where it is set.
+  const openButton = (o: WatchOption) => {
+    if (!onPlay && !links) return null
+    const address = episodeAddress(o.anime, o.next)
+    if (!address) {
+      return <Button size="sm" variant="ghost" icon="link" title="Set the address of an episode’s page, to open the next one from here"
+        aria-label={`Where to watch ${o.anime.title}?`} onClick={() => onShow(o.anime)}>Where to watch?</Button>
+    }
+    // The visible text starts the accessible name.
+    const label = `Open ep ${o.next}: ${o.anime.title}${onPlay ? ', for everyone here' : ''}`
+    const variant = o.state === 'together' || o.state === 'some' ? 'primary' : 'secondary'
+    return onPlay
+      ? <Button size="sm" icon="play" variant={variant} aria-label={label} title={`Open episode ${o.next} in the room’s Firefox, for everyone here`} onClick={() => onPlay(o.anime, o.next)}>Open ep {o.next}</Button>
+      : <ButtonLink size="sm" icon="play" variant={variant} aria-label={label} title={address} href={address} target="_blank" rel="noreferrer noopener">Open ep {o.next}</ButtonLink>
   }
+
+  // When the next episode airs, where AniList says: it is the one announced.
+  const airTime = (o: WatchOption) => (o.state === 'airing' && o.next === o.anime.nextEpisode ? o.anime.nextAiringAt : null)
 
   const avatarButton = (anime: WatchAnime, u: string, about: string) => {
     const p = person.get(u)
@@ -205,7 +210,8 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
     }
     const moved = o.state !== place(o).state
     const now = o.state === 'together' || o.state === 'some'
-    const length = o.anime.episodes !== null ? `of ${o.anime.episodes}` : 'airing'
+    const length = o.anime.episodes !== null ? `of ${o.anime.episodes}` : 'ongoing'
+    const airs = airTime(o)
     return (
       <li key={a} class={`${styles.item} ${styles[o.state]} ${a === playing ? styles.playing : ''}`}>
         {/* The title opens the show too: the cover is for the mouse only. */}
@@ -242,8 +248,13 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
             <strong><span class={styles.hidden}>episode </span>Ep {o.next}</strong>
             <small class={styles.of}>{length}</small>
             {o.state === 'waiting' && <small class={styles.hold}><Icon name="clock" size={12} />on hold</small>}
+            {o.state === 'airing' && (
+              <small class={styles.hold} title={airs !== null ? `Airs ${airsOn(airs)}` : undefined}>
+                <Icon name="bell" size={12} /><span class={styles.hidden}>airs </span>{airs !== null ? airsIn(airs) : 'not out yet'}
+              </small>
+            )}
           </p>
-          <div class={styles.side}>{buttons(o)}</div>
+          {o.state !== 'airing' && <div class={styles.side}>{openButton(o)}</div>}
         </div>
       </li>
     )
@@ -259,7 +270,7 @@ export function WatchNext({ anime, here, people, progress, self, admin, playing,
       const shown = all[state] ? found : found.slice(0, limit)
       return (
         <section key={state} class={styles.section} aria-label={sections[state].title}>
-          <Heading class={styles.heading}><Icon name={sections[state].icon} size={16} class={`${styles.dot} ${styles[state]}`} />{sections[state].title}<span class={styles.count}>{found.length}</span></Heading>
+          <Heading class={styles.heading}><Icon name={sections[state].icon} size={16} class={`${styles.dot} ${styles[state]}`} />{sections[state].title}<span class={styles.count}><span class={styles.hidden}>, </span>{found.length}<span class={styles.hidden}> {found.length === 1 ? 'show' : 'shows'}</span></span></Heading>
           <p class={styles.about}>{sections[state].about}</p>
           <ul class={styles.list}>{shown.map(item)}</ul>
           {found.length > limit && (

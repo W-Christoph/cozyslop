@@ -218,8 +218,10 @@ room, msg, attrs as JSON). Kinds:
   longest-held lock, how long the databases' write locks took, TLS
   handshake failures and dropped entries.
 - `stall`: the watchdog (`diag.Watchdog`, every 5 seconds) found the server
-  stuck, and later well again with how long it was: the hub's or a room's
-  lock held over 5 s (`diag.Mutex` and `diag.RWMutex` know since when they
+  stuck, and later well again with how long it was: the hub's lock, a
+  room's or a room's chat lock (chat is written to the database under
+  its own lock, so a busy database holds up the chat, not the room) held
+  over 5 s (`diag.Mutex` and `diag.RWMutex` know since when they
   are held, so nothing has to take them to find out), a database's write
   lock (`BEGIN IMMEDIATE`, one try at a time) taking over 3 s or failing, a
   request other than the long-lived ones running over 15 s, or the
@@ -233,7 +235,7 @@ room, msg, attrs as JSON). Kinds:
 most 200,000, removed hourly. The file is not exported, nothing in it
 refers to an account, and deleting it and `data/diagnostics/` (or
 `DELETE /api/admin/diagnostics`) loses nothing but history; a file it cannot read is replaced at startup.
-`COZYCAST_DIAGNOSTICS=false` turns it off. It is written by one goroutine
+`COZYCAST_DIAGNOSTICS=false` (`DIAGNOSTICS=false` in `.env`) turns it off. It is written by one goroutine
 in batches; when that falls behind, entries are dropped and counted, never
 waited for.
 

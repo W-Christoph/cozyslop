@@ -30,29 +30,29 @@ samples, the stall watchdog with dumps, SIGUSR1, Docker log limits. Left:
       `/var/lib/docker/containers/*/*-json.log` (`sudo du -sh`). Also look
       for a default in `/etc/docker/daemon.json` and for copies anywhere
       else (journald, log shippers, backups of `/var/lib/docker`).
-- [ ] Main instance: after deploying, look at `?kind=boot` (was the last
+- [ ] Main instance: after deploying, look at the boots (was the last
       outage a crash or out-of-memory restart?) and, at the next outage,
-      `?kind=stall` and its dump. Check the thresholds give no false alarms
+      the stall and its dump, on the admin page once it exists (until
+      then `?kind=boot` and `?kind=stall`). Check the thresholds give no false alarms
       in normal use (`diag.StuckLock` 5 s, `StuckProbe` 3 s, `StuckRequest`
       15 s, `StuckLag` 2 s) and how fast `diagnostics.db` grows (samples:
       about 5 MB a day).
 - [ ] An uptime check from another machine (e.g. `GET /api/settings` every
       minute): tells an outage of the process from one of the network,
       Docker's port forwarding or the host, which the watchdog cannot see.
-- [ ] Likely causes to look at when a stall names them: chat messages are
-      written to the database while `Room.mu` is held (`hub/messages.go`,
-      up to the 5 s busy timeout), `Hub.Remove` holds the hub's lock until
-      the room's goroutines end (one may be in a 10 s AniList call), and
-      everything writing `cozycast.db` shares its one writer (chat prune
-      every minute, session touches).
-- [ ] The node agent (`server/cmd/node`, on home computers) still logs
-      through the plain slog handler: give it `diag.NewHandler` without a
-      store, so its stderr is scrubbed the same way.
-- [ ] `COZYCAST_DIAGNOSTICS` (default on) is not in `compose.yaml` or
-      `.env.example`; add it if it should be switchable from `.env`.
-- [ ] Refused egress no longer logs the host (it may be where someone in a
-      paired room tried to go). If refusals need troubleshooting, count
-      them per port instead.
+- [x] Chat messages are written to the database under the room's own chat
+      lock (`Room.chatMu`), no longer under `Room.mu`; `Hub.Remove` waits
+      for the room's goroutines without the hub's lock (`Add` waits for a
+      name still being removed).
+- [ ] Left to look at when a stall names it: everything writing
+      `cozycast.db` shares its one writer (chat prune every minute,
+      session touches).
+- [x] The node agent (`server/cmd/node`, on home computers) logs through
+      `diag.NewHandler` without a store, so its stderr is scrubbed the same
+      way. What it says to the person at home (stdout) is not.
+- [x] `DIAGNOSTICS` in `.env` (`COZYCAST_DIAGNOSTICS`, default on).
+- [x] Refused egress logs the port, never the host (it may be where
+      someone in a paired room tried to go).
 
 ## 1. Open: when deploying
 

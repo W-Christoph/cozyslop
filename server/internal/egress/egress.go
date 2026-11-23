@@ -179,10 +179,16 @@ func splice(down net.Conn, buffered *bufio.Reader, up net.Conn) {
 	<-done
 }
 
+// refuse answers a request that cannot go through. A refusal is logged with
+// the port only: the host may be where someone in the room tried to go.
 func (p *Proxy) refuse(w http.ResponseWriter, host string, err error) {
 	if errors.Is(err, errDenied) {
 		if p.Log != nil {
-			p.Log.Info("egress refused")
+			_, port, err := net.SplitHostPort(host)
+			if err != nil {
+				port = "80" // plain HTTP without one
+			}
+			p.Log.Info("egress refused", "port", port)
 		}
 		http.Error(w, "destination not allowed", http.StatusForbidden)
 		return

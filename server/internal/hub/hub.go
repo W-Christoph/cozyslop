@@ -45,6 +45,9 @@ type Hub struct {
 	mu       diag.RWMutex // room map and lifetimes
 	ctx      context.Context
 	rooms    map[string]*Room
+	// Removed rooms whose work has not ended yet: their names are not
+	// free before it has.
+	removing map[string]chan struct{}
 	log      *slog.Logger
 	// The rooms when Locks last looked, for when it cannot look.
 	lockRooms atomic.Pointer[[]*Room]
@@ -81,7 +84,8 @@ type RoomConfig struct {
 }
 
 func New(s *store.Store, mediaDir string, rooms []RoomConfig) *Hub {
-	h := &Hub{store: s, mediaDir: mediaDir, rooms: make(map[string]*Room), log: slog.Default()}
+	h := &Hub{store: s, mediaDir: mediaDir, rooms: make(map[string]*Room),
+		removing: make(map[string]chan struct{}), log: slog.Default()}
 	for _, rc := range rooms {
 		h.rooms[rc.Name] = h.makeRoom(rc)
 	}
@@ -102,7 +106,8 @@ func (h *Hub) Locks() []diag.Lock {
 	locks := []diag.Lock{{Name: "hub", Held: h.mu.Held()}}
 	if rooms := h.lockRooms.Load(); rooms != nil {
 		for _, r := range *rooms {
-			locks = append(locks, diag.Lock{Name: "room " + r.Name, Held: r.mu.Held()})
+			locks = append(locks, diag.Lock{Name: "room " + r.Name, Held: r.mu.Held()},
+				diag.Lock{Name: "room " + r.Name + " chat", Held: r.chatMu.Held()})
 		}
 	}
 	return locks
@@ -253,9 +258,22 @@ func (h *Hub) startRoom(r *Room) {
 	go func() { defer close(r.done); r.run(ctx) }()
 }
 
-// Add loads settings before publishing a room and starts the same work as Start.
+// Add loads settings before publishing a room and starts the same work as
+// Start. A room of the same name that is being removed is waited for.
 func (h *Hub) Add(ctx context.Context, rc RoomConfig) error {
 	h.mu.Lock()
+	for done := h.removing[rc.Name]; done != nil; done = h.removing[rc.Name] {
+		h.mu.Unlock()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		h.mu.Lock()
+		if h.removing[rc.Name] == done {
+			delete(h.removing, rc.Name)
+		}
+	}
 	defer h.mu.Unlock()
 	if h.rooms[rc.Name] != nil {
 		return ErrRoomExists
@@ -275,26 +293,36 @@ func (h *Hub) Add(ctx context.Context, rc RoomConfig) error {
 
 // Remove waits for the room's background work before allowing its name to be reused.
 // It deliberately leaves all per-room data in the store.
+// The hub's lock is not held while waiting: the work may be in a call to
+// AniList or the room's helpers, and every request looks up its room.
 func (h *Hub) Remove(name, reason string) bool {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	r := h.rooms[name]
 	if r == nil {
+		h.mu.Unlock()
 		return false
 	}
 	delete(h.rooms, name)
+	h.removing[name] = r.done
 	r.mu.Lock()
 	r.removeCancel()
 	for _, c := range r.clients {
 		r.kickClientLocked(c, kickedMsg{Type: "kicked", Reason: reason})
 	}
 	r.mu.Unlock()
-	if r.cancel != nil {
-		r.cancel()
+	cancel := r.cancel
+	h.mu.Unlock()
+	if cancel != nil {
+		cancel()
 		<-r.done
 	} else {
 		close(r.done)
 	}
+	h.mu.Lock()
+	if h.removing[name] == r.done {
+		delete(h.removing, name)
+	}
+	h.mu.Unlock()
 	return true
 }
 

@@ -225,20 +225,40 @@ func (r *Room) PostMedia(ctx context.Context, key, typ, file string) error {
 }
 
 func (r *Room) post(ctx context.Context, key, typ, body, media string) error {
+	r.chatMu.Lock()
+	defer r.chatMu.Unlock()
+	msg, err := r.newChat(key, typ, body, media)
+	if err != nil {
+		return err
+	}
+	// Stored and broadcast under chatMu, so every tab sees messages in id
+	// order and joins cannot miss one (see Join).
+	if err := r.hub.store.InsertChat(ctx, msg); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	r.broadcastLocked(chatMsg{Type: "chat", Message: r.toChat([]store.ChatMessage{*msg})[0]}, nil)
+	r.mu.Unlock()
+	return nil
+}
+
+// newChat checks that key may post and makes the message, as its author
+// is now.
+func (r *Room) newChat(key, typ, body, media string) (*store.ChatMessage, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	m := r.members[key]
 	if m == nil {
-		return ErrNotPresent
+		return nil, ErrNotPresent
 	}
 
 	if (typ == "image" || typ == "video") && !m.rights.Image {
-		return ErrNotAllowed
+		return nil, ErrNotAllowed
 	}
 
 	if typ == "text" {
 		if err := r.chatRateLocked(m); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -257,13 +277,7 @@ func (r *Room) post(ctx context.Context, key, typ, body, media string) error {
 		msg.UserID = &m.user.ID
 		msg.Avatar = m.user.Avatar
 	}
-	// Insert and broadcast under the lock so every tab sees messages in id
-	// order and joins cannot miss one (see Join).
-	if err := r.hub.store.InsertChat(ctx, msg); err != nil {
-		return err
-	}
-	r.broadcastLocked(chatMsg{Type: "chat", Message: r.toChat([]store.ChatMessage{*msg})[0]}, nil)
-	return nil
+	return msg, nil
 }
 
 func (r *Room) chatRateLocked(m *member) error {
@@ -282,27 +296,34 @@ func (r *Room) editChat(ctx context.Context, c *Client, id int64, body string) e
 	if err != nil {
 		return err
 	}
+	r.chatMu.Lock()
+	defer r.chatMu.Unlock()
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	author := c.m.key
+	r.mu.Unlock()
 	// Only the author edits, and only text.
-	err = r.hub.store.EditChat(ctx, r.Name, id, c.m.key, body)
+	err = r.hub.store.EditChat(ctx, r.Name, id, author, body)
 	if errors.Is(err, store.ErrNotFound) {
 		return ErrNotAllowed
 	}
 	if err != nil {
 		return err
 	}
+	r.mu.Lock()
 	r.broadcastLocked(chatEditedMsg{Type: "chat_edited", ID: id, Body: body}, nil)
+	r.mu.Unlock()
 	return nil
 }
 
 func (r *Room) deleteChat(ctx context.Context, c *Client, id int64) error {
+	r.chatMu.Lock()
+	defer r.chatMu.Unlock()
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	author := c.m.key
 	if c.m.rights.Admin {
 		author = "" // admins delete anyone's messages
 	}
+	r.mu.Unlock()
 	media, err := r.hub.store.DeleteChat(ctx, r.Name, id, author)
 	if errors.Is(err, store.ErrNotFound) {
 		return ErrNotAllowed
@@ -310,8 +331,10 @@ func (r *Room) deleteChat(ctx context.Context, c *Client, id int64) error {
 	if err != nil {
 		return err
 	}
-	r.hub.removeMedia([]string{media})
+	r.mu.Lock()
 	r.broadcastLocked(chatDeletedMsg{Type: "chat_deleted", ID: id}, nil)
+	r.mu.Unlock()
+	r.hub.removeMedia([]string{media})
 	return nil
 }
 

@@ -64,6 +64,13 @@ type Room struct {
 	start, stop func(ctx context.Context) error
 	running     func(ctx context.Context) (bool, error)
 
+	// chatMu orders writes to the room's chat: each is stored and then
+	// broadcast before the next, and Join reads the history between them.
+	// The database is written under chatMu, not mu, which every message
+	// and join needs: a busy database delays the chat, not the room.
+	// Taken before mu, never while holding it.
+	chatMu diag.Mutex
+
 	mu       diag.Mutex
 	settings store.RoomSettings
 	members  map[string]*member // by identity key
@@ -578,6 +585,8 @@ func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
 		sessionHash: slices.Clone(id.SessionHash), ip: id.IP}
 	now := time.Now().UnixMilli()
 
+	r.chatMu.Lock()
+	defer r.chatMu.Unlock()
 	r.mu.Lock()
 	select {
 	case <-r.removed.Done():
@@ -602,8 +611,8 @@ func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
 	r.clients[c.ID] = c
 	changed := r.recomputeLocked(m)
 
-	// History is read under the lock: a chat message is either in it or
-	// broadcast to this client afterwards, never lost in between.
+	// History is read under chatMu: a chat message is either in it or
+	// broadcast to this client afterwards, never lost or sent twice.
 	history, err := r.hub.store.ChatHistory(ctx, r.Name)
 	if err != nil {
 		r.removeClientLocked(c)

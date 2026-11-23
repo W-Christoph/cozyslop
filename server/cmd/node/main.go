@@ -6,10 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"cozycast/internal/diag"
 	"cozycast/internal/node"
 )
 
@@ -21,6 +23,10 @@ func env(key, fallback string) string {
 }
 
 func main() {
+	// Logged as the server logs, scrubbed (the tunnel's errors name
+	// addresses). What the agent says to the person at home goes to stdout
+	// as it is: the pairing code has to stay readable.
+	slog.SetDefault(slog.New(diag.NewHandler(slog.NewTextHandler(os.Stderr, nil), nil)))
 	forward, err := node.PortsFromEnv(env("COZYCAST_FORWARD", "8080=room:8080,8081=room:8081,8082=room:8082,8083=room:8083"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

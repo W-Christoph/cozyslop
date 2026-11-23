@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -30,10 +31,14 @@ func TestPublic(t *testing.T) {
 	}
 }
 
-// A proxy that may reach the test's loopback "internet" only.
-func proxy(t *testing.T, allowed string) *httptest.Server {
+// A proxy that may reach the test's loopback "internet" only; what it logs
+// goes to log, if not nil.
+func proxy(t *testing.T, allowed string, log ...io.Writer) *httptest.Server {
 	p := egress.New()
 	p.Allow = func(ip netip.Addr) bool { return ip.String() == allowed }
+	if len(log) > 0 {
+		p.Log = slog.New(slog.NewTextHandler(log[0], nil))
+	}
 	srv := httptest.NewServer(p)
 	t.Cleanup(srv.Close)
 	return srv
@@ -44,7 +49,8 @@ func TestPlainHTTPAndRefusals(t *testing.T) {
 		fmt.Fprintf(w, "hello %s", r.URL.Path)
 	}))
 	defer site.Close()
-	srv := proxy(t, "127.0.0.1")
+	var log strings.Builder
+	srv := proxy(t, "127.0.0.1", &log)
 	proxyURL, _ := url.Parse(srv.URL)
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 	res, err := client.Get(site.URL + "/page")
@@ -64,6 +70,11 @@ func TestPlainHTTPAndRefusals(t *testing.T) {
 			t.Errorf("%s: %v %v", target, res.StatusCode, err)
 		}
 		res.Body.Close()
+	}
+	// Refusals say the port, never the host.
+	if got := log.String(); strings.Count(got, "egress refused") != 2 ||
+		!strings.Contains(got, "port="+port) || !strings.Contains(got, "port=25") || strings.Contains(got, "127.0.0") {
+		t.Errorf("log: %s", got)
 	}
 	// Not a proxy request at all.
 	res, err = http.Get(srv.URL + "/")

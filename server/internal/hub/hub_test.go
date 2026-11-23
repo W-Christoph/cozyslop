@@ -541,6 +541,99 @@ func TestRemoveUnreachableRoomStopsWork(t *testing.T) {
 	r.Leave(f.ctx, c)
 }
 
+// While a removed room's work is still ending, the hub answers, and its
+// name is free only once the work has ended.
+func TestRemoveWaitsWithoutTheHubLock(t *testing.T) {
+	f := newFixture(t, store.RoomSettings{})
+	fake := nekotest.New(t, "secret")
+	fake.SetHealthy(false)
+	nc, err := neko.NewClient(fake.URL(), "secret", nil)
+	requireOK(t, err)
+	// A room whose work ends only when told to.
+	r := f.h.makeRoom(RoomConfig{Name: "stuck", Neko: nc})
+	f.h.mu.Lock()
+	r.cancel = func() {}
+	f.h.rooms["stuck"] = r
+	f.h.mu.Unlock()
+
+	removed := make(chan bool)
+	go func() { removed <- f.h.Remove("stuck", "not_found") }()
+	deadline := time.Now().Add(testTimeout)
+	for f.h.Room("stuck") != nil { // answers while Remove waits
+		if time.Now().After(deadline) {
+			t.Fatal("not removed")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	added := make(chan error)
+	go func() { added <- f.h.Add(f.ctx, RoomConfig{Name: "stuck", Neko: nc}) }()
+	select {
+	case <-removed:
+		t.Fatal("Remove returned before the work ended")
+	case err := <-added:
+		t.Fatalf("name reused before the work ended: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(r.done)
+	requireEqual(t, <-removed, true)
+	requireOK(t, <-added)
+	if again := f.h.Room("stuck"); again == nil || again == r {
+		t.Fatal("not added again")
+	}
+	f.h.Remove("stuck", "not_found")
+}
+
+// Chat is written outside the room's lock; a tab that joins meanwhile
+// still sees every message once, in order.
+func TestChatWhileJoining(t *testing.T) {
+	f := newFixture(t, store.RoomSettings{})
+	var posters []*Client
+	for i := range 4 {
+		rec := newRecording()
+		c, err := f.r.Join(f.ctx, JoinRequest{Identity: anon(fmt.Sprint("poster", i)), Send: rec.send, Kill: rec.kill})
+		requireOK(t, err)
+		posters = append(posters, c)
+	}
+	var work sync.WaitGroup
+	for _, c := range posters {
+		work.Add(1)
+		go func() {
+			defer work.Done()
+			for i := range 5 {
+				requireOK(t, f.r.sendChat(f.ctx, c, fmt.Sprint("message ", i)))
+			}
+		}()
+	}
+	joiners := make([]*recording, 10)
+	for i := range joiners {
+		joiners[i] = newRecording()
+		work.Add(1)
+		go func() {
+			defer work.Done()
+			_, err := f.r.Join(f.ctx, JoinRequest{Identity: anon(fmt.Sprint("joiner", i)), Send: joiners[i].send, Kill: joiners[i].kill})
+			requireOK(t, err)
+		}()
+	}
+	work.Wait()
+	for i, rec := range joiners {
+		var ids []int64
+		for _, m := range rec.snapshot() {
+			switch m := m.(type) {
+			case welcomeMsg:
+				for _, h := range m.History {
+					ids = append(ids, h.ID)
+				}
+			case chatMsg:
+				ids = append(ids, m.Message.ID)
+			}
+		}
+		if len(ids) != 20 || !slices.IsSorted(ids) || len(slices.Compact(slices.Clone(ids))) != 20 {
+			t.Errorf("joiner %d saw %v", i, ids)
+		}
+	}
+}
+
 func TestRuntimeRoomReaders(t *testing.T) {
 	f := newFixture(t, store.RoomSettings{})
 	fake := nekotest.New(t, "admin-secret")

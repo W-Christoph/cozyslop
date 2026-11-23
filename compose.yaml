@@ -79,6 +79,9 @@ services:
       # Seconds a room stays empty before the programs on its desktop are
       # paused; whoever joins next wakes them. 0 = never.
       COZYCAST_HIBERNATE_AFTER: ${HIBERNATE_AFTER:-60}
+      # A few days of diagnostics that say nobody's name, for admins
+      # (docs/architecture.md, Diagnostics). false = none kept.
+      COZYCAST_DIAGNOSTICS: ${DIAGNOSTICS:-true}
       COZYCAST_DATA_DIR: /data
       COZYCAST_IMPORT: /import/cozycast-export.tar.gz
       # Set DOMAIN for automatic HTTPS (Let's Encrypt); ports 80 and 443

@@ -267,51 +267,91 @@ export interface DiagSummary {
     failedRequests: number
     anilist: number
     anilistFailed: number
+    anilistLimited: number // answered 429: too many
+    anilistPeak: number // the most calls in one minute
+    anilistSentBytes: number
+    anilistReceivedBytes: number
     boots: number
     crashes: number
   }
   lastBoot: DiagEntry | null
-  anilist: { time: number; calls: number; failed: number; peak: number }[]
+  boots: DiagEntry[] // from since, newest first
+  anilist: DiagAniList[]
   samples: DiagSample[]
 }
 
-// The highest of each health value in a bucket; null where none was taken.
+export interface DiagAniList {
+  time: number
+  calls: number
+  failed: number
+  limited: number
+  peak: number
+  sentBytes: number
+  receivedBytes: number
+}
+
+// The highest of each health value in a bucket (the lowest free memory);
+// null where none was taken.
 export interface DiagSample {
   time: number
   cpuPct: number | null
   memoryMb: number | null
-  goroutines: number | null
+  hostFreeMb: number | null
+  hostTotalMb: number | null
+  people: number | null
   lagMs: number | null
   lockMs: number | null
   dbMs: number | null
-  schedMs: number | null
+  requestMs: number | null
 }
 
+// What the list shows: groups of DIAG_GROUPS, and the rest.
 export interface DiagFilter {
-  kinds: DiagKind[]
-  level: '' | 'info' | 'warn' | 'error'
+  groups: string[]
+  level: '' | 'warn' | 'error'
   text: string
+  room: string
   since: number
+  until?: number
 }
+
+export const DIAG_GROUPS: { id: string; label: string; kinds: DiagKind[]; target?: string }[] = [
+  { id: 'log', label: 'Log', kinds: ['event'] },
+  { id: 'requests', label: 'Requests', kinds: ['request'] },
+  { id: 'anilist', label: 'AniList', kinds: ['outbound'], target: 'anilist' },
+  { id: 'helpers', label: 'Room helpers', kinds: ['outbound'], target: 'helper' },
+  { id: 'stalls', label: 'Stalls', kinds: ['stall'] },
+  { id: 'starts', label: 'Starts and stops', kinds: ['boot', 'shutdown'] },
+]
 
 export const DIAG_PAGE = 100
 
 export const adminDiagnostics = {
   summary: (hours: number) => api.get<DiagSummary>(`/api/admin/diagnostics/summary?hours=${hours}`),
   entries: (f: DiagFilter, before?: number) => {
-    const q = new URLSearchParams({ kind: f.kinds.join(','), since: String(f.since), limit: String(DIAG_PAGE) })
+    const groups = DIAG_GROUPS.filter((g) => f.groups.includes(g.id))
+    if (!groups.length) return Promise.resolve([])
+    const q = new URLSearchParams({
+      kind: [...new Set(groups.flatMap((g) => g.kinds))].join(','),
+      since: String(f.since),
+      limit: String(DIAG_PAGE),
+    })
+    const targets = groups.flatMap((g) => g.target ? [g.target] : [])
+    if (targets.length) q.set('target', targets.join(','))
+    if (f.until) q.set('until', String(f.until))
     if (f.level) q.set('level', f.level)
+    if (f.room) q.set('room', f.room)
     if (f.text.trim()) q.set('q', f.text.trim())
     if (before) q.set('before', String(before))
     return api.get<{ entries: DiagEntry[] }>(`/api/admin/diagnostics?${q}`).then((r) => r.entries)
   },
   stalls: (since: number) =>
     api.get<{ entries: DiagEntry[] }>(`/api/admin/diagnostics?kind=stall&since=${since}&limit=200`).then((r) => r.entries),
-  // A stall's goroutine dump, as text.
+  // A stall's or crash's dump, as text.
   dump: async (name: string) => {
     let res: Response
     try {
-      res = await fetch(`/api/admin/diagnostics/dumps/${encodeURIComponent(name)}`)
+      res = await fetch(dumpUrl(name))
     } catch {
       throw new ApiError(0, 'Could not reach the server.')
     }
@@ -321,5 +361,9 @@ export const adminDiagnostics = {
     }
     return res.text()
   },
+  rooms: () => adminRooms.list().then((list) => list.map((r) => r.name)),
   clear: () => api.del<void>('/api/admin/diagnostics'),
 }
+export type DiagnosticsSource = typeof adminDiagnostics
+
+export const dumpUrl = (name: string) => `/api/admin/diagnostics/dumps/${encodeURIComponent(name)}`

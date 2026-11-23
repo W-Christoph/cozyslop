@@ -113,6 +113,25 @@ func (h *Hub) Locks() []diag.Lock {
 	return locks
 }
 
+// People is how many people are in the rooms, for the health samples.
+// It never waits for a lock (the watchdog asks): false if one was taken.
+// Rooms are the ones Locks last saw.
+func (h *Hub) People() (int, bool) {
+	rooms := h.lockRooms.Load()
+	if rooms == nil {
+		return 0, false
+	}
+	n := 0
+	for _, r := range *rooms {
+		if !r.mu.TryLock() {
+			return 0, false
+		}
+		n += len(r.members)
+		r.mu.Unlock()
+	}
+	return n, true
+}
+
 // SetWatchlog turns following what is played in the rooms on or off (the
 // watchlog setting). Turned off, rooms forget their episode and suggestion
 // at their next poll.

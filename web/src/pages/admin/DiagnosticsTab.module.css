@@ -1,5 +1,5 @@
 .blocks { display: flex; flex-direction: column; gap: var(--space-6); transition: opacity 0.15s; }
 .stale { opacity: 0.6; }
-.range { display: flex; align-items: center; gap: var(--space-3); margin-bottom: calc(var(--space-6) * -0.5); }
 .below { margin-top: var(--space-2); }
+.anchor { scroll-margin-top: calc(var(--header-height) + var(--space-3)); }
 .confirm { margin: 0; }

@@ -18,7 +18,8 @@ func DumpDir(database string) string {
 	return strings.TrimSuffix(database, ".db")
 }
 
-var dumpName = regexp.MustCompile(`^stall-[0-9]+\.txt\.gz$`)
+// Stall reports, and what Go wrote when it ended the server (Boot).
+var dumpName = regexp.MustCompile(`^(stall|crash)-[0-9]+\.txt\.gz$`)
 
 // ErrNoDump is the answer for a dump that does not exist.
 var ErrNoDump = errors.New("diagnostics: no such dump")

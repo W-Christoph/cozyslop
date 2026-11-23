@@ -1,32 +1,47 @@
-import type { DiagSample, DiagSummary } from '../../api'
+import type { DiagAniList, DiagSample, DiagSummary } from '../../api'
 import { SectionLabel } from '../ui/Section'
-import { duration } from './diagFormat'
-import { TimeChart } from './TimeChart'
+import { bytes, duration, plural } from './diagFormat'
+import { TimeChart, type ChartPoint } from './TimeChart'
 import styles from './DiagnosticsCharts.module.css'
 
-const health: { key: Exclude<keyof DiagSample, 'time'>; title: string; about: string; format: (v: number) => string; stuck?: number }[] = [
-  { key: 'cpuPct', title: 'CPU', about: '100 % is one core', format: (v) => `${Math.round(v)} %` },
-  { key: 'memoryMb', title: 'Memory', about: 'what Go holds', format: (v) => `${Math.round(v)} MB` },
-  { key: 'goroutines', title: 'Goroutines', about: 'grows with people and rooms', format: (v) => Math.round(v).toLocaleString() },
-  { key: 'lockMs', title: 'Longest-held lock', about: 'how long one was held', format: (v) => duration(Math.round(v)), stuck: 5000 },
-  { key: 'dbMs', title: 'Database write check', about: 'taking cozycast.db’s write lock', format: (v) => duration(Math.round(v)), stuck: 3000 },
-  { key: 'lagMs', title: 'Watchdog late', about: 'beyond its 5 s round', format: (v) => duration(Math.round(v)), stuck: 2000 },
+// Where the watchdog calls the server stuck (diag.StuckLock and the rest).
+const STUCK = { lockMs: 5000, dbMs: 3000, lagMs: 2000, requestMs: 15_000 }
+const ANILIST_LIMIT = 90 // calls a minute
+
+// How close the server came to stuck: the worst of the four checks, as a
+// share of where it counts as stuck.
+function closeness(s: DiagSample) {
+  const parts = (Object.keys(STUCK) as (keyof typeof STUCK)[]).map((k) => s[k] === null ? null : s[k]! / STUCK[k] * 100)
+  return parts.every((p) => p === null) ? null : Math.max(...parts.map((p) => p ?? 0))
+}
+const closenessNote = (s: DiagSample) => [
+  s.lockMs !== null && `longest lock ${duration(s.lockMs)}`,
+  s.dbMs !== null && `database ${duration(s.dbMs)}`,
+  s.requestMs !== null && `slowest request ${duration(s.requestMs)}`,
+  s.lagMs !== null && `watchdog ${duration(s.lagMs)} late`,
+].filter(Boolean).join(' · ')
+
+const health: { key: Exclude<keyof DiagSample, 'time'>; title: string; about: (s: DiagSummary) => string; format: (v: number) => string }[] = [
+  { key: 'cpuPct', title: 'CPU', about: () => 'the server’s; 100 % is one core', format: (v) => `${Math.round(v)} %` },
+  { key: 'memoryMb', title: 'Server memory', about: () => 'what the server itself holds', format: (v) => `${Math.round(v)} MB` },
+  {
+    key: 'hostFreeMb', title: 'Free memory on the machine', format: (v) => v >= 1000 ? `${Number((v / 1000).toFixed(1))} GB` : `${Math.round(v)} MB`,
+    about: (s) => {
+      const total = Math.max(0, ...s.samples.map((x) => x.hostTotalMb ?? 0))
+      return `the lowest; ${total ? `of ${Number((total / 1000).toFixed(1))} GB, ` : ''}the rooms’ browsers use most`
+    },
+  },
+  { key: 'people', title: 'People in rooms', about: () => 'the most at once', format: (v) => Math.round(v).toLocaleString() },
 ]
 
-// AniList calls, and the health samples, over the time shown.
+// Health, then AniList, over the time shown.
 export function DiagnosticsCharts({ summary }: { summary: DiagSummary }) {
   const { since, until, bucketMs } = summary
   const per = duration(bucketMs)
   const samplesFrom = until - summary.sampleDays * 86_400_000
+  const chart = { since, until, bucketMs }
   return (
     <div class={styles.charts}>
-      {summary.anilist.length === 0 ? <div>
-        <SectionLabel>AniList calls</SectionLabel>
-        <p class={styles.about}>None in this time.</p>
-      </div> : <TimeChart title="AniList calls" description={`per ${per}; AniList allows about 90 a minute`} kind="columns"
-        since={since} until={until} bucketMs={bucketMs} format={(v) => v.toLocaleString()}
-        series={[{ name: 'Answered', tone: 'base' }, { name: 'Failed', tone: 'danger' }]}
-        points={summary.anilist.map((b) => ({ time: b.time, values: [b.calls - b.failed, b.failed], note: `Busiest minute: ${b.peak}` }))} />}
       <div>
         <SectionLabel>Health</SectionLabel>
         <p class={styles.about}>
@@ -34,15 +49,47 @@ export function DiagnosticsCharts({ summary }: { summary: DiagSummary }) {
           {summary.samples.length > 0 && since < samplesFrom && ` Samples are kept ${summary.sampleDays} days.`}
         </p>
         {summary.samples.length > 0 && <div class={styles.grid}>
+          <div class={styles.wide}>
+            <TimeChart {...chart} title="How close to stuck" kind="line"
+              description="the worst of: the longest-held lock, the database write check, the slowest request and how late the watchdog ran, each against where it counts as stuck"
+              format={(v) => `${Math.round(v)} %`} threshold={{ value: 100, label: 'stuck' }}
+              series={[{ name: 'How close to stuck', tone: 'line' }]}
+              points={summary.samples.map((s) => ({ time: s.time, values: [closeness(s)], note: closenessNote(s) }))} />
+          </div>
           {health.map((h) => (
-            <TimeChart key={h.key} title={h.title} description={h.about} kind="line"
-              since={since} until={until} bucketMs={bucketMs} format={h.format}
-              threshold={h.stuck ? { value: h.stuck, label: `stuck from ${duration(h.stuck)}` } : undefined}
+            <TimeChart key={h.key} {...chart} title={h.title} description={h.about(summary)} kind="line" format={h.format}
               series={[{ name: h.title, tone: 'line' }]}
               points={summary.samples.map((s) => ({ time: s.time, values: [s[h.key]] }))} />
           ))}
         </div>}
       </div>
+      <div>
+        <SectionLabel>AniList</SectionLabel>
+        {summary.anilist.length === 0 ? <p class={styles.about}>No calls in this time.</p> : <>
+          <p class={styles.about}>AniList answers about {ANILIST_LIMIT} calls a minute, then refuses (“too many”).</p>
+          <div class={styles.grid}>
+            <TimeChart {...chart} title="Busiest minute" description={`calls, per ${per}`} kind="columns"
+              format={(v) => Math.round(v).toLocaleString()} threshold={{ value: ANILIST_LIMIT, label: 'AniList’s limit' }}
+              series={[{ name: 'All answered', tone: 'base' }, { name: 'Some failed', tone: 'danger' }]}
+              points={summary.anilist.map((b) => anilistPoint([b], b.time))} combine={(p, time) => anilistPoint(p.flatMap((x) => x.data as DiagAniList[]), time)} />
+            <TimeChart {...chart} title="Data to and from AniList" description={`per ${per}`} kind="line" format={bytes}
+              series={[{ name: 'Data', tone: 'line' }]}
+              points={summary.anilist.map((b) => ({ time: b.time, values: [b.sentBytes + b.receivedBytes],
+                note: `sent ${bytes(b.sentBytes)}, received ${bytes(b.receivedBytes)} in ${plural(b.calls, 'call', 'calls')}` }))} />
+          </div>
+        </>}
+      </div>
     </div>
   )
+}
+
+// The busiest minute of these buckets, as a failed column if any call failed.
+function anilistPoint(list: DiagAniList[], time: number): ChartPoint {
+  const peak = Math.max(...list.map((b) => b.peak))
+  const calls = list.reduce((a, b) => a + b.calls, 0), failed = list.reduce((a, b) => a + b.failed, 0)
+  const limited = list.reduce((a, b) => a + b.limited, 0)
+  return {
+    time, data: list, values: failed ? [null, peak] : [peak, null],
+    note: `${plural(calls, 'call', 'calls')} in all${failed ? `, ${failed} failed${limited ? ` (${limited} as too many)` : ''}` : ''}`,
+  }
 }

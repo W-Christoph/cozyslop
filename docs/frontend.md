@@ -144,22 +144,33 @@ per area and list it in `src/snapshots/main.tsx`.
 
 Admin > Diagnostics (`/admin/diagnostics`, `pages/admin/DiagnosticsTab.tsx`)
 reads `GET /api/admin/diagnostics/summary` for the time chosen (6 hours to
-7 days) and the entries themselves. From the top: since when the server
-runs, with a warning when the run before did not shut down; counts (stalls,
-errors and warnings, slow or failed requests, AniList calls and failures,
-starts and those after a crash), the database's size and dropped entries;
-the stalls, each with how long it lasted and its dump (shown in place, or
-opened in a tab); AniList calls per bucket, the ones that failed in red;
-health as small charts (CPU, memory, goroutines, the longest-held lock, the
-database write check and how late the watchdog was, the last three with
-where "stuck" starts); and everything kept, newest first, filtered by kind,
-level and text, 100 at a time. Delete all asks first.
+7 days) and the entries themselves. From the top:
+
+- since when the server runs; when the run before did not shut down, how
+  it ended (Go's crash message, or "from outside" with where to look);
+- counts, each leading to its entries: starts (after going down), stalls,
+  errors, slow or failed requests, AniList's busiest minute against its
+  limit of about 90 (calls, data, failures); only starts after going down
+  and stalls are marked as needing a look. Delete all is beside the size;
+- What went wrong: each time the server was stuck (for how long, why, in
+  plain words, its dump) or down (from when it was last seen until it
+  started again, how it ended, Go's crash dump), newest first. "Show what
+  happened around then" narrows the list below to ±10 minutes;
+- Health: how close to stuck (the worst of the four checks against where
+  each counts as stuck), CPU, the server's memory, the machine's free
+  memory (the rooms' browsers use most) and people in the rooms;
+- AniList: the busiest minute per bucket against the limit (red where
+  calls failed), and the data sent and received;
+- everything kept, under a heading per day, by kind (room helpers' polls
+  only when asked for), level, room and text, 100 at a time.
 
 The charts (`components/admin/TimeChart.tsx`) are plain SVG: a line in the
 accent, or columns stacked bottom first with a neutral for what went well
 and `--danger` for failures (the accent may be red), so failures stand out
-whatever the accent. Hover or focus and the arrow keys show a bucket's
-values; "Table" lists them. Scenes: `src/snapshots/diagnostics.tsx`.
+whatever the accent. Columns that would be thinner than 3px are merged.
+Hover or focus and the arrow keys show a bucket's values; "Table" lists
+them. The scenes (`src/snapshots/diagnostics.tsx`) draw the whole page from
+a made-up source.
 
 ## Admin rooms
 

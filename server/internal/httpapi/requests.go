@@ -93,6 +93,10 @@ func (s *Server) Requests() []diag.Request {
 func (s *Server) Gauges(sample map[string]any) {
 	sample["connections"] = diag.OpenConns.Load()
 	sample["requests_total"] = s.reqs.total.Load()
+	// Without waiting for a lock: the watchdog asks.
+	if people, ok := s.hub.People(); ok {
+		sample["people"] = people
+	}
 }
 
 // statusWriter notes the status of the answer. Unwrap lets

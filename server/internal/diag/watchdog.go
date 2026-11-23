@@ -380,6 +380,11 @@ func (w *Watchdog) sample(now time.Time, lag time.Duration, locks []Lock, reques
 	if fds, err := os.ReadDir("/proc/self/fd"); err == nil {
 		s["fds"] = len(fds)
 	}
+	// The machine's, also in a container: the rooms' browsers use far more
+	// than the server, and the machine running out ends everything.
+	if free, total, ok := hostMemory(); ok {
+		s["host_free_mb"], s["host_total_mb"] = free>>10, total>>10
+	}
 	if b, err := os.ReadFile("/proc/loadavg"); err == nil {
 		if f := strings.Fields(string(b)); len(f) > 0 {
 			s["load1"] = f[0]
@@ -467,6 +472,32 @@ func processTicks() (int64, bool) {
 	utime, err1 := strconv.ParseInt(f[11], 10, 64)
 	stime, err2 := strconv.ParseInt(f[12], 10, 64)
 	return utime + stime, err1 == nil && err2 == nil
+}
+
+// hostMemory is the machine's available and total memory in KiB
+// (/proc/meminfo).
+func hostMemory() (free, total int64, ok bool) {
+	b, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0, 0, false
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		f := strings.Fields(line)
+		if len(f) < 2 {
+			continue
+		}
+		v, err := strconv.ParseInt(f[1], 10, 64)
+		if err != nil {
+			continue
+		}
+		switch f[0] {
+		case "MemAvailable:":
+			free = v
+		case "MemTotal:":
+			total = v
+		}
+	}
+	return free, total, free > 0 && total > 0
 }
 
 // pressure is the share of the last 10 seconds some tasks waited for a

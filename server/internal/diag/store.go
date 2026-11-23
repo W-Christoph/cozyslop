@@ -10,13 +10,17 @@
 package diag
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -301,7 +305,8 @@ type Filter struct {
 	Room     string
 	Since    time.Time
 	Until    time.Time
-	Before   int64 // entries with smaller ids only: the next page
+	Targets  []string // outbound entries to these only (anilist, helper); others unaffected
+	Before   int64    // entries with smaller ids only: the next page
 	Text     string
 	Limit    int // default 200, at most 1000
 }
@@ -317,6 +322,12 @@ func (s *Store) Entries(ctx context.Context, f Filter) ([]Entry, error) {
 		where = append(where, "kind IN (?"+strings.Repeat(", ?", len(f.Kinds)-1)+")")
 		for _, k := range f.Kinds {
 			args = append(args, k)
+		}
+	}
+	if len(f.Targets) > 0 {
+		where = append(where, "(kind != 'outbound' OR json_extract(NULLIF(attrs, ''), '$.target') IN (?"+strings.Repeat(", ?", len(f.Targets)-1)+"))")
+		for _, t := range f.Targets {
+			args = append(args, t)
 		}
 	}
 	if f.MinLevel != nil {
@@ -411,7 +422,9 @@ func (s *Store) Size(ctx context.Context) (int64, error) {
 // Boot records that the server started, and whether the run before it
 // ended without shutting down (a crash, the machine losing power, being
 // killed for running out of memory): that run's last entry says when it
-// was last seen alive.
+// was last seen alive. When Go itself ended it (an unrecovered panic, a
+// fatal error), what Go wrote then is kept as a dump and its first line
+// is the boot's "crash". From here on, Go writes such an end to crash.txt.
 func (s *Store) Boot(ctx context.Context) {
 	if s == nil {
 		return
@@ -422,8 +435,33 @@ func (s *Store) Boot(ctx context.Context) {
 		attrs["previous"] = "no clean shutdown"
 		attrs["last_seen"] = last.Time.UnixMilli()
 	}
+	if s.dumps != "" {
+		if text, err := os.ReadFile(s.crashFile()); err == nil && len(bytes.TrimSpace(text)) > 0 {
+			name := fmt.Sprintf("crash-%d.txt.gz", s.now().UnixMilli())
+			if err := s.writeDump(name, func(w io.Writer) error {
+				_, err := io.WriteString(w, ScrubIPs(string(text)))
+				return err
+			}); err == nil {
+				attrs["dump"] = name
+			}
+			first, _, _ := strings.Cut(strings.TrimSpace(string(text)), "\n")
+			attrs["crash"] = Scrub(first)
+			if attrs["previous"] == nil {
+				attrs["previous"] = "crashed"
+			}
+		}
+		if err := os.MkdirAll(s.dumps, 0o750); err == nil {
+			if f, err := os.OpenFile(s.crashFile(), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600); err == nil {
+				// The runtime keeps its own copy of the descriptor.
+				debug.SetCrashOutput(f, debug.CrashOptions{})
+				f.Close()
+			}
+		}
+	}
 	s.Add(Entry{Kind: KindBoot, Level: slog.LevelInfo, Msg: "server started", Attrs: attrs})
 }
+
+func (s *Store) crashFile() string { return filepath.Join(s.dumps, "crash.txt") }
 
 // Shutdown records that the server stops cleanly. Close comes after it.
 func (s *Store) Shutdown() {

@@ -131,16 +131,22 @@ func TestTransport(t *testing.T) {
 		if r.URL.Path == "/fail" {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}
+		io.WriteString(w, "twelve bytes")
 	}))
 	defer srv.Close()
 	s := openTest(t)
 	c := &http.Client{Transport: Transport{Store: s, Target: "anilist"}}
 	ctx := WithOp(WithCaller(context.Background(), "room_detect", "default"), "search")
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/?q=frieren", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/?q=frieren", strings.NewReader(`{"query":"…"}`))
 	res, err := c.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if list := flush(t, s, Filter{}); len(list) != 0 {
+		t.Fatalf("kept before the answer was read: %+v", list)
+	}
+	io.ReadAll(res.Body)
+	res.Body.Close()
 	res.Body.Close()
 	list := flush(t, s, Filter{})
 	if len(list) != 1 {
@@ -148,7 +154,8 @@ func TestTransport(t *testing.T) {
 	}
 	e := list[0]
 	if e.Kind != KindOutbound || e.Room != "default" || e.Msg != "anilist search" || e.Attrs["caller"] != "room_detect" ||
-		e.Attrs["status"] != float64(200) || e.Attrs["rate_remaining"] != float64(42) || e.Attrs["duration_ms"] == nil {
+		e.Attrs["status"] != float64(200) || e.Attrs["rate_remaining"] != float64(42) || e.Attrs["duration_ms"] == nil ||
+		e.Attrs["sent_bytes"] != float64(len(`{"query":"…"}`)) || e.Attrs["received_bytes"] != float64(12) {
 		t.Errorf("entry: %+v", e)
 	}
 

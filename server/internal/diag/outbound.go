@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"path"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -77,6 +79,9 @@ func (t Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if c.caller != "" {
 		attrs["caller"] = c.caller
 	}
+	if req.ContentLength > 0 {
+		attrs["sent_bytes"] = req.ContentLength
+	}
 	level := slog.LevelInfo
 	if err != nil {
 		attrs["err"], attrs["kind"] = Scrub(err.Error()), ErrorKind(err)
@@ -93,8 +98,39 @@ func (t Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 			attrs["retry_after"] = Scrub(v)
 		}
 	}
-	t.Store.Add(Entry{Time: start, Kind: KindOutbound, Level: level, Room: c.room, Msg: t.Target + " " + c.op, Attrs: attrs})
+	e := Entry{Time: start, Kind: KindOutbound, Level: level, Room: c.room, Msg: t.Target + " " + c.op, Attrs: attrs}
+	if res == nil || res.Body == nil {
+		t.Store.Add(e)
+		return res, err
+	}
+	// Kept once the answer has been read: how much came back, and how long
+	// that took.
+	res.Body = &countedBody{ReadCloser: res.Body, done: func(n int64) {
+		e.Attrs["received_bytes"], e.Attrs["duration_ms"] = n, time.Since(start).Milliseconds()
+		t.Store.Add(e)
+	}}
 	return res, err
+}
+
+// countedBody counts what is read from a response, and tells done when it
+// is closed.
+type countedBody struct {
+	io.ReadCloser
+	n    int64
+	done func(n int64)
+	once sync.Once
+}
+
+func (b *countedBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	b.n += int64(n)
+	return n, err
+}
+
+func (b *countedBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.once.Do(func() { b.done(b.n) })
+	return err
 }
 
 // ErrorKind sorts a request's error: timeout, dns, refused, reset, tls,

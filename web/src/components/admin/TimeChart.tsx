@@ -13,12 +13,13 @@ export interface ChartPoint {
   time: number // the bucket's start, unix ms
   values: (number | null)[] // one per series
   note?: string // shown under the values
+  data?: unknown // what it was made from, for combine
 }
 
 const PAD = { top: 10, right: 10, bottom: 24, left: 52 }
 const HEIGHT = 150
 
-export function TimeChart({ title, description, since, until, bucketMs, kind, series, points, format, threshold }: {
+export function TimeChart({ title, description, since, until, bucketMs: bucket, kind, series, points: given, format, threshold, combine = sumPoints }: {
   title: string
   description?: string
   since: number
@@ -29,6 +30,8 @@ export function TimeChart({ title, description, since, until, bucketMs, kind, se
   points: ChartPoint[]
   format: (value: number) => string
   threshold?: { value: number; label: string } // a line across, e.g. where "stuck" starts
+  // Columns: several buckets as one, where they would be thinner than 3px.
+  combine?: (points: ChartPoint[], time: number) => ChartPoint
 }) {
   const frame = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(560)
@@ -43,11 +46,15 @@ export function TimeChart({ title, description, since, until, bucketMs, kind, se
     return () => observer.disconnect()
   }, [])
 
+  const plotW = width - PAD.left - PAD.right, plotH = HEIGHT - PAD.top - PAD.bottom
+  // Narrow: columns of several buckets each.
+  const per = kind === 'columns' ? Math.max(1, Math.ceil(3 / (plotW * bucket / (until - since)))) : 1
+  const bucketMs = bucket * per
+  const points = per === 1 ? given : merged(given, since, bucketMs, combine)
   const total = (p: ChartPoint) => kind === 'columns' ? p.values.reduce<number>((a, v) => a + (v ?? 0), 0) : Math.max(...p.values.map((v) => v ?? 0))
   const top = Math.max(points.reduce((m, p) => Math.max(m, total(p)), 0), threshold?.value ?? 0)
   const ticks = yTicks(top)
   const yMax = ticks[ticks.length - 1]
-  const plotW = width - PAD.left - PAD.right, plotH = HEIGHT - PAD.top - PAD.bottom
   const x = (t: number) => PAD.left + ((t - since) / (until - since)) * plotW
   const y = (v: number) => PAD.top + plotH - (v / yMax) * plotH
   const slot = Math.max(1, x(since + bucketMs) - x(since))
@@ -210,10 +217,26 @@ const time = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-di
 const day = new Intl.DateTimeFormat(undefined, { weekday: 'short' })
 const dayTime = new Intl.DateTimeFormat(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })
 
-// A time on an axis of this length: the hour, or the day for long ones.
+// A time on an axis of this length: the hour, or the day at midnight and
+// for long ones.
 function clock(t: number, length: number) {
-  if (length <= 24 * 3_600_000) return time.format(t)
-  return new Date(t).getHours() === 0 ? day.format(t) : dayTime.format(t)
+  if (new Date(t).getHours() === 0 && new Date(t).getMinutes() === 0) return day.format(t)
+  return length <= 24 * 3_600_000 ? time.format(t) : dayTime.format(t)
+}
+
+// Buckets grouped into wider ones from since, each group made one point.
+function merged(points: ChartPoint[], since: number, bucketMs: number, combine: (p: ChartPoint[], time: number) => ChartPoint) {
+  const groups = new Map<number, ChartPoint[]>()
+  for (const p of points) {
+    const start = since + Math.floor((p.time - since) / bucketMs) * bucketMs
+    groups.set(start, [...groups.get(start) ?? [], p])
+  }
+  return [...groups].map(([time, group]) => combine(group, time))
+}
+
+// Several buckets as one: the values added up.
+function sumPoints(points: ChartPoint[], time: number): ChartPoint {
+  return { time, values: points[0].values.map((_, i) => points.reduce<number | null>((a, p) => p.values[i] === null ? a : (a ?? 0) + p.values[i]!, null)) }
 }
 
 function span(t: number, bucketMs: number, length: number) {

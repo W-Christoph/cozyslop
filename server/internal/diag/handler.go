@@ -17,8 +17,9 @@ var allowed = map[string]bool{
 	"socket": true, "project": true, "dir": true, "screen": true, "replaced": true,
 	"state": true, "kind": true, "action": true, "attempt": true, "count": true,
 	"duration_ms": true, "bytes": true,
-	// What the watchlog asks AniList and the room helpers about.
-	"anime": true, "episode": true, "target": true, "op": true, "caller": true,
+	// How the watchlog uses AniList and the room helpers; never which show
+	// or episode (what a room watched, and when, is what someone does).
+	"target": true, "op": true, "caller": true,
 	"outcome": true, "retry_after": true, "rate_remaining": true,
 	// The legacy import's counts.
 	"users": true, "rooms": true, "permissions": true, "invites": true,

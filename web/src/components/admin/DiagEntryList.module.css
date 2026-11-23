@@ -5,8 +5,24 @@
 .narrow { display: flex; gap: var(--space-2); margin-left: auto; }
 .narrow input { width: 180px; }
 .hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.around {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: max-content;
+  max-width: 100%;
+  padding: 2px 2px 2px var(--space-3);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: var(--text-sm);
+}
 .none { margin: 0; font-size: var(--text-sm); color: var(--text-muted); }
 
+.days { display: flex; flex-direction: column; gap: var(--space-4); transition: opacity 0.15s; }
+.stale { opacity: 0.55; }
+.day { margin: 0 0 var(--space-2); font-size: var(--text-xs); font-weight: 600; color: var(--text-secondary); }
 .list {
   margin: 0;
   padding: 0;
@@ -14,12 +30,10 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-surface);
-  transition: opacity 0.15s;
 }
-.stale { opacity: 0.55; }
 .entry {
   display: grid;
-  grid-template-columns: 9.5rem 11rem minmax(0, 1fr);
+  grid-template-columns: 6rem 11rem minmax(0, 1fr);
   gap: var(--space-1) var(--space-3);
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border);
@@ -32,18 +46,21 @@
 .room { padding: 0 6px; border-radius: var(--radius); background: var(--bg-raised); }
 .body { min-width: 0; }
 .msg { color: var(--text); overflow-wrap: anywhere; }
-/* Inline, so that a long value wraps back to the left edge. */
+/* Each pair stays on one line; a long value (an error) wraps back to the
+   left edge. */
 .attrs { margin: 2px 0 0; font: var(--text-2xs)/1.5 var(--font-mono); }
-.attrs div { display: inline; margin-right: var(--space-3); }
+.attrs div { display: inline-block; margin-right: var(--space-3); white-space: nowrap; }
+.attrs div.long { display: inline; white-space: normal; }
 .attrs dt, .attrs dd { display: inline; margin: 0; }
-.attrs dt { color: var(--text-muted); white-space: nowrap; }
+.attrs dt { color: var(--text-muted); }
 .attrs dt::after { content: '='; }
-.attrs dd { color: var(--text-secondary); overflow-wrap: anywhere; }
+.attrs dd { color: var(--text-secondary); }
+.attrs div.long dd { overflow-wrap: anywhere; }
 .more { align-self: center; }
 
 @media (max-width: 780px) {
   .narrow { width: 100%; margin-left: 0; }
-  .narrow input { flex: 1; width: auto; }
+  .narrow input { flex: 1; width: auto; min-width: 0; }
   .entry { grid-template-columns: auto minmax(0, 1fr); }
   .body { grid-column: 1 / -1; }
 }

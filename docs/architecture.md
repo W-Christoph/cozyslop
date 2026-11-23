@@ -202,20 +202,29 @@ room, msg, attrs as JSON). Kinds:
 - `event`: log records from Info up.
 - `boot`, `shutdown`: a boot after a run without a shutdown (a crash, a
   kill for running out of memory) says so, with when that run was last seen.
+  Go writes how it ended the server (an unrecovered panic, a fatal error)
+  to `data/diagnostics/crash.txt` (`debug.SetCrashOutput`); the next boot
+  keeps it as a dump (`crash-<unix ms>.txt.gz`, public IP addresses
+  masked) and its first line as `crash`. A boot after a run without one
+  was ended from outside: running out of memory, power, a kill.
 - `request`: requests that failed (5xx) or took over a second, by route;
   WebSockets, the neko proxy and uploads only when they fail.
 - `outbound`: each request to AniList (what for: `caller` = `http_search`,
   `http_add`, `room_detect`, `room_pick`, `airing`; `op`; status, duration,
-  AniList's `X-RateLimit-Remaining` and `Retry-After`, how it failed), and
+  bytes sent and received (unpacked), AniList's `X-RateLimit-Remaining`
+  and `Retry-After`, how it failed; kept once the answer has been read), and
   the rooms' play helper (`worker/play.py`): opening and playing one entry
   each, the 5-second status polls one per minute, room and operation with
   count, errors, average and longest duration. Rooms log `anime detection`
   events with how a file's show was found (`alias`, `search`,
-  `search_words`, `miss`).
+  `search_words`, `miss`), never which show: what a room watched is left
+  out.
 - `sample`: every 10 seconds, the watchdog's health sample (Debug level):
   goroutines, memory, scheduling latency, mutex waits, GC and process CPU,
   open files, load, the container's CPU/memory/IO pressure and CPU
-  throttling, connections, requests under way and the oldest of them, the
+  throttling, the machine's free and total memory, people in the rooms
+  (counted without waiting for a room's lock), connections, requests
+  under way and the oldest of them, the
   longest-held lock, how long the databases' write locks took, TLS
   handshake failures and dropped entries.
 - `stall`: the watchdog (`diag.Watchdog`, every 5 seconds) found the server
@@ -242,8 +251,9 @@ waited for.
 
 Nothing in it, or on stderr, says who: the log handler (`diag.Handler`)
 keeps only the attributes on its allowed list (rooms, errors, statuses,
-ports, AniList ids, episode numbers, counts; never accounts, usernames,
-nicknames, identity keys, client or member ids, file names, addresses of
+ports, counts; never accounts, usernames,
+nicknames, identity keys, client or member ids, file names, shows or
+episodes, addresses of
 pages, search text) and scrubs messages and values: public IP addresses
 become `<ip>` (private, loopback and link-local ones stay: they are the
 server's, its rooms' and the tunnel's), URLs keep only scheme and host,

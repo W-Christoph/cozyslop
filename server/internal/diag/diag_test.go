@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/url"
 	"os"
@@ -52,16 +53,16 @@ func TestHandler(t *testing.T) {
 	var out bytes.Buffer
 	log := slog.New(NewHandler(slog.NewTextHandler(&out, &slog.HandlerOptions{Level: slog.LevelDebug}), s))
 	log.With("room", "default", "client", "c123").Warn("open page from 203.0.113.7",
-		"err", fmt.Errorf("dial 198.51.100.1: refused"), "username", "alice", "anime", 154587,
+		"err", fmt.Errorf("dial 198.51.100.1: refused"), "username", "alice", "anime", 154587, "status", 503,
 		slog.Group("g", "identity", "u:12", "status", 503))
 	log.Debug("client joined", "identity", "u:12")
 	log.Info("plain")
-	for _, leak := range []string{"c123", "alice", "u:12", "203.0.113.7", "198.51.100.1", "client=", "username", "identity"} {
+	for _, leak := range []string{"c123", "alice", "u:12", "203.0.113.7", "198.51.100.1", "client=", "username", "identity", "anime", "154587"} {
 		if strings.Contains(out.String(), leak) {
 			t.Errorf("stderr has %q: %s", leak, out.String())
 		}
 	}
-	for _, want := range []string{"room=default", "anime=154587", "g.status=503", `err="dial <ip>: refused"`, "client joined"} {
+	for _, want := range []string{"room=default", " status=503", "g.status=503", `err="dial <ip>: refused"`, "client joined"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("stderr lacks %q: %s", want, out.String())
 		}
@@ -74,7 +75,7 @@ func TestHandler(t *testing.T) {
 	if e.Kind != KindEvent || e.Level != slog.LevelWarn || e.Room != "default" || e.Msg != "open page from <ip>" {
 		t.Errorf("entry = %+v", e)
 	}
-	if e.Attrs["anime"] != float64(154587) || e.Attrs["err"] != "dial <ip>: refused" || e.Attrs["g.status"] != float64(503) || len(e.Attrs) != 3 {
+	if e.Attrs["status"] != float64(503) || e.Attrs["err"] != "dial <ip>: refused" || e.Attrs["g.status"] != float64(503) || len(e.Attrs) != 3 {
 		t.Errorf("attrs = %v", e.Attrs)
 	}
 }
@@ -181,6 +182,39 @@ func TestBootAndBrokenFile(t *testing.T) {
 	if b := flush(t, s, Filter{Kinds: []string{KindBoot}}); len(b) != 3 || b[0].Attrs["previous"] != "no clean shutdown" || b[0].Attrs["last_seen"] == nil {
 		t.Errorf("boot after a crash: %+v", b)
 	}
+	s.Close()
+
+	// What Go wrote when it ended the server.
+	crash := filepath.Join(DumpDir(path), "crash.txt")
+	if info, err := os.Stat(crash); err != nil || info.Size() != 0 {
+		t.Fatalf("crash file after a boot: %v %v", info, err)
+	}
+	if err := os.WriteFile(crash, []byte("panic: boom near 203.0.113.9\n\ngoroutine 1 [running]:\nmain.main()\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	s.Boot(ctx)
+	b := flush(t, s, Filter{Kinds: []string{KindBoot}})
+	dump, _ := b[0].Attrs["dump"].(string)
+	if b[0].Attrs["crash"] != "panic: boom near <ip>" || !strings.HasPrefix(dump, "crash-") {
+		t.Fatalf("boot after a Go crash: %+v", b[0])
+	}
+	r, err := s.Dump(dump)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text, _ := io.ReadAll(r)
+	r.Close()
+	if !strings.Contains(string(text), "goroutine 1 [running]") || strings.Contains(string(text), "203.0.113.9") {
+		t.Errorf("crash dump: %q", text)
+	}
+	if info, err := os.Stat(crash); err != nil || info.Size() != 0 {
+		t.Errorf("crash file not started anew: %v %v", info, err)
+	}
 }
 
 func TestAddNeverWaits(t *testing.T) {
@@ -245,7 +279,11 @@ func TestSummarize(t *testing.T) {
 	since := until.Add(-24 * time.Hour)
 	at := func(ago time.Duration) time.Time { return until.Add(-ago) }
 	anilist := func(ago time.Duration, level slog.Level) Entry {
-		return Entry{Time: at(ago), Kind: KindOutbound, Level: level, Msg: "anilist search", Attrs: map[string]any{"target": "anilist"}}
+		attrs := map[string]any{"target": "anilist", "status": 200, "sent_bytes": 100, "received_bytes": 1000}
+		if level >= slog.LevelWarn {
+			attrs["status"] = 429
+		}
+		return Entry{Time: at(ago), Kind: KindOutbound, Level: level, Msg: "anilist search", Attrs: attrs}
 	}
 	for _, e := range []Entry{
 		{Time: at(25 * time.Hour), Kind: KindEvent, Level: slog.LevelError, Msg: "too old"},
@@ -261,8 +299,8 @@ func TestSummarize(t *testing.T) {
 		{Time: at(time.Hour), Kind: KindOutbound, Level: slog.LevelWarn, Msg: "helper status (per minute)", Attrs: map[string]any{"target": "helper"}},
 		anilist(3*time.Hour-5*time.Minute, slog.LevelInfo), anilist(3*time.Hour-5*time.Minute, slog.LevelInfo),
 		anilist(3*time.Hour-5*time.Minute, slog.LevelWarn), anilist(3*time.Hour-3*time.Minute, slog.LevelInfo),
-		{Time: at(2 * time.Hour), Kind: KindSample, Level: slog.LevelDebug, Msg: "sample", Attrs: map[string]any{"cpu_pct": 12, "lag_ms": 3}},
-		{Time: at(2*time.Hour - 10*time.Second), Kind: KindSample, Level: slog.LevelDebug, Msg: "sample", Attrs: map[string]any{"cpu_pct": 40}},
+		{Time: at(2 * time.Hour), Kind: KindSample, Level: slog.LevelDebug, Msg: "sample", Attrs: map[string]any{"cpu_pct": 12, "lag_ms": 3, "host_free_mb": 900}},
+		{Time: at(2*time.Hour - 10*time.Second), Kind: KindSample, Level: slog.LevelDebug, Msg: "sample", Attrs: map[string]any{"cpu_pct": 40, "host_free_mb": 700}},
 	} {
 		s.Add(e)
 	}
@@ -271,18 +309,19 @@ func TestSummarize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Counts{Errors: 1, Warnings: 1, Stalls: 1, Requests: 2, FailedRequests: 1, AniList: 4, AniListFailed: 1, Boots: 1, Crashes: 1}
+	want := Counts{Errors: 1, Warnings: 1, Stalls: 1, Requests: 2, FailedRequests: 1, AniList: 4, AniListFailed: 1,
+		AniListLimited: 1, AniListPeak: 3, AniListSent: 400, AniListGot: 4000, Boots: 1, Crashes: 1}
 	if sum.Counts != want {
 		t.Errorf("counts %+v, want %+v", sum.Counts, want)
 	}
-	if sum.BucketMs != 10*60_000 || sum.LastBoot == nil || sum.LastBoot.Attrs["previous"] == nil {
+	if sum.BucketMs != 10*60_000 || sum.LastBoot == nil || sum.LastBoot.Attrs["previous"] == nil || len(sum.Boots) != 1 {
 		t.Errorf("bucket %d, last boot %+v", sum.BucketMs, sum.LastBoot)
 	}
 	// 3 calls in one minute, 1 two minutes later, in the bucket from 3 h ago.
-	if len(sum.AniList) != 1 || sum.AniList[0] != (AniListBucket{Time: at(3 * time.Hour).UnixMilli(), Calls: 4, Failed: 1, Peak: 3}) {
+	if len(sum.AniList) != 1 || sum.AniList[0] != (AniListBucket{Time: at(3 * time.Hour).UnixMilli(), Calls: 4, Failed: 1, Limited: 1, Peak: 3, Sent: 400, Got: 4000}) {
 		t.Errorf("anilist %+v", sum.AniList)
 	}
-	if len(sum.Samples) != 1 || *sum.Samples[0].CPU != 40 || *sum.Samples[0].LagMs != 3 || sum.Samples[0].MemoryMB != nil {
+	if len(sum.Samples) != 1 || *sum.Samples[0].CPU != 40 || *sum.Samples[0].LagMs != 3 || *sum.Samples[0].HostFreeMB != 700 || sum.Samples[0].MemoryMB != nil {
 		t.Errorf("samples %+v", sum.Samples)
 	}
 	var none *Store

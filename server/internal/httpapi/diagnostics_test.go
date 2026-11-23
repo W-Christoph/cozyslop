@@ -60,6 +60,12 @@ func TestAdminDiagnostics(t *testing.T) {
 	if len(out.Entries) != 1 || out.Entries[0].Msg != "neko ready" {
 		t.Errorf("room: %+v", out.Entries)
 	}
+	d.Add(diag.Entry{Kind: diag.KindOutbound, Level: slog.LevelInfo, Msg: "helper status", Attrs: map[string]any{"target": "helper"}})
+	d.Sync()
+	a.call(admin, "GET", "/api/admin/diagnostics?kind=outbound,event&target=helper", nil, 200, &out)
+	if len(out.Entries) != 3 || out.Entries[0].Msg != "helper status" {
+		t.Errorf("helpers and events: %+v", out.Entries)
+	}
 	a.error(admin, "GET", "/api/admin/diagnostics?level=loud", nil, 400, "Unknown level.")
 	a.error(admin, "GET", "/api/admin/diagnostics?since=yesterday", nil, 400, "Invalid since.")
 

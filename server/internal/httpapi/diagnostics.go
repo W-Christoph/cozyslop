@@ -32,7 +32,8 @@ func (s *Server) requireAdminReadOnly(w http.ResponseWriter, r *http.Request) *s
 }
 
 // adminDiagnostics lists what the server kept for troubleshooting, newest
-// first. Filters, all optional: kind (comma-separated), level (lowest one:
+// first. Filters, all optional: kind and target (comma-separated; target
+// selects outbound entries: anilist, helper), level (lowest one:
 // debug, info, warn, error), room, since and until (unix ms), q (text in
 // the message or attributes), before (an entry id: the next page), limit.
 func (s *Server) adminDiagnostics(w http.ResponseWriter, r *http.Request) {
@@ -43,6 +44,9 @@ func (s *Server) adminDiagnostics(w http.ResponseWriter, r *http.Request) {
 	f := diag.Filter{Room: q.Get("room"), Text: q.Get("q")}
 	if kinds := q.Get("kind"); kinds != "" {
 		f.Kinds = strings.Split(kinds, ",")
+	}
+	if targets := q.Get("target"); targets != "" {
+		f.Targets = strings.Split(targets, ",")
 	}
 	if level := q.Get("level"); level != "" {
 		var l slog.Level

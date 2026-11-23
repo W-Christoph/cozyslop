@@ -381,7 +381,7 @@ func (r *Room) startWatching(ctx context.Context, file, key string, name episode
 func (r *Room) findAnime(ctx context.Context, n episode.Name) (a *store.Anime, linked bool) {
 	a, err := r.hub.Watchlog.AnimeByAlias(ctx, n.Alias())
 	if err == nil {
-		r.log.Info("anime detection", "outcome", "alias", "anime", a.ID)
+		r.log.Info("anime detection", "outcome", "alias")
 		return a, true
 	}
 	if !errors.Is(err, store.ErrNotFound) {
@@ -398,7 +398,7 @@ func (r *Room) findAnime(ctx context.Context, n episode.Name) (a *store.Anime, l
 		return nil, false
 	}
 	if len(found) > 0 {
-		r.log.Info("anime detection", "outcome", "search", "anime", found[0].ID)
+		r.log.Info("anime detection", "outcome", "search")
 		return found[0].Anime(), false
 	}
 	// A page's address leaves out the signs between a title's letters ("im
@@ -432,7 +432,7 @@ func (r *Room) findAnime(ctx context.Context, n episode.Name) (a *store.Anime, l
 		}
 		for _, m := range found {
 			if slices.Contains(want, letters(m.Title.Romaji)) || slices.Contains(want, letters(m.Title.English)) {
-				r.log.Info("anime detection", "outcome", "search_words", "anime", m.ID)
+				r.log.Info("anime detection", "outcome", "search_words")
 				return m.Anime(), false
 			}
 		}
@@ -804,7 +804,6 @@ func (r *Room) openEpisode(ctx context.Context, c *Client, animeID int64, n int)
 	case status != http.StatusNoContent:
 		return fmt.Errorf("play helper: open: %d", status)
 	}
-	r.log.Info("open episode", "anime", a.ID, "episode", n)
 	return nil
 }
 

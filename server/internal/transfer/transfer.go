@@ -27,6 +27,10 @@ const (
 	Database = "cozycast.db"
 	// WatchlogDatabase is the watchlog's own database there.
 	WatchlogDatabase = "watchlog.db"
+	// DiagnosticsDatabase is the diagnostics' (internal/diag), which are
+	// not exported: they are no one's data and only for this server.
+	DiagnosticsDatabase = "diagnostics.db"
+	DiagnosticsDumps    = "diagnostics" // diag.DumpDir
 	// The archive's first entry: what made it, and when.
 	manifestName = "cozycast-server.json"
 	format       = 1
@@ -103,10 +107,11 @@ func Export(ctx context.Context, st *store.Store, wl *store.Watchlog, dataDir st
 		}
 		name := filepath.ToSlash(rel)
 		switch name {
-		case exportTmp, importTmp:
+		case exportTmp, importTmp, DiagnosticsDumps:
 			return filepath.SkipDir
 		case Database, Database + "-wal", Database + "-shm", manifestName,
-			WatchlogDatabase, WatchlogDatabase + "-wal", WatchlogDatabase + "-shm":
+			WatchlogDatabase, WatchlogDatabase + "-wal", WatchlogDatabase + "-shm",
+			DiagnosticsDatabase, DiagnosticsDatabase + "-wal", DiagnosticsDatabase + "-shm":
 			return nil
 		}
 		switch {

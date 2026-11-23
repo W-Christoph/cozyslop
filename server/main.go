@@ -20,6 +20,7 @@ import (
 	"cozycast/internal/anilist"
 	"cozycast/internal/auth"
 	"cozycast/internal/config"
+	"cozycast/internal/diag"
 	"cozycast/internal/docker"
 	"cozycast/internal/egress"
 	"cozycast/internal/fwd"
@@ -85,6 +86,23 @@ func run(args []string, out io.Writer) error {
 
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
 		return err
+	}
+	var diagnostics *diag.Store
+	stderr := slog.NewTextHandler(os.Stderr, nil)
+	if command == "" && cfg.Diagnostics {
+		// First: every logger made from here on scrubs what it logs.
+		diagnostics, err = diag.Open(ctx, filepath.Join(cfg.DataDir, transfer.DiagnosticsDatabase))
+		if err != nil {
+			slog.Warn("diagnostics unavailable", "err", err)
+		}
+	}
+	if command == "" {
+		slog.SetDefault(slog.New(diag.NewHandler(stderr, diagnostics)))
+		diagnostics.Boot(ctx)
+		defer func() {
+			diagnostics.Shutdown()
+			diagnostics.Close()
+		}()
 	}
 	if command == "import" {
 		// Before the database is opened: it is about to be replaced.
@@ -225,6 +243,8 @@ func run(args []string, out io.Writer) error {
 	h := hub.New(db, filepath.Join(mediaDir, "chat"), rooms)
 	h.HibernateAfter = cfg.HibernateAfter
 	h.AniList = anilist.New()
+	h.AniList.HTTP.Transport = diag.Transport{Store: diagnostics, Target: "anilist"}
+	h.Diagnostics = diagnostics
 	watchlog, err := store.OpenWatchlog(ctx, filepath.Join(cfg.DataDir, transfer.WatchlogDatabase))
 	if err != nil {
 		return fmt.Errorf("the watchlog's database: %w", err)
@@ -261,8 +281,23 @@ func run(args []string, out io.Writer) error {
 		SourceURL:   cfg.SourceURL,
 		AniList:     h.AniList,
 		Watchlog:    watchlog,
+		Diagnostics: diagnostics,
 	})
 	handler := api.Handler()
+
+	watchdog := &diag.Watchdog{
+		Store:    diagnostics,
+		Log:      slog.New(diag.NewHandler(stderr, nil)),
+		Locks:    h.Locks,
+		Requests: api.Requests,
+		Gauges:   api.Gauges,
+		Probes: []*diag.Probe{
+			{Name: "db_main", Try: db.ProbeWrite},
+			{Name: "db_watchlog", Try: watchlog.ProbeWrite},
+		},
+	}
+	go watchdog.Run(ctx)
+	dumpOnSignal(ctx, watchdog)
 
 	var servers []*http.Server
 	errc := make(chan error, 4)
@@ -339,7 +374,8 @@ func shutdown(ctx context.Context, servers []*http.Server, api *httpapi.Server) 
 func newServer(addr string, h http.Handler) *http.Server {
 	// Request bodies get their deadline per route (httpapi); WebSockets and
 	// uploads must not be cut off by a server-wide one.
-	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
+	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute,
+		ErrorLog: diag.ServerErrorLog(slog.Default()), ConnState: diag.ConnState}
 }
 
 // hsts tells browsers to use HTTPS for this site from now on.

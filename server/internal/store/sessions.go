@@ -26,22 +26,11 @@ func (s *Store) CreateSession(ctx context.Context, tokenHash []byte, userID int6
 // SessionUser returns the enabled user owning a valid session and slides
 // the session's expiry, reporting whether it was extended.
 func (s *Store) SessionUser(ctx context.Context, tokenHash []byte) (*User, bool, error) {
-	now := s.unix()
-	var lastSeen int64
-	row := s.db.QueryRowContext(ctx,
-		`SELECT s.last_seen_at, `+prefixed("u.", userColumns)+`
-		 FROM sessions s JOIN users u ON u.id = s.user_id
-		 WHERE s.token_hash = ? AND s.expires_at > ? AND u.disabled = 0`, tokenHash, now)
-	var u User
-	err := row.Scan(&lastSeen, &u.ID, &u.Username, &u.PasswordHash, &u.Nickname, &u.NameColor,
-		&u.Avatar, &u.Admin, &u.Verified, &u.Disabled, &u.CreatedAt, &u.WatchlogOff)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, false, ErrNotFound
-	}
+	u, lastSeen, err := s.sessionUser(ctx, tokenHash)
 	if err != nil {
 		return nil, false, err
 	}
-
+	now := s.unix()
 	var extended bool
 	if now-lastSeen >= int64(sessionTouchInterval.Seconds()) {
 		res, err := s.db.ExecContext(ctx,
@@ -56,7 +45,33 @@ func (s *Store) SessionUser(ctx context.Context, tokenHash []byte) (*User, bool,
 		}
 		extended = n > 0
 	}
-	return &u, extended, nil
+	return u, extended, nil
+}
+
+// SessionUserReadOnly is SessionUser without sliding the expiry: it only
+// reads, so it answers while another connection holds the write lock.
+func (s *Store) SessionUserReadOnly(ctx context.Context, tokenHash []byte) (*User, error) {
+	u, _, err := s.sessionUser(ctx, tokenHash)
+	return u, err
+}
+
+func (s *Store) sessionUser(ctx context.Context, tokenHash []byte) (*User, int64, error) {
+	now := s.unix()
+	var lastSeen int64
+	row := s.db.QueryRowContext(ctx,
+		`SELECT s.last_seen_at, `+prefixed("u.", userColumns)+`
+		 FROM sessions s JOIN users u ON u.id = s.user_id
+		 WHERE s.token_hash = ? AND s.expires_at > ? AND u.disabled = 0`, tokenHash, now)
+	var u User
+	err := row.Scan(&lastSeen, &u.ID, &u.Username, &u.PasswordHash, &u.Nickname, &u.NameColor,
+		&u.Avatar, &u.Admin, &u.Verified, &u.Disabled, &u.CreatedAt, &u.WatchlogOff)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, 0, ErrNotFound
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	return &u, lastSeen, nil
 }
 
 func (s *Store) DeleteSession(ctx context.Context, tokenHash []byte) error {

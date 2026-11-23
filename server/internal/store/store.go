@@ -63,6 +63,18 @@ func open(path string) (*sql.DB, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
+// ProbeWrite takes the database's write lock and lets go of it at once:
+// how long that takes is how long writers wait (diag.Watchdog).
+func (s *Store) ProbeWrite(ctx context.Context) error { return probeWrite(ctx, s.db) }
+
+func probeWrite(ctx context.Context, db *sql.DB) error {
+	tx, err := db.BeginTx(ctx, nil) // BEGIN IMMEDIATE (_txlock)
+	if err != nil {
+		return err
+	}
+	return tx.Rollback()
+}
+
 // Snapshot writes a copy of the database to path, which must not exist. It
 // is the database as of one moment, also while it is being written to.
 func (s *Store) Snapshot(ctx context.Context, path string) error {

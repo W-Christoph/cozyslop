@@ -24,7 +24,7 @@ func (r *Room) fileAction(ctx context.Context, c *Client, action, name string) {
 	var userErr *userError
 	switch {
 	case err == nil:
-		r.log.Info(action+" file", "client", c.ID, "name", name)
+		r.log.Info(action + " file")
 	case errors.As(err, &userErr):
 		res.Error = userErr.msg
 	case errors.Is(err, ErrNotAllowed):
@@ -32,7 +32,7 @@ func (r *Room) fileAction(ctx context.Context, c *Client, action, name string) {
 	case errors.Is(err, neko.ErrNotFound):
 		res.Error = "That file is not in Downloads any more."
 	default:
-		r.log.Error(action+" file", "client", c.ID, "err", err)
+		r.log.Error(action+" file", "err", err)
 		res.Error = "Something went wrong."
 	}
 	c.send(res)
@@ -103,7 +103,7 @@ func (r *Room) postHelper(ctx context.Context, address string) (int, error) {
 		return 0, err
 	}
 	req.Header.Set("Authorization", "Bearer "+r.playToken)
-	res, err := (&http.Client{Timeout: 15 * time.Second, Transport: r.neko.Transport()}).Do(req)
+	res, err := (&http.Client{Timeout: 15 * time.Second, Transport: r.helperTransport(false)}).Do(req)
 	if err != nil {
 		return 0, err
 	}

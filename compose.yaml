@@ -1,7 +1,20 @@
 # CozyCast: one server plus one neko container per room.
 # Configure via .env (see .env.example), then: docker compose up -d --build
 
+# Docker keeps a container's log only this long: 3 files of 10 MB, the
+# oldest dropped first (the server keeps its diagnostics itself, for a few
+# days). Non-blocking: a full log buffer drops lines instead of stopping
+# the program that writes them.
+x-logging: &logging
+  driver: local
+  options:
+    max-size: 10m
+    max-file: "3"
+    mode: non-blocking
+    max-buffer-size: 4m
+
 x-room: &room
+  logging: *logging
   build: ./worker
   image: cozycast-worker
   restart: unless-stopped
@@ -53,6 +66,7 @@ services:
       dockerfile: server/Dockerfile
     image: cozycast-server
     restart: unless-stopped
+    logging: *logging
     ports:
       - "${HTTP_PORT:-80}:8080"
       - "${HTTPS_PORT:-443}:8443"

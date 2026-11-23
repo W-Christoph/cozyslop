@@ -16,6 +16,7 @@ import (
 	"unicode"
 
 	"cozycast/internal/anilist"
+	"cozycast/internal/diag"
 	"cozycast/internal/episode"
 	"cozycast/internal/store"
 )
@@ -105,11 +106,11 @@ type viewer struct {
 // proposal is a suggestion to mark an episode watched.
 type proposal struct {
 	WatchProposal
-	alias    string           // the file name's title, remembered for its show on save
-	pageURL  string           // the page's address, remembered for its show on save
-	anime    *store.Anime     // nil while no show is picked
-	users    map[string]int64 // account ids of the viewers, by identity key
-	timer    *time.Timer
+	alias   string           // the file name's title, remembered for its show on save
+	pageURL string           // the page's address, remembered for its show on save
+	anime   *store.Anime     // nil while no show is picked
+	users   map[string]int64 // account ids of the viewers, by identity key
+	timer   *time.Timer
 }
 
 func (w *watching) playing() *WatchPlaying {
@@ -297,7 +298,7 @@ func (r *Room) checkPlayback(ctx context.Context) {
 	if !watched {
 		return
 	}
-	st, err := fetchPlayStatus(ctx, r.neko.Transport(), r.statusURL, r.playToken)
+	st, err := fetchPlayStatus(ctx, r.helperTransport(true), r.statusURL, r.playToken)
 	if err != nil || st.State == "unknown" {
 		if r.watchMisses++; r.watchMisses >= watchMisses {
 			r.endWatching(ctx)
@@ -380,6 +381,7 @@ func (r *Room) startWatching(ctx context.Context, file, key string, name episode
 func (r *Room) findAnime(ctx context.Context, n episode.Name) (a *store.Anime, linked bool) {
 	a, err := r.hub.Watchlog.AnimeByAlias(ctx, n.Alias())
 	if err == nil {
+		r.log.Info("anime detection", "outcome", "alias", "anime", a.ID)
 		return a, true
 	}
 	if !errors.Is(err, store.ErrNotFound) {
@@ -388,7 +390,7 @@ func (r *Room) findAnime(ctx context.Context, n episode.Name) (a *store.Anime, l
 	if r.hub.AniList == nil {
 		return nil, false
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(diag.WithCaller(ctx, "room_detect", r.Name), 10*time.Second)
 	defer cancel()
 	found, err := r.hub.AniList.Search(ctx, n.Query())
 	if err != nil {
@@ -396,6 +398,7 @@ func (r *Room) findAnime(ctx context.Context, n episode.Name) (a *store.Anime, l
 		return nil, false
 	}
 	if len(found) > 0 {
+		r.log.Info("anime detection", "outcome", "search", "anime", found[0].ID)
 		return found[0].Anime(), false
 	}
 	// A page's address leaves out the signs between a title's letters ("im
@@ -429,10 +432,12 @@ func (r *Room) findAnime(ctx context.Context, n episode.Name) (a *store.Anime, l
 		}
 		for _, m := range found {
 			if slices.Contains(want, letters(m.Title.Romaji)) || slices.Contains(want, letters(m.Title.English)) {
+				r.log.Info("anime detection", "outcome", "search_words", "anime", m.ID)
 				return m.Anime(), false
 			}
 		}
 	}
+	r.log.Info("anime detection", "outcome", "miss")
 	return nil, false
 }
 
@@ -676,7 +681,7 @@ func (r *Room) showByID(ctx context.Context, animeID int64) (*store.Anime, error
 	if r.hub.AniList == nil {
 		return nil, &userError{"AniList is not available."}
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(diag.WithCaller(ctx, "room_pick", r.Name), 10*time.Second)
 	defer cancel()
 	m, err := r.hub.AniList.Get(ctx, animeID)
 	if errors.Is(err, anilist.ErrNotFound) {
@@ -799,8 +804,14 @@ func (r *Room) openEpisode(ctx context.Context, c *Client, animeID int64, n int)
 	case status != http.StatusNoContent:
 		return fmt.Errorf("play helper: open: %d", status)
 	}
-	r.log.Info("open episode", "client", c.ID, "anime", a.ID, "episode", n)
+	r.log.Info("open episode", "anime", a.ID, "episode", n)
 	return nil
+}
+
+// helperTransport reaches the room's helpers (worker/play.py), keeping its
+// requests in the diagnostics; polls are summarized per minute.
+func (r *Room) helperTransport(poll bool) http.RoundTripper {
+	return diag.Transport{Base: r.neko.Transport(), Store: r.hub.Diagnostics, Target: "helper", Room: r.Name, Summarize: poll}
 }
 
 func fetchPlayStatus(ctx context.Context, transport http.RoundTripper, url, token string) (playStatus, error) {

@@ -182,7 +182,7 @@ func splice(down net.Conn, buffered *bufio.Reader, up net.Conn) {
 func (p *Proxy) refuse(w http.ResponseWriter, host string, err error) {
 	if errors.Is(err, errDenied) {
 		if p.Log != nil {
-			p.Log.Info("egress refused", "host", host)
+			p.Log.Info("egress refused")
 		}
 		http.Error(w, "destination not allowed", http.StatusForbidden)
 		return

@@ -13,11 +13,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"cozycast/internal/anilist"
+	"cozycast/internal/diag"
 	"cozycast/internal/neko"
 	"cozycast/internal/store"
 )
@@ -34,15 +34,20 @@ type Hub struct {
 	// Watchlog is the watchlog's database; nil = there is no watchlog, and
 	// SetWatchlog turns nothing on. Set before Start.
 	Watchlog *store.Watchlog
+	// Diagnostics keeps the requests to the rooms' helpers; nil = nothing
+	// does. Set before Start.
+	Diagnostics *diag.Store
 
 	watchlog atomic.Bool // the watchlog is on: rooms follow what is played
 
 	store    *store.Store
 	mediaDir string       // chat images and videos
-	mu       sync.RWMutex // room map and lifetimes
+	mu       diag.RWMutex // room map and lifetimes
 	ctx      context.Context
 	rooms    map[string]*Room
 	log      *slog.Logger
+	// The rooms when Locks last looked, for when it cannot look.
+	lockRooms atomic.Pointer[[]*Room]
 }
 
 type RoomConfig struct {
@@ -81,6 +86,26 @@ func New(s *store.Store, mediaDir string, rooms []RoomConfig) *Hub {
 		h.rooms[rc.Name] = h.makeRoom(rc)
 	}
 	return h
+}
+
+// Locks is how long the hub's lock and each room's have been held, found
+// without taking them (diag.Watchdog).
+func (h *Hub) Locks() []diag.Lock {
+	if h.mu.TryRLock() {
+		rooms := make([]*Room, 0, len(h.rooms))
+		for _, r := range h.rooms {
+			rooms = append(rooms, r)
+		}
+		h.mu.RUnlock()
+		h.lockRooms.Store(&rooms)
+	}
+	locks := []diag.Lock{{Name: "hub", Held: h.mu.Held()}}
+	if rooms := h.lockRooms.Load(); rooms != nil {
+		for _, r := range *rooms {
+			locks = append(locks, diag.Lock{Name: "room " + r.Name, Held: r.mu.Held()})
+		}
+	}
+	return locks
 }
 
 // SetWatchlog turns following what is played in the rooms on or off (the
@@ -202,7 +227,7 @@ func (h *Hub) removeMedia(names []string) {
 			continue
 		}
 		if err := os.Remove(filepath.Join(h.mediaDir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			h.log.Warn("remove chat media", "file", name, "err", err)
+			h.log.Warn("remove chat media", "err", err)
 		}
 	}
 }
@@ -311,7 +336,7 @@ func (h *Hub) updateAiring(ctx context.Context) (next time.Time) {
 	for len(ids) > 0 {
 		batch := ids[:min(len(ids), anilist.MaxIDs)]
 		ids = ids[len(batch):]
-		actx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		actx, cancel := context.WithTimeout(diag.WithCaller(ctx, "airing", ""), 20*time.Second)
 		found, err := h.AniList.GetMany(actx, batch)
 		cancel()
 		if err != nil {

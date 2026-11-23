@@ -200,7 +200,7 @@ func (s *Server) adminAcceptPairing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.pairing.Finish(pr.ID, room)
-	s.log.Info("computer paired", "room", room, "by", actor.Username, "replaced", req.Replace != "")
+	s.log.Info("computer paired", "room", room, "replaced", req.Replace != "")
 	writeJSON(w, http.StatusOK, toAdminRoom(s.hub.Room(room)))
 }
 

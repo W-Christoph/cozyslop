@@ -97,7 +97,7 @@ func (s *Server) adminControlRoom(w http.ResponseWriter, r *http.Request, action
 		writeError(w, http.StatusNotFound, "Unknown room.")
 		return
 	}
-	s.log.Info("admin container "+action, "room", room.Name, "username", actor.Username)
+	s.log.Info("admin container "+action, "room", room.Name)
 	control := room.StartContainer
 	if action == "stop" {
 		control = room.StopContainer
@@ -107,7 +107,7 @@ func (s *Server) adminControlRoom(w http.ResponseWriter, r *http.Request, action
 	case errors.Is(err, hub.ErrNoContainerControl):
 		writeError(w, http.StatusConflict, "This room's container is not managed by the server.")
 	case err != nil:
-		s.log.Error("admin container "+action, "room", room.Name, "username", actor.Username, "err", err)
+		s.log.Error("admin container "+action, "room", room.Name, "err", err)
 		writeError(w, http.StatusBadGateway, "Docker could not "+action+" the room.")
 	default:
 		writeJSON(w, http.StatusOK, containerRoom(r.Context(), room))

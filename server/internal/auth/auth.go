@@ -105,6 +105,21 @@ func (a *Service) Identify(w http.ResponseWriter, r *http.Request) (Identity, er
 	return id, nil
 }
 
+// ReadOnlyUser is the request's logged-in user, or nil, found without
+// writing to the database (no cookies, no sliding expiry): for what must
+// answer while the database is busy writing, like the diagnostics.
+func (a *Service) ReadOnlyUser(r *http.Request) (*store.User, error) {
+	c, err := r.Cookie(sessionCookie)
+	if err != nil || !validToken(c.Value) {
+		return nil, nil
+	}
+	u, err := a.store.SessionUserReadOnly(r.Context(), hashToken(c.Value))
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, nil
+	}
+	return u, err
+}
+
 // Login checks credentials and starts a session.
 func (a *Service) Login(w http.ResponseWriter, r *http.Request, username, password string) (*store.User, error) {
 	u, err := a.store.UserByUsername(r.Context(), username)

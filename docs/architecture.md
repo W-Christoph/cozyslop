@@ -192,6 +192,65 @@ along.
   `dropped`): someone the others do not wait for, because they watch the
   show along when they are there, or have stopped. Deleted with the show.
 
+### Diagnostics
+
+What the server keeps for troubleshooting is in `data/diagnostics.db`
+(`server/internal/diag`): one table, `entries` (ts in unix ms, kind, level,
+room, msg, attrs as JSON). Kinds:
+
+- `event`: log records from Info up.
+- `boot`, `shutdown`: a boot after a run without a shutdown (a crash, a
+  kill for running out of memory) says so, with when that run was last seen.
+- `request`: requests that failed (5xx) or took over a second, by route;
+  WebSockets, the neko proxy and uploads only when they fail.
+- `outbound`: each request to AniList (what for: `caller` = `http_search`,
+  `http_add`, `room_detect`, `room_pick`, `airing`; `op`; status, duration,
+  AniList's `X-RateLimit-Remaining` and `Retry-After`, how it failed), and
+  the rooms' play helper (`worker/play.py`): opening and playing one entry
+  each, the 5-second status polls one per minute, room and operation with
+  count, errors, average and longest duration. Rooms log `anime detection`
+  events with how a file's show was found (`alias`, `search`,
+  `search_words`, `miss`).
+- `sample`: every 10 seconds, the watchdog's health sample (Debug level):
+  goroutines, memory, scheduling latency, mutex waits, GC and process CPU,
+  open files, load, the container's CPU/memory/IO pressure and CPU
+  throttling, connections, requests under way and the oldest of them, the
+  longest-held lock, how long the databases' write locks took, TLS
+  handshake failures and dropped entries.
+- `stall`: the watchdog (`diag.Watchdog`, every 5 seconds) found the server
+  stuck, and later well again with how long it was: the hub's or a room's
+  lock held over 5 s (`diag.Mutex` and `diag.RWMutex` know since when they
+  are held, so nothing has to take them to find out), a database's write
+  lock (`BEGIN IMMEDIATE`, one try at a time) taking over 3 s or failing, a
+  request other than the long-lived ones running over 15 s, or the
+  watchdog itself running 2 s late. The first entry of a stall names a
+  dump in `data/diagnostics/` (at most one per 10 minutes): locks,
+  requests under way, the probes, the last samples, and the goroutine and
+  mutex profiles, with public IP addresses masked. `SIGUSR1` keeps a dump
+  at any time (`docker compose kill -s USR1 server`), for when nothing
+  answers; the dump can be read once the server does again, and the
+  container's log says it was made. Entries are kept 7 days (health samples 3), at
+most 200,000, removed hourly. The file is not exported, nothing in it
+refers to an account, and deleting it and `data/diagnostics/` (or
+`DELETE /api/admin/diagnostics`) loses nothing but history; a file it cannot read is replaced at startup.
+`COZYCAST_DIAGNOSTICS=false` turns it off. It is written by one goroutine
+in batches; when that falls behind, entries are dropped and counted, never
+waited for.
+
+Nothing in it, or on stderr, says who: the log handler (`diag.Handler`)
+keeps only the attributes on its allowed list (rooms, errors, statuses,
+ports, AniList ids, episode numbers, counts; never accounts, usernames,
+nicknames, identity keys, client or member ids, file names, addresses of
+pages, search text) and scrubs messages and values: public IP addresses
+become `<ip>` (private, loopback and link-local ones stay: they are the
+server's, its rooms' and the tunnel's), URLs keep only scheme and host,
+e-mail addresses and token-like strings are masked, and text is cut to 500
+bytes. Requests are named by their route pattern
+(`PUT /api/watchlog/progress/{anime}/{username}`), never their path. The
+HTTP servers' own errors go through it too, except failed TLS handshakes,
+which are only counted. Compose limits Docker's container logs to 3 files
+of 10 MB per container, written without blocking (`x-logging`).
+
 ## Permissions
 
 Per room, an identity's effective rights are computed in one place

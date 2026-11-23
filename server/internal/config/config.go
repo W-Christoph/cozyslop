@@ -30,6 +30,7 @@ type Config struct {
 	DataDir       string   // database and uploaded files
 	ImportPath    string   // optional legacy export archive; imported into an empty database
 	TrustProxy    bool     // take client IP/scheme from X-Forwarded-* headers
+	Diagnostics   bool     // keep a few days of diagnostics (internal/diag)
 	Docker        bool     // opt in to room container restarts
 	DockerSocket  string   // Docker Engine Unix socket
 	DockerProject string   // fallback when the server's compose project cannot be detected
@@ -67,6 +68,7 @@ func FromEnv() (Config, error) {
 		DataDir:       env("COZYCAST_DATA_DIR", "data"),
 		ImportPath:    os.Getenv("COZYCAST_IMPORT"),
 		TrustProxy:    envBool("COZYCAST_TRUST_PROXY", false),
+		Diagnostics:   envBool("COZYCAST_DIAGNOSTICS", true),
 		Docker:        envBool("COZYCAST_DOCKER", false),
 		DockerSocket:  env("COZYCAST_DOCKER_SOCKET", "/var/run/docker.sock"),
 		DockerProject: os.Getenv("COZYCAST_DOCKER_PROJECT"),

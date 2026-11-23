@@ -18,6 +18,7 @@ import (
 
 	"cozycast/internal/anilist"
 	"cozycast/internal/auth"
+	"cozycast/internal/diag"
 	"cozycast/internal/fwd"
 	"cozycast/internal/hub"
 	"cozycast/internal/pairing"
@@ -55,6 +56,8 @@ type Deps struct {
 	AniList *anilist.Client
 	// Watchlog is the watchlog's database; nil = there is no watchlog.
 	Watchlog *store.Watchlog
+	// Diagnostics is what is kept for troubleshooting; nil = nothing is.
+	Diagnostics *diag.Store
 }
 
 type Server struct {
@@ -64,6 +67,7 @@ type Server struct {
 	relay          *relay.Relay
 	anilist        *anilist.Client
 	watchlog       *store.Watchlog
+	diagnostics    *diag.Store
 	publicIP       netip.Addr
 	mediaPorts     [2]int
 	pairing        *pairing.Manager // nil when the tunnel is off
@@ -79,6 +83,7 @@ type Server struct {
 	mediaDir       string
 	maxUploadBytes int64
 	avatarMu       sync.Mutex // avatar replacement, removal and account deletion
+	reqs           requests
 
 	adminMu sync.Mutex // enabled-admin count checks and updates
 
@@ -118,6 +123,7 @@ func New(d Deps) *Server {
 		relay:          d.Relay,
 		anilist:        d.AniList,
 		watchlog:       d.Watchlog,
+		diagnostics:    d.Diagnostics,
 		searchLimit:    ratelimit.New(10, 2*time.Second),
 		publicIP:       d.PublicIP,
 		mediaPorts:     d.MediaPorts,
@@ -189,6 +195,10 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("PUT /api/admin/settings", s.adminSaveSettings)
 
+	mux.HandleFunc("GET /api/admin/diagnostics", s.adminDiagnostics)
+	mux.HandleFunc("DELETE /api/admin/diagnostics", s.adminClearDiagnostics)
+	mux.HandleFunc("GET /api/admin/diagnostics/dumps/{name}", s.adminDiagnosticsDump)
+
 	mux.HandleFunc("POST /api/admin/invites", s.adminCreateInvite)
 	mux.HandleFunc("GET /api/admin/invites", s.adminListInvites)
 	mux.HandleFunc("DELETE /api/admin/invites/{code}", s.adminDeleteInvite)
@@ -213,7 +223,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/media", http.NotFound)
 	mux.HandleFunc("/neko/{room}/{path...}", s.nekoProxy)
 	mux.Handle("/", spaHandler(s.web))
-	return bodyDeadline(sameOrigin(validateMediaPath(mux)))
+	return bodyDeadline(sameOrigin(validateMediaPath(s.track(mux))))
 }
 
 // How long a request body may take to arrive. Uploads to the room desktop
@@ -316,7 +326,7 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 
 // internalError logs err and sends a generic 500.
 func (s *Server) internalError(w http.ResponseWriter, r *http.Request, err error) {
-	s.log.Error("request failed", "method", r.Method, "path", r.URL.Path, "err", err)
+	s.log.Error("request failed", "method", r.Method, "route", r.Pattern, "err", err)
 	writeError(w, http.StatusInternalServerError, "Something went wrong.")
 }
 

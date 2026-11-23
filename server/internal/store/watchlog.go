@@ -32,6 +32,9 @@ func OpenWatchlog(ctx context.Context, path string) (*Watchlog, error) {
 
 func (s *Watchlog) Close() error { return s.db.Close() }
 
+// ProbeWrite is Store.ProbeWrite for the watchlog's database.
+func (s *Watchlog) ProbeWrite(ctx context.Context) error { return probeWrite(ctx, s.db) }
+
 // Snapshot writes a copy of the database to path, as Store.Snapshot does.
 func (s *Watchlog) Snapshot(ctx context.Context, path string) error {
 	_, err := s.db.ExecContext(ctx, "VACUUM INTO ?", path)

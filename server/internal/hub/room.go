@@ -22,6 +22,7 @@ import (
 	"unicode/utf8"
 
 	"cozycast/internal/auth"
+	"cozycast/internal/diag"
 	"cozycast/internal/neko"
 	"cozycast/internal/ratelimit"
 	"cozycast/internal/rights"
@@ -63,7 +64,7 @@ type Room struct {
 	start, stop func(ctx context.Context) error
 	running     func(ctx context.Context) (bool, error)
 
-	mu       sync.Mutex
+	mu       diag.Mutex
 	settings store.RoomSettings
 	members  map[string]*member // by identity key
 	clients  map[string]*Client // by client id
@@ -438,17 +439,17 @@ func (r *Room) checkMembers(ctx context.Context) {
 		c := r.clients[m.ID]
 		r.mu.Unlock()
 		if c == nil {
-			r.log.Warn("deleting a neko member that belongs to no tab", "member", m.ID, "name", m.Profile.Name)
+			r.log.Warn("deleting a neko member that belongs to no tab")
 			if err := r.neko.DeleteMember(ctx, m.ID); err != nil && !errors.Is(err, neko.ErrNotFound) {
-				r.log.Warn("delete neko member", "member", m.ID, "err", err)
+				r.log.Warn("delete neko member", "err", err)
 			}
 			continue
 		}
 		c.nekoMu.Lock()
 		if want := r.nekoProfile(c); !c.gone && !sameProfile(m.Profile, want) {
-			r.log.Warn("resetting a neko member's profile", "client", c.ID)
+			r.log.Warn("resetting a neko member's profile")
 			if err := r.neko.UpdateProfile(ctx, c.ID, want); err != nil && !errors.Is(err, neko.ErrNotFound) {
-				r.log.Warn("update neko member", "client", c.ID, "err", err)
+				r.log.Warn("update neko member", "err", err)
 			}
 		}
 		c.nekoMu.Unlock()
@@ -638,7 +639,7 @@ func (r *Room) Join(ctx context.Context, req JoinRequest) (*Client, error) {
 		go r.wake()
 	}
 	r.syncNeko(ctx, resync)
-	r.log.Info("client joined", "client", c.ID, "identity", key)
+	r.log.Debug("client joined")
 	return c, nil
 }
 
@@ -653,10 +654,10 @@ func (r *Room) Leave(ctx context.Context, c *Client) {
 	c.nekoMu.Lock()
 	c.gone = true
 	if err := r.neko.DeleteMember(ctx, c.ID); err != nil && !errors.Is(err, neko.ErrNotFound) {
-		r.log.Warn("delete neko member", "client", c.ID, "err", err)
+		r.log.Warn("delete neko member", "err", err)
 	}
 	c.nekoMu.Unlock()
-	r.log.Info("client left", "client", c.ID)
+	r.log.Debug("client left")
 }
 
 func (r *Room) removeClientLocked(c *Client) {
@@ -723,12 +724,12 @@ func (r *Room) refreshUser(ctx context.Context, userID int64) {
 		return
 	}
 	if err != nil {
-		r.log.Warn("refresh user", "user", userID, "err", err)
+		r.log.Warn("refresh user", "err", err)
 		return
 	}
 	perm, err := r.hub.store.Permission(ctx, r.Name, userID)
 	if err != nil {
-		r.log.Warn("refresh permission", "user", userID, "err", err)
+		r.log.Warn("refresh permission", "err", err)
 		return
 	}
 
@@ -993,7 +994,7 @@ func (r *Room) NekoToken(ctx context.Context, c *Client) (string, error) {
 		if err == nil {
 			return r.issueToken(c, token)
 		}
-		r.log.Info("neko login failed, recreating member", "client", c.ID, "err", err)
+		r.log.Info("neko login failed, recreating member", "err", err)
 		_ = r.neko.DeleteMember(ctx, c.ID)
 	}
 
@@ -1152,7 +1153,7 @@ func (r *Room) syncNeko(ctx context.Context, clients []*Client) {
 		c.nekoMu.Lock()
 		if c.nekoPassword != "" {
 			if err := r.neko.UpdateProfile(ctx, c.ID, r.nekoProfile(c)); err != nil && !errors.Is(err, neko.ErrNotFound) {
-				r.log.Warn("update neko member", "client", c.ID, "err", err)
+				r.log.Warn("update neko member", "err", err)
 			}
 		}
 		c.nekoMu.Unlock()

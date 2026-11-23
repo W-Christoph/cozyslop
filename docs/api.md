@@ -228,6 +228,18 @@ most recently joined live tab; a plain kick removes only the target identity.
 |---|---|---|---|---|
 | `PUT /api/admin/settings` | Admin | `{"message":"…","registration":"open","watchlog":false}`; full replacement (`watchlog` omitted = `false`) | 200 saved global settings; turning `watchlog` off makes rooms drop the episode they follow and any open suggestion at their next poll | 400 message over 4096 characters or registration other than `open` / `invite` |
 
+## Admin diagnostics
+
+What the server keeps for troubleshooting (`docs/architecture.md`,
+Diagnostics). The admin check only reads the database, so these answer
+while it is busy writing.
+
+| Method and path | Caller | Request body | Response | Notable errors |
+|---|---|---|---|---|
+| `GET /api/admin/diagnostics` | Admin | None. Query, all optional: `kind` (comma-separated: `event`, `request`, `outbound`, `sample`, `stall`, `boot`, `shutdown`), `level` (lowest: `debug`, `info`, `warn`, `error`), `room`, `since` and `until` (unix ms), `q` (text in the message or attributes), `before` (an entry id: the next page), `limit` (default 200, at most 1000) | 200 `{"enabled":true,"retentionDays":7,"sizeBytes":…,"dropped":…,"tlsHandshakeErrors":…,"entries":[{"id":…,"time":<unix ms>,"kind":"event","level":"WARN","room":"default","msg":"…","attrs":{…}}]}`, newest first; `enabled` is `false` and `entries` empty when diagnostics are off | 400 unknown level or a number that is not one |
+| `GET /api/admin/diagnostics/dumps/{name}` | Admin | None; `name` is a stall entry's `dump` (`stall-<unix ms>.txt.gz`) | 200 the dump as `text/plain` | 404 `"No such dump."` |
+| `DELETE /api/admin/diagnostics` | Admin | None | 204; every entry and dump is removed | |
+
 ## Watchlog
 
 How far each account has watched which anime (see

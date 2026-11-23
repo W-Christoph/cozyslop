@@ -35,6 +35,14 @@ services:
   docker:
     image: wollomatic/socket-proxy:1@sha256:3935b709275e4ec35d6ed5a5c4a1f0d01ed31eec5e7234efc3357ecd47689002
     restart: unless-stopped
+    # As compose.yaml's x-logging.
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+        mode: non-blocking
+        max-buffer-size: 4m
     user: "65534:${DOCKER_GID:?set DOCKER_GID in .env}"
     read_only: true
     cap_drop: [ALL]

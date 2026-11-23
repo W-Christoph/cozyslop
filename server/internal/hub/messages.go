@@ -106,7 +106,7 @@ func (r *Room) report(c *Client, typ string, err error) {
 	case errors.Is(err, ErrNotAllowed):
 		c.send(errorMsg{Type: "error", Message: "You are not allowed to do that."})
 	default:
-		r.log.Error("handle message", "type", typ, "client", c.ID, "err", err)
+		r.log.Error("handle message", "type", typ, "err", err)
 		c.send(errorMsg{Type: "error", Message: "Something went wrong."})
 	}
 }
@@ -165,7 +165,7 @@ func (r *Room) nekoTokenAnswer(ctx context.Context, c *Client, lost <-chan struc
 	token, err := r.NekoToken(ctx, c)
 	if err != nil {
 		if ctx.Err() == nil && !errors.Is(err, ErrNotPresent) {
-			r.log.Error("issue neko token", "client", c.ID, "err", err)
+			r.log.Error("issue neko token", "err", err)
 			return nekoUnavailableMsg{Type: "neko_unavailable", Message: "The room's desktop is not reachable right now."}
 		}
 		return nil
@@ -433,7 +433,7 @@ func (r *Room) Restart(c *Client) error {
 	r.broadcastLocked(restartingMsg{Type: "restarting", By: r.userLocked(c.m).Nickname}, nil)
 	r.mu.Unlock()
 
-	r.log.Info("restarting room", "by", c.m.key)
+	r.log.Info("restarting room")
 	// The restart outlives the request: the requester's socket may close
 	// while the desktop goes down.
 	go func() {

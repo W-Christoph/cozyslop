@@ -326,7 +326,7 @@ func (s *Server) removeAvatarFile(ctx context.Context, name string) {
 	}
 	used, err := s.store.AvatarReferenced(ctx, name)
 	if err != nil {
-		s.log.Warn("check avatar references", "file", name, "err", err)
+		s.log.Warn("check avatar references", "err", err)
 		return
 	}
 	if !used {
@@ -341,7 +341,7 @@ func (s *Server) removeMediaFile(dir, name string) {
 		return
 	}
 	if err := os.Remove(filepath.Join(s.mediaDir, dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		s.log.Warn("remove media", "dir", dir, "file", name, "err", err)
+		s.log.Warn("remove media", "dir", dir, "err", err)
 	}
 }
 

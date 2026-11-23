@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"cozycast/internal/anilist"
+	"cozycast/internal/diag"
 	"cozycast/internal/episode"
 	"cozycast/internal/store"
 )
@@ -161,7 +162,7 @@ func (s *Server) searchAnime(w http.ResponseWriter, r *http.Request) {
 	if !s.allowAniList(w, u) {
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(diag.WithCaller(r.Context(), "http_search", ""), 10*time.Second)
 	defer cancel()
 	found, err := s.anilist.Search(ctx, q)
 	if err != nil {
@@ -199,7 +200,7 @@ func (s *Server) addAnime(w http.ResponseWriter, r *http.Request) {
 	if !s.allowAniList(w, u) {
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(diag.WithCaller(r.Context(), "http_add", ""), 10*time.Second)
 	defer cancel()
 	m, err := s.anilist.Get(ctx, req.ID)
 	if errors.Is(err, anilist.ErrNotFound) {

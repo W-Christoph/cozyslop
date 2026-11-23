@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"time"
 
+	"cozycast/internal/diag"
 	"cozycast/internal/store"
 )
 
@@ -68,7 +69,7 @@ func (c *Client) Search(ctx context.Context, text string) ([]Media, error) {
 			Media []Media `json:"media"`
 		} `json:"Page"`
 	}
-	err := c.query(ctx, `query ($q: String) { Page(perPage: 10) { media(search: $q, type: ANIME, sort: SEARCH_MATCH) { `+fields+` } } }`,
+	err := c.query(diag.WithOp(ctx, "search"), `query ($q: String) { Page(perPage: 10) { media(search: $q, type: ANIME, sort: SEARCH_MATCH) { `+fields+` } } }`,
 		map[string]any{"q": text}, &out)
 	return out.Page.Media, err
 }
@@ -78,7 +79,7 @@ func (c *Client) Get(ctx context.Context, id int64) (Media, error) {
 	var out struct {
 		Media *Media `json:"Media"`
 	}
-	err := c.query(ctx, `query ($id: Int) { Media(id: $id, type: ANIME) { `+fields+` } }`,
+	err := c.query(diag.WithOp(ctx, "get"), `query ($id: Int) { Media(id: $id, type: ANIME) { `+fields+` } }`,
 		map[string]any{"id": id}, &out)
 	if err == nil && out.Media == nil {
 		err = ErrNotFound
@@ -100,7 +101,7 @@ func (c *Client) GetMany(ctx context.Context, ids []int64) ([]Media, error) {
 			Media []Media `json:"media"`
 		} `json:"Page"`
 	}
-	err := c.query(ctx, `query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids, type: ANIME) { `+fields+` } } }`,
+	err := c.query(diag.WithOp(ctx, "get_many"), `query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids, type: ANIME) { `+fields+` } } }`,
 		map[string]any{"ids": ids[:min(len(ids), MaxIDs)]}, &out)
 	return out.Page.Media, err
 }

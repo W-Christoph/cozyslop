@@ -50,6 +50,9 @@ func TestAdminAuthorization(t *testing.T) {
 		{"POST", "/api/admin/invites"},
 		{"GET", "/api/admin/invites"},
 		{"DELETE", "/api/admin/invites/missing"},
+		{"GET", "/api/admin/diagnostics"},
+		{"DELETE", "/api/admin/diagnostics"},
+		{"GET", "/api/admin/diagnostics/dumps/stall-1.txt.gz"},
 	} {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
 			a.error(anon, route.method, route.path, map[string]any{}, 401, "Please log in.")

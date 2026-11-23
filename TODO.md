@@ -3,6 +3,57 @@
 From the full-codebase review on 2026-10-03 (three Codex runs, every file
 read; findings checked against the code). State as of 2026-10-19.
 
+## 0. Open: diagnostics (2026-11-23)
+
+The server keeps a few days of diagnostics without saying who
+(`server/internal/diag`, `docs/architecture.md` Diagnostics, API in
+`docs/api.md` Admin diagnostics). Built: the store, the scrubbing log
+handler, the admin endpoint, request/AniList/helper recording, health
+samples, the stall watchdog with dumps, SIGUSR1, Docker log limits. Left:
+
+- [ ] Admin page for the diagnostics (today JSON only, at
+      `/api/admin/diagnostics`): overview (stalls, errors, AniList calls and
+      failures in the last 24 h, size, dropped), events with a level and
+      kind filter and paging (`before`), stalls with their dump in a
+      `<pre>`, AniList calls per minute, health samples over time, the
+      "delete all" button. Draw it with made-up entries as scenes in
+      `web/src/snapshots/` (`npm run snapshots`, `docs/frontend.md`) and
+      hill-climb on the pictures: dark and light, phone width, empty state,
+      long error texts, a stall with a long dump.
+- [ ] Main instance: get rid of the old container logs. They were kept
+      without limit (`json-file`, no `max-size`). `docker compose up -d`
+      after the update should recreate every container (the logging
+      settings changed), and Docker deletes a container's log with the
+      container. Check: `docker inspect -f '{{.HostConfig.LogConfig}}'
+      <container>` says `local` with `max-size`, `docker compose logs
+      server` starts at the update, and nothing big is left in
+      `/var/lib/docker/containers/*/*-json.log` (`sudo du -sh`). Also look
+      for a default in `/etc/docker/daemon.json` and for copies anywhere
+      else (journald, log shippers, backups of `/var/lib/docker`).
+- [ ] Main instance: after deploying, look at `?kind=boot` (was the last
+      outage a crash or out-of-memory restart?) and, at the next outage,
+      `?kind=stall` and its dump. Check the thresholds give no false alarms
+      in normal use (`diag.StuckLock` 5 s, `StuckProbe` 3 s, `StuckRequest`
+      15 s, `StuckLag` 2 s) and how fast `diagnostics.db` grows (samples:
+      about 5 MB a day).
+- [ ] An uptime check from another machine (e.g. `GET /api/settings` every
+      minute): tells an outage of the process from one of the network,
+      Docker's port forwarding or the host, which the watchdog cannot see.
+- [ ] Likely causes to look at when a stall names them: chat messages are
+      written to the database while `Room.mu` is held (`hub/messages.go`,
+      up to the 5 s busy timeout), `Hub.Remove` holds the hub's lock until
+      the room's goroutines end (one may be in a 10 s AniList call), and
+      everything writing `cozycast.db` shares its one writer (chat prune
+      every minute, session touches).
+- [ ] The node agent (`server/cmd/node`, on home computers) still logs
+      through the plain slog handler: give it `diag.NewHandler` without a
+      store, so its stderr is scrubbed the same way.
+- [ ] `COZYCAST_DIAGNOSTICS` (default on) is not in `compose.yaml` or
+      `.env.example`; add it if it should be switchable from `.env`.
+- [ ] Refused egress no longer logs the host (it may be where someone in a
+      paired room tried to go). If refusals need troubleshooting, count
+      them per port instead.
+
 ## 1. Open: when deploying
 
 Nothing in the code blocks a deployment any more. These are steps and

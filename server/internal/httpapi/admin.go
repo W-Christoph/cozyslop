@@ -134,7 +134,7 @@ func (s *Server) adminDeleteUser(w http.ResponseWriter, r *http.Request) {
 	if s.watchlog != nil {
 		// Ids are not given out again: rows left behind here belong to nobody.
 		if err := s.watchlog.DeleteUser(r.Context(), u.ID); err != nil {
-			s.log.Warn("watchlog of a deleted account", "user", u.ID, "err", err)
+			s.log.Warn("watchlog of a deleted account", "err", err)
 		}
 	}
 	s.removeAvatarFile(r.Context(), u.Avatar)

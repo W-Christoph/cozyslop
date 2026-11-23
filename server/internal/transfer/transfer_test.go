@@ -43,6 +43,10 @@ func server(t *testing.T) []byte {
 	}
 	write(t, dir, "media/avatars/moved.png", "picture")
 	write(t, dir, "wireguard.key", "key")
+	// Not exported: the import below finds no diagnostics.
+	write(t, dir, DiagnosticsDatabase, "diagnostics")
+	write(t, dir, DiagnosticsDatabase+"-wal", "diagnostics")
+	write(t, dir, DiagnosticsDumps+"/stall-1.txt.gz", "dump")
 	if err := os.MkdirAll(filepath.Join(dir, "media", "chat"), 0o750); err != nil {
 		t.Fatal(err)
 	}

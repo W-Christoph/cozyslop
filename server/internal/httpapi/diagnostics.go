@@ -90,6 +90,44 @@ func (s *Server) adminDiagnostics(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// adminDiagnosticsSummary counts what happened in the last hours (1 to
+// 168, default 24), for the admin page.
+func (s *Server) adminDiagnosticsSummary(w http.ResponseWriter, r *http.Request) {
+	if s.requireAdminReadOnly(w, r) == nil {
+		return
+	}
+	hours := 24
+	if text := r.URL.Query().Get("hours"); text != "" {
+		v, err := strconv.Atoi(text)
+		if err != nil || v < 1 || v > 168 {
+			writeError(w, http.StatusBadRequest, "Invalid hours.")
+			return
+		}
+		hours = v
+	}
+	now := time.Now()
+	sum, err := s.diagnostics.Summarize(r.Context(), now.Add(-time.Duration(hours)*time.Hour), now)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	size, err := s.diagnostics.Size(r.Context())
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		diag.Summary
+		Enabled            bool  `json:"enabled"`
+		RetentionDays      int   `json:"retentionDays"`
+		SampleDays         int   `json:"sampleDays"`
+		SizeBytes          int64 `json:"sizeBytes"`
+		Dropped            int64 `json:"dropped"`
+		TLSHandshakeErrors int64 `json:"tlsHandshakeErrors"`
+	}{sum, s.diagnostics != nil, int(diag.Retention.Hours() / 24), int(diag.SampleRetention.Hours() / 24),
+		size, s.diagnostics.Dropped(), diag.TLSHandshakeErrors.Load()})
+}
+
 // adminDiagnosticsDump answers a stall report's goroutine dump (the
 // "dump" of a stall entry), as text.
 func (s *Server) adminDiagnosticsDump(w http.ResponseWriter, r *http.Request) {

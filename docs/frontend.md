@@ -140,6 +140,27 @@ file's, a width and a `render` function; `Variants` puts several states side by 
 stands in for a `RoomStore` with the signals given. Add a file of scenes
 per area and list it in `src/snapshots/main.tsx`.
 
+## Admin diagnostics
+
+Admin > Diagnostics (`/admin/diagnostics`, `pages/admin/DiagnosticsTab.tsx`)
+reads `GET /api/admin/diagnostics/summary` for the time chosen (6 hours to
+7 days) and the entries themselves. From the top: since when the server
+runs, with a warning when the run before did not shut down; counts (stalls,
+errors and warnings, slow or failed requests, AniList calls and failures,
+starts and those after a crash), the database's size and dropped entries;
+the stalls, each with how long it lasted and its dump (shown in place, or
+opened in a tab); AniList calls per bucket, the ones that failed in red;
+health as small charts (CPU, memory, goroutines, the longest-held lock, the
+database write check and how late the watchdog was, the last three with
+where "stuck" starts); and everything kept, newest first, filtered by kind,
+level and text, 100 at a time. Delete all asks first.
+
+The charts (`components/admin/TimeChart.tsx`) are plain SVG: a line in the
+accent, or columns stacked bottom first with a neutral for what went well
+and `--danger` for failures (the accent may be red), so failures stand out
+whatever the accent. Hover or focus and the arrow keys show a bucket's
+values; "Table" lists them. Scenes: `src/snapshots/diagnostics.tsx`.
+
 ## Admin rooms
 
 The Rooms tab at `/admin/rooms` lists room sources, connection state (Online,

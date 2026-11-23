@@ -234,3 +234,92 @@ export interface PasswordResetCheck {
   valid: boolean
   username: string
 }
+
+// ---- diagnostics: what the server kept for troubleshooting -------------------
+
+export type DiagKind = 'event' | 'request' | 'outbound' | 'sample' | 'stall' | 'boot' | 'shutdown'
+
+export interface DiagEntry {
+  id: number
+  time: number // unix ms
+  kind: DiagKind
+  level: string // DEBUG, INFO, WARN, ERROR (or e.g. ERROR+2)
+  room?: string
+  msg: string
+  attrs?: Record<string, unknown>
+}
+
+export interface DiagSummary {
+  enabled: boolean
+  retentionDays: number
+  sampleDays: number
+  sizeBytes: number
+  dropped: number
+  tlsHandshakeErrors: number
+  since: number
+  until: number
+  bucketMs: number
+  counts: {
+    errors: number
+    warnings: number
+    stalls: number
+    requests: number
+    failedRequests: number
+    anilist: number
+    anilistFailed: number
+    boots: number
+    crashes: number
+  }
+  lastBoot: DiagEntry | null
+  anilist: { time: number; calls: number; failed: number; peak: number }[]
+  samples: DiagSample[]
+}
+
+// The highest of each health value in a bucket; null where none was taken.
+export interface DiagSample {
+  time: number
+  cpuPct: number | null
+  memoryMb: number | null
+  goroutines: number | null
+  lagMs: number | null
+  lockMs: number | null
+  dbMs: number | null
+  schedMs: number | null
+}
+
+export interface DiagFilter {
+  kinds: DiagKind[]
+  level: '' | 'info' | 'warn' | 'error'
+  text: string
+  since: number
+}
+
+export const DIAG_PAGE = 100
+
+export const adminDiagnostics = {
+  summary: (hours: number) => api.get<DiagSummary>(`/api/admin/diagnostics/summary?hours=${hours}`),
+  entries: (f: DiagFilter, before?: number) => {
+    const q = new URLSearchParams({ kind: f.kinds.join(','), since: String(f.since), limit: String(DIAG_PAGE) })
+    if (f.level) q.set('level', f.level)
+    if (f.text.trim()) q.set('q', f.text.trim())
+    if (before) q.set('before', String(before))
+    return api.get<{ entries: DiagEntry[] }>(`/api/admin/diagnostics?${q}`).then((r) => r.entries)
+  },
+  stalls: (since: number) =>
+    api.get<{ entries: DiagEntry[] }>(`/api/admin/diagnostics?kind=stall&since=${since}&limit=200`).then((r) => r.entries),
+  // A stall's goroutine dump, as text.
+  dump: async (name: string) => {
+    let res: Response
+    try {
+      res = await fetch(`/api/admin/diagnostics/dumps/${encodeURIComponent(name)}`)
+    } catch {
+      throw new ApiError(0, 'Could not reach the server.')
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => null)
+      throw new ApiError(res.status, data?.error ?? `Request failed (${res.status}).`)
+    }
+    return res.text()
+  },
+  clear: () => api.del<void>('/api/admin/diagnostics'),
+}

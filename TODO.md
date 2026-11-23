@@ -11,15 +11,13 @@ The server keeps a few days of diagnostics without saying who
 handler, the admin endpoint, request/AniList/helper recording, health
 samples, the stall watchdog with dumps, SIGUSR1, Docker log limits. Left:
 
-- [ ] Admin page for the diagnostics (today JSON only, at
-      `/api/admin/diagnostics`): overview (stalls, errors, AniList calls and
-      failures in the last 24 h, size, dropped), events with a level and
-      kind filter and paging (`before`), stalls with their dump in a
-      `<pre>`, AniList calls per minute, health samples over time, the
-      "delete all" button. Draw it with made-up entries as scenes in
-      `web/src/snapshots/` (`npm run snapshots`, `docs/frontend.md`) and
-      hill-climb on the pictures: dark and light, phone width, empty state,
-      long error texts, a stall with a long dump.
+- [x] Admin page for the diagnostics (Admin > Diagnostics,
+      `docs/frontend.md`): counts, stalls with their dumps, AniList calls,
+      health charts, everything kept with filters and paging, Delete all.
+      Drawn as scenes (dark, light, phone, empty, long errors, a long
+      dump) and tried against a real server in Chromium (a SIGUSR1 dump,
+      the level filter, Delete all). Not yet seen with a real stall or a
+      real week of data.
 - [ ] Main instance: get rid of the old container logs. They were kept
       without limit (`json-file`, no `max-size`). `docker compose up -d`
       after the update should recreate every container (the logging
@@ -32,8 +30,7 @@ samples, the stall watchdog with dumps, SIGUSR1, Docker log limits. Left:
       else (journald, log shippers, backups of `/var/lib/docker`).
 - [ ] Main instance: after deploying, look at the boots (was the last
       outage a crash or out-of-memory restart?) and, at the next outage,
-      the stall and its dump, on the admin page once it exists (until
-      then `?kind=boot` and `?kind=stall`). Check the thresholds give no false alarms
+      the stall and its dump, under Admin > Diagnostics. Check the thresholds give no false alarms
       in normal use (`diag.StuckLock` 5 s, `StuckProbe` 3 s, `StuckRequest`
       15 s, `StuckLag` 2 s) and how fast `diagnostics.db` grows (samples:
       about 5 MB a day).

@@ -63,6 +63,20 @@ func TestAdminDiagnostics(t *testing.T) {
 	a.error(admin, "GET", "/api/admin/diagnostics?level=loud", nil, 400, "Unknown level.")
 	a.error(admin, "GET", "/api/admin/diagnostics?since=yesterday", nil, 400, "Invalid since.")
 
+	var sum struct {
+		Enabled  bool  `json:"enabled"`
+		BucketMs int64 `json:"bucketMs"`
+		Counts   struct {
+			Warnings int `json:"warnings"`
+		} `json:"counts"`
+		Samples []any `json:"samples"`
+	}
+	a.call(admin, "GET", "/api/admin/diagnostics/summary?hours=6", nil, 200, &sum)
+	if !sum.Enabled || sum.Counts.Warnings != 1 || sum.BucketMs != 2*60_000 || sum.Samples == nil {
+		t.Errorf("summary: %+v", sum)
+	}
+	a.error(admin, "GET", "/api/admin/diagnostics/summary?hours=200", nil, 400, "Invalid hours.")
+
 	a.call(admin, "DELETE", "/api/admin/diagnostics", nil, 204, nil)
 	d.Sync()
 	a.call(admin, "GET", "/api/admin/diagnostics?kind=outbound", nil, 200, &out)
@@ -81,5 +95,13 @@ func TestAdminDiagnosticsOff(t *testing.T) {
 	a.call(a.login("root"), "GET", "/api/admin/diagnostics", nil, 200, &out)
 	if out.Enabled || out.Entries == nil || len(out.Entries) != 0 {
 		t.Errorf("without diagnostics: %+v", out)
+	}
+	var sum struct {
+		Enabled bool  `json:"enabled"`
+		AniList []any `json:"anilist"`
+	}
+	a.call(a.login("root"), "GET", "/api/admin/diagnostics/summary", nil, 200, &sum)
+	if sum.Enabled || sum.AniList == nil {
+		t.Errorf("summary without diagnostics: %+v", sum)
 	}
 }

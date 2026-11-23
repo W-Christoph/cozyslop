@@ -11,6 +11,7 @@
 }
 .notice svg { margin-top: 2px; }
 .error { background: var(--danger-soft); color: var(--danger-text); }
+.warning { background: var(--warning-soft); color: var(--warning-text); }
 .success { background: var(--success-soft); color: var(--success-text); }
 .info { background: var(--bg-raised); color: var(--text-secondary); }
 .compact { gap: var(--space-1); margin-top: var(--space-1); padding: var(--space-1) var(--space-2); font-size: var(--text-xs); }

@@ -7,6 +7,7 @@ import { ServerSettingsTab } from './ServerSettingsTab'
 import { PermissionsTab } from './PermissionsTab'
 import { InvitesTab } from './InvitesTab'
 import { RoomsTab } from './RoomsTab'
+import { DiagnosticsTab } from './DiagnosticsTab'
 
 const nav: NavGroup[] = [
   {
@@ -20,9 +21,10 @@ const nav: NavGroup[] = [
   { label: 'Server', items: [
     { id: 'rooms', label: 'Rooms', icon: 'monitor', href: '/admin/rooms' },
     { id: 'settings', label: 'Server settings', icon: 'server', href: '/admin/settings' },
+    { id: 'diagnostics', label: 'Diagnostics', icon: 'activity', href: '/admin/diagnostics' },
   ] },
 ]
-const tabs = ['accounts', 'permissions', 'invites', 'rooms', 'settings']
+const tabs = ['accounts', 'permissions', 'invites', 'rooms', 'settings', 'diagnostics']
 
 export function AdminPage() {
   const { params } = useRoute()
@@ -44,6 +46,8 @@ export function AdminPage() {
           <InvitesTab />
         ) : tab === 'rooms' ? (
           <RoomsTab />
+        ) : tab === 'diagnostics' ? (
+          <DiagnosticsTab />
         ) : (
           <AccountsTab />
         )}

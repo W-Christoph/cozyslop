@@ -1,0 +1,49 @@
+.entries { display: flex; flex-direction: column; gap: var(--space-3); }
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+.kinds { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); margin: 0; padding: 0; border: 0; }
+.kind { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--text-secondary); cursor: pointer; }
+.narrow { display: flex; gap: var(--space-2); margin-left: auto; }
+.narrow input { width: 180px; }
+.hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.none { margin: 0; font-size: var(--text-sm); color: var(--text-muted); }
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  transition: opacity 0.15s;
+}
+.stale { opacity: 0.55; }
+.entry {
+  display: grid;
+  grid-template-columns: 9.5rem 11rem minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+.entry:last-child { border-bottom: 0; }
+.time { color: var(--text-muted); font-size: var(--text-xs); line-height: 1.6; font-variant-numeric: tabular-nums; }
+.tags { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-1) var(--space-2); }
+.kindName, .room { font-size: var(--text-xs); line-height: 1.6; color: var(--text-secondary); }
+.room { padding: 0 6px; border-radius: var(--radius); background: var(--bg-raised); }
+.body { min-width: 0; }
+.msg { color: var(--text); overflow-wrap: anywhere; }
+/* Inline, so that a long value wraps back to the left edge. */
+.attrs { margin: 2px 0 0; font: var(--text-2xs)/1.5 var(--font-mono); }
+.attrs div { display: inline; margin-right: var(--space-3); }
+.attrs dt, .attrs dd { display: inline; margin: 0; }
+.attrs dt { color: var(--text-muted); white-space: nowrap; }
+.attrs dt::after { content: '='; }
+.attrs dd { color: var(--text-secondary); overflow-wrap: anywhere; }
+.more { align-self: center; }
+
+@media (max-width: 780px) {
+  .narrow { width: 100%; margin-left: 0; }
+  .narrow input { flex: 1; width: auto; }
+  .entry { grid-template-columns: auto minmax(0, 1fr); }
+  .body { grid-column: 1 / -1; }
+}

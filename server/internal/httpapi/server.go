@@ -197,6 +197,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/admin/diagnostics", s.adminDiagnostics)
 	mux.HandleFunc("DELETE /api/admin/diagnostics", s.adminClearDiagnostics)
+	mux.HandleFunc("GET /api/admin/diagnostics/summary", s.adminDiagnosticsSummary)
 	mux.HandleFunc("GET /api/admin/diagnostics/dumps/{name}", s.adminDiagnosticsDump)
 
 	mux.HandleFunc("POST /api/admin/invites", s.adminCreateInvite)

@@ -40,6 +40,7 @@ const icons = {
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 7.5h.01" /></>,
   alert: <path d="M12 4l9 16H3zM12 10v4M12 17h.01" />,
+  activity: <path d="M3 12h4l3-8 4 16 3-8h4" />,
   zap: <path d="M13 3L5 13h6l-1 8 8-10h-6z" />,
   mouse: <><rect x="7" y="3" width="10" height="18" rx="5" /><path d="M12 7v4" /></>,
   power: <path d="M12 4v8M7 6.5a8 8 0 1 0 10 0" />,

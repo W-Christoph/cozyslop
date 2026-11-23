@@ -3,11 +3,12 @@ import '../styles/tokens.css'
 import '../styles/base.css'
 import type { Scene } from './scene'
 import { watchlogScenes } from './watchlog'
+import { diagnosticsScenes } from './diagnostics'
 import styles from './Snapshots.module.css'
 
 // The snapshots page: every scene, or ?scene=<name> alone; ?theme=<name>
 // for another theme.
-const scenes: Scene[] = [...watchlogScenes]
+const scenes: Scene[] = [...watchlogScenes, ...diagnosticsScenes]
 
 const params = new URLSearchParams(location.search)
 document.documentElement.dataset.theme = params.get('theme') ?? 'default'

@@ -234,3 +234,59 @@ func flush(t *testing.T, s *Store, f Filter) []Entry {
 	}
 	return list
 }
+
+func TestSummarize(t *testing.T) {
+	s, err := Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	until := time.UnixMilli(1_800_000_000_000)
+	since := until.Add(-24 * time.Hour)
+	at := func(ago time.Duration) time.Time { return until.Add(-ago) }
+	anilist := func(ago time.Duration, level slog.Level) Entry {
+		return Entry{Time: at(ago), Kind: KindOutbound, Level: level, Msg: "anilist search", Attrs: map[string]any{"target": "anilist"}}
+	}
+	for _, e := range []Entry{
+		{Time: at(25 * time.Hour), Kind: KindEvent, Level: slog.LevelError, Msg: "too old"},
+		{Time: at(25 * time.Hour), Kind: KindBoot, Level: slog.LevelInfo, Msg: "server started"},
+		{Time: at(20 * time.Hour), Kind: KindBoot, Level: slog.LevelInfo, Msg: "server started", Attrs: map[string]any{"previous": "no clean shutdown"}},
+		{Time: at(time.Hour), Kind: KindEvent, Level: slog.LevelError, Msg: "boom"},
+		{Time: at(time.Hour), Kind: KindEvent, Level: slog.LevelWarn, Msg: "hm"},
+		{Time: at(time.Hour), Kind: KindEvent, Level: slog.LevelInfo, Msg: "fine"},
+		{Time: at(time.Hour), Kind: KindStall, Level: slog.LevelError, Msg: "server stuck"},
+		{Time: at(time.Hour), Kind: KindStall, Level: slog.LevelWarn, Msg: "server well again"},
+		{Time: at(time.Hour), Kind: KindRequest, Level: slog.LevelWarn, Msg: "GET /x", Attrs: map[string]any{"status": 502}},
+		{Time: at(time.Hour), Kind: KindRequest, Level: slog.LevelInfo, Msg: "GET /y", Attrs: map[string]any{"status": 200}},
+		{Time: at(time.Hour), Kind: KindOutbound, Level: slog.LevelWarn, Msg: "helper status (per minute)", Attrs: map[string]any{"target": "helper"}},
+		anilist(3*time.Hour-5*time.Minute, slog.LevelInfo), anilist(3*time.Hour-5*time.Minute, slog.LevelInfo),
+		anilist(3*time.Hour-5*time.Minute, slog.LevelWarn), anilist(3*time.Hour-3*time.Minute, slog.LevelInfo),
+		{Time: at(2 * time.Hour), Kind: KindSample, Level: slog.LevelDebug, Msg: "sample", Attrs: map[string]any{"cpu_pct": 12, "lag_ms": 3}},
+		{Time: at(2*time.Hour - 10*time.Second), Kind: KindSample, Level: slog.LevelDebug, Msg: "sample", Attrs: map[string]any{"cpu_pct": 40}},
+	} {
+		s.Add(e)
+	}
+	s.Sync()
+	sum, err := s.Summarize(context.Background(), since, until)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Counts{Errors: 1, Warnings: 1, Stalls: 1, Requests: 2, FailedRequests: 1, AniList: 4, AniListFailed: 1, Boots: 1, Crashes: 1}
+	if sum.Counts != want {
+		t.Errorf("counts %+v, want %+v", sum.Counts, want)
+	}
+	if sum.BucketMs != 10*60_000 || sum.LastBoot == nil || sum.LastBoot.Attrs["previous"] == nil {
+		t.Errorf("bucket %d, last boot %+v", sum.BucketMs, sum.LastBoot)
+	}
+	// 3 calls in one minute, 1 two minutes later, in the bucket from 3 h ago.
+	if len(sum.AniList) != 1 || sum.AniList[0] != (AniListBucket{Time: at(3 * time.Hour).UnixMilli(), Calls: 4, Failed: 1, Peak: 3}) {
+		t.Errorf("anilist %+v", sum.AniList)
+	}
+	if len(sum.Samples) != 1 || *sum.Samples[0].CPU != 40 || *sum.Samples[0].LagMs != 3 || sum.Samples[0].MemoryMB != nil {
+		t.Errorf("samples %+v", sum.Samples)
+	}
+	var none *Store
+	if sum, err := none.Summarize(context.Background(), since, until); err != nil || sum.Samples == nil || sum.LastBoot != nil {
+		t.Errorf("off: %+v %v", sum, err)
+	}
+}

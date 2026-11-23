@@ -195,7 +195,8 @@ along.
 ### Diagnostics
 
 What the server keeps for troubleshooting is in `data/diagnostics.db`
-(`server/internal/diag`): one table, `entries` (ts in unix ms, kind, level,
+(`server/internal/diag`), shown to admins under Admin > Diagnostics
+(`docs/frontend.md`): one table, `entries` (ts in unix ms, kind, level,
 room, msg, attrs as JSON). Kinds:
 
 - `event`: log records from Info up.

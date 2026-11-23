@@ -29,25 +29,3 @@
   computer (`compose.node.yaml`, `docs/home-hosting.md`).
 - `web/`: Preact + TypeScript + Vite. Colours and spacing come from
   `src/styles/tokens.css`; every component has its own `.module.css`.
-- The old CozyCast code (`../` when checked out inside the cozycast repo) is
-  reference only.
-
-## Codex for grunt work
-
-Codex CLI (reasoning effort **high**, full permissions) does bulk,
-mechanical, clearly specified work: component ports, CSS splitting,
-renames, boilerplate, tests, log digging. Claude scopes the task, writes the
-brief, and reviews the result. Small edits: just do them yourself.
-
-```bash
-codex exec -C "$PWD" "$(cat brief.md)" < /dev/null
-```
-
-- Run via Bash with `timeout: 600000`, or in the background for long tasks.
-  Split anything over ~10 minutes.
-- Brief and report go in the scratchpad dir, not the repo. The brief must
-  stand alone: goal, acceptance criteria, pointers, boundaries (never commit,
-  push or spawn agents), and a report written to `<scratchpad>/report.md`.
-- Read `git diff` and the report before trusting the result.
-- Review: `codex review --uncommitted`.
-- Never use effort `ultra` and don't enable `multi_agent`.

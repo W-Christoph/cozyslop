@@ -19,6 +19,12 @@ x-room: &room
   image: cozycast-worker
   restart: unless-stopped
   shm_size: 2gb
+  # The most the room's container may use: the desktop, its browser and
+  # /dev/shm. Without a cap the browser can take the whole machine, and the
+  # server, starved of memory, stops answering. At the cap the kernel ends
+  # the room's largest program (usually a browser tab) instead.
+  # ./cozycast.sh start fits it to this machine; 3200m is for a 4 GB one.
+  mem_limit: ${ROOM_MEMORY:-3200m}
   # neko's image gives the desktop user passwordless sudo. Whoever holds the
   # remote has a terminal, so this takes sudo (and every other setuid
   # program) away: they stay an ordinary user inside the room.

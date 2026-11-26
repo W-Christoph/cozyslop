@@ -223,7 +223,10 @@ room, msg, attrs as JSON). Kinds:
   goroutines, memory, scheduling latency, mutex waits, GC and process CPU,
   open files, load, the container's CPU/memory/IO pressure and CPU
   throttling, the machine's free and total memory, people in the rooms
-  (counted without waiting for a room's lock), connections, requests
+  (counted without waiting for a room's lock), the memory of the room that
+  uses the most and its cap (each room's helper, `worker/window-title.py`,
+  is asked every 10 seconds; a program the kernel ended there for lack of
+  memory is a warning, `out of memory: programs ended`), connections, requests
   under way and the oldest of them, the
   longest-held lock, how long the databases' write locks took, TLS
   handshake failures and dropped entries.

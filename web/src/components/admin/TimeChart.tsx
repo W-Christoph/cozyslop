@@ -29,7 +29,7 @@ export function TimeChart({ title, description, since, until, bucketMs: bucket, 
   series: ChartSeries[]
   points: ChartPoint[]
   format: (value: number) => string
-  threshold?: { value: number; label: string } // a line across, e.g. where "stuck" starts
+  threshold?: { value: number; label: string } // a line across, e.g. where "stuck" starts, once the values near it
   // Columns: several buckets as one, where they would be thinner than 3px.
   combine?: (points: ChartPoint[], time: number) => ChartPoint
 }) {
@@ -52,7 +52,11 @@ export function TimeChart({ title, description, since, until, bucketMs: bucket, 
   const bucketMs = bucket * per
   const points = per === 1 ? given : merged(given, since, bucketMs, combine)
   const total = (p: ChartPoint) => kind === 'columns' ? p.values.reduce<number>((a, v) => a + (v ?? 0), 0) : Math.max(...p.values.map((v) => v ?? 0))
-  const top = Math.max(points.reduce((m, p) => Math.max(m, total(p)), 0), threshold?.value ?? 0)
+  const highest = points.reduce((m, p) => Math.max(m, total(p)), 0)
+  // The threshold only once the values come within half of it: far below,
+  // its line would squash them to the bottom.
+  const line = threshold && highest >= threshold.value / 2 ? threshold : undefined
+  const top = Math.max(highest, line?.value ?? 0)
   const ticks = yTicks(top)
   const yMax = ticks[ticks.length - 1]
   const x = (t: number) => PAD.left + ((t - since) / (until - since)) * plotW
@@ -107,9 +111,9 @@ export function TimeChart({ title, description, since, until, bucketMs: bucket, 
           {xTicks(since, until, plotW).map((t) => (
             <text key={t} class={styles.axis} x={x(t)} y={HEIGHT - 6} text-anchor="middle">{clock(t, until - since)}</text>
           ))}
-          {threshold && <g>
-            <line class={styles.threshold} x1={PAD.left} x2={width - PAD.right} y1={y(threshold.value)} y2={y(threshold.value)} />
-            <text class={styles.thresholdLabel} x={PAD.left + 6} y={y(threshold.value) - 4}>{threshold.label}</text>
+          {line && <g>
+            <line class={styles.threshold} x1={PAD.left} x2={width - PAD.right} y1={y(line.value)} y2={y(line.value)} />
+            <text class={styles.thresholdLabel} x={PAD.left + 6} y={y(line.value) - 4}>{line.label}</text>
           </g>}
           {kind === 'line' ? lines(points, bucketMs, x, y) : columns(points, series, slot, x, y)}
           {shown && <line class={styles.crosshair} x1={x(shown.time + bucketMs / 2)} x2={x(shown.time + bucketMs / 2)} y1={PAD.top} y2={PAD.top + plotH} />}
@@ -191,7 +195,8 @@ function yTicks(max: number) {
   if (max <= 0) return [0, 1]
   const rough = max / 3
   const pow = 10 ** Math.floor(Math.log10(rough))
-  const step = [1, 2, 5, 10].map((m) => m * pow).find((s) => s >= rough)!
+  // Whole steps from 1 up, so a count of 1 is not labelled 0, 1, 1.
+  const step = Math.max(max >= 1 ? 1 : 0, [1, 2, 5, 10].map((m) => m * pow).find((s) => s >= rough)!)
   const ticks = [0]
   while (ticks[ticks.length - 1] < max) ticks.push(ticks[ticks.length - 1] + step)
   return ticks.map((t) => Number(t.toPrecision(12)))

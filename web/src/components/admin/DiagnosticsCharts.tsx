@@ -21,14 +21,27 @@ const closenessNote = (s: DiagSample) => [
   s.lagMs !== null && `watchdog ${duration(s.lagMs)} late`,
 ].filter(Boolean).join(' · ')
 
-const health: { key: Exclude<keyof DiagSample, 'time'>; title: string; about: (s: DiagSummary) => string; format: (v: number) => string }[] = [
+const mb = (v: number) => v >= 1000 ? `${Number((v / 1000).toFixed(1))} GB` : `${Math.round(v)} MB`
+
+const health: {
+  key: Exclude<keyof DiagSample, 'time'>; title: string; about: (s: DiagSummary) => string; format: (v: number) => string
+  threshold?: (s: DiagSummary) => { value: number; label: string } | undefined
+}[] = [
   { key: 'cpuPct', title: 'CPU', about: () => 'the server’s; 100 % is one core', format: (v) => `${Math.round(v)} %` },
   { key: 'memoryMb', title: 'Server memory', about: () => 'what the server itself holds', format: (v) => `${Math.round(v)} MB` },
   {
-    key: 'hostFreeMb', title: 'Free memory on the machine', format: (v) => v >= 1000 ? `${Number((v / 1000).toFixed(1))} GB` : `${Math.round(v)} MB`,
+    key: 'hostFreeMb', title: 'Free memory on the machine', format: mb,
     about: (s) => {
       const total = Math.max(0, ...s.samples.map((x) => x.hostTotalMb ?? 0))
       return `the lowest; ${total ? `of ${Number((total / 1000).toFixed(1))} GB, ` : ''}the rooms’ browsers use most`
+    },
+  },
+  {
+    key: 'roomMemoryMb', title: 'Room memory', format: mb,
+    about: () => 'the fullest room’s; at its cap a program there is ended',
+    threshold: (s) => {
+      const cap = Math.max(0, ...s.samples.map((x) => x.roomLimitMb ?? 0))
+      return cap ? { value: cap, label: 'cap' } : undefined
     },
   },
   { key: 'people', title: 'People in rooms', about: () => 'the most at once', format: (v) => Math.round(v).toLocaleString() },
@@ -58,6 +71,7 @@ export function DiagnosticsCharts({ summary }: { summary: DiagSummary }) {
           </div>
           {health.map((h) => (
             <TimeChart key={h.key} {...chart} title={h.title} description={h.about(summary)} kind="line" format={h.format}
+              threshold={h.threshold?.(summary)}
               series={[{ name: h.title, tone: 'line' }]}
               points={summary.samples.map((s) => ({ time: s.time, values: [s[h.key]] }))} />
           ))}

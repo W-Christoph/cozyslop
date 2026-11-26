@@ -70,6 +70,24 @@ setting() { sed -n "s/^$1=//p" .env | tail -n 1; }
 # plain "docker compose" commands leave alone.
 on_demand() { case "$(setting COMPOSE_FILE)" in *room-on-demand*) return 0 ;; *) return 1 ;; esac; }
 
+# Each room's share of this machine's memory, unless .env sets ROOM_MEMORY:
+# all but 700 MB (or an eighth, if that is more) for the system, Docker and
+# the server, split evenly between the rooms on this server. Without a cap a
+# room's browser can take the whole machine and the server stops answering.
+room_memory() {
+  [ -z "$(setting ROOM_MEMORY)" ] && [ -z "${ROOM_MEMORY:-}" ] || return 0
+  local rooms total reserve share
+  rooms=$(if on_demand; then docker compose --profile room-default config --services; else docker compose config --services; fi |
+    grep -c '^room-' || true)
+  [ "$rooms" -gt 0 ] || return 0
+  total=$(( $(docker info --format '{{.MemTotal}}') >> 20 ))
+  reserve=$(( total / 8 > 700 ? total / 8 : 700 ))
+  share=$(( (total - reserve) / rooms ))
+  [ "$share" -ge 512 ] || share=512
+  export ROOM_MEMORY=${share}m
+  echo "Each room on this server may use up to $share MB of memory (ROOM_MEMORY in .env sets it)."
+}
+
 ask() { # ask <question> <default>
   local answer
   read -r -p "$1 [$2]: " answer || true
@@ -187,6 +205,7 @@ start() {
     node up -d --build
     return
   fi
+  room_memory
   docker compose up -d --build
   if on_demand; then
     # Built and created, not started: that is the admin's button. A room

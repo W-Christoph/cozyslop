@@ -300,7 +300,7 @@ func TestSummarize(t *testing.T) {
 		anilist(3*time.Hour-5*time.Minute, slog.LevelInfo), anilist(3*time.Hour-5*time.Minute, slog.LevelInfo),
 		anilist(3*time.Hour-5*time.Minute, slog.LevelWarn), anilist(3*time.Hour-3*time.Minute, slog.LevelInfo),
 		{Time: at(2 * time.Hour), Kind: KindSample, Level: slog.LevelDebug, Msg: "sample", Attrs: map[string]any{"cpu_pct": 12, "lag_ms": 3, "host_free_mb": 900}},
-		{Time: at(2*time.Hour - 10*time.Second), Kind: KindSample, Level: slog.LevelDebug, Msg: "sample", Attrs: map[string]any{"cpu_pct": 40, "host_free_mb": 700}},
+		{Time: at(2*time.Hour - 10*time.Second), Kind: KindSample, Level: slog.LevelDebug, Msg: "sample", Attrs: map[string]any{"cpu_pct": 40, "host_free_mb": 700, "room_memory_mb": 2100, "room_limit_mb": 3200}},
 	} {
 		s.Add(e)
 	}
@@ -321,7 +321,8 @@ func TestSummarize(t *testing.T) {
 	if len(sum.AniList) != 1 || sum.AniList[0] != (AniListBucket{Time: at(3 * time.Hour).UnixMilli(), Calls: 4, Failed: 1, Limited: 1, Peak: 3, Sent: 400, Got: 4000}) {
 		t.Errorf("anilist %+v", sum.AniList)
 	}
-	if len(sum.Samples) != 1 || *sum.Samples[0].CPU != 40 || *sum.Samples[0].LagMs != 3 || *sum.Samples[0].HostFreeMB != 700 || sum.Samples[0].MemoryMB != nil {
+	if len(sum.Samples) != 1 || *sum.Samples[0].CPU != 40 || *sum.Samples[0].LagMs != 3 || *sum.Samples[0].HostFreeMB != 700 || sum.Samples[0].MemoryMB != nil ||
+		*sum.Samples[0].RoomMemoryMB != 2100 || *sum.Samples[0].RoomLimitMB != 3200 {
 		t.Errorf("samples %+v", sum.Samples)
 	}
 	var none *Store

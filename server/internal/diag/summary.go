@@ -56,10 +56,13 @@ type SampleBucket struct {
 	HostFreeMB  *float64 `json:"hostFreeMb"`
 	HostTotalMB *float64 `json:"hostTotalMb"`
 	People      *float64 `json:"people"`
-	LagMs       *float64 `json:"lagMs"`
-	LockMs      *float64 `json:"lockMs"`
-	DBMs        *float64 `json:"dbMs"`
-	RequestMs   *float64 `json:"requestMs"` // the oldest request under way
+	// The room that used the most memory, and its cap (hub.RoomMemory).
+	RoomMemoryMB *float64 `json:"roomMemoryMb"`
+	RoomLimitMB  *float64 `json:"roomLimitMb"`
+	LagMs        *float64 `json:"lagMs"`
+	LockMs       *float64 `json:"lockMs"`
+	DBMs         *float64 `json:"dbMs"`
+	RequestMs    *float64 `json:"requestMs"` // the oldest request under way
 }
 
 // SummaryBuckets is about how many buckets a Summary has.
@@ -139,7 +142,8 @@ func (s *Store) Summarize(ctx context.Context, since, until time.Time) (Summary,
 		MIN(json_extract(NULLIF(attrs, ''), '$.host_free_mb')), MAX(json_extract(NULLIF(attrs, ''), '$.host_total_mb')),
 		MAX(json_extract(NULLIF(attrs, ''), '$.people')), MAX(json_extract(NULLIF(attrs, ''), '$.lag_ms')),
 		MAX(json_extract(NULLIF(attrs, ''), '$.lock_max_ms')), MAX(json_extract(NULLIF(attrs, ''), '$.db_main_ms')),
-		MAX(json_extract(NULLIF(attrs, ''), '$.oldest_request_ms'))
+		MAX(json_extract(NULLIF(attrs, ''), '$.oldest_request_ms')),
+		MAX(json_extract(NULLIF(attrs, ''), '$.room_memory_mb')), MAX(json_extract(NULLIF(attrs, ''), '$.room_limit_mb'))
 		FROM entries WHERE kind = 'sample' AND ts >= ? AND ts < ? GROUP BY 1 ORDER BY 1`,
 		from, bucket, from, to)
 	if err != nil {
@@ -148,12 +152,12 @@ func (s *Store) Summarize(ctx context.Context, since, until time.Time) (Summary,
 	defer rows.Close()
 	for rows.Next() {
 		var i int64
-		var v [9]sql.NullFloat64
-		if err := rows.Scan(&i, &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7], &v[8]); err != nil {
+		var v [11]sql.NullFloat64
+		if err := rows.Scan(&i, &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7], &v[8], &v[9], &v[10]); err != nil {
 			return sum, err
 		}
 		b := SampleBucket{Time: from + i*bucket}
-		for j, p := range []**float64{&b.CPU, &b.MemoryMB, &b.HostFreeMB, &b.HostTotalMB, &b.People, &b.LagMs, &b.LockMs, &b.DBMs, &b.RequestMs} {
+		for j, p := range []**float64{&b.CPU, &b.MemoryMB, &b.HostFreeMB, &b.HostTotalMB, &b.People, &b.LagMs, &b.LockMs, &b.DBMs, &b.RequestMs, &b.RoomMemoryMB, &b.RoomLimitMB} {
 			if v[j].Valid {
 				*p = &v[j].Float64
 			}

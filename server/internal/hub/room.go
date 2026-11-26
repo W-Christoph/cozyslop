@@ -89,6 +89,10 @@ type Room struct {
 	titleURL string // set before run
 	title    string // of the window in front on the desktop
 
+	// The room container's memory (memory.go); memoryURL is set before run.
+	memoryURL string
+	memory    memoryGauge
+
 	playURL, playToken string // the desktop's helper that plays files; set before run
 	openURL            string // the same helper, to open a page in Firefox
 
@@ -245,6 +249,10 @@ func (r *Room) run(ctx context.Context) {
 	if r.titleURL != "" {
 		work.Add(1)
 		go func() { defer work.Done(); r.watchTitle(ctx) }()
+	}
+	if r.memoryURL != "" {
+		work.Add(1)
+		go func() { defer work.Done(); r.watchMemory(ctx) }()
 	}
 	if r.statusURL != "" {
 		work.Add(1)

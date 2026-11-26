@@ -158,7 +158,9 @@ reads `GET /api/admin/diagnostics/summary` for the time chosen (6 hours to
   happened around then" narrows the list below to ±10 minutes;
 - Health: how close to stuck (the worst of the four checks against where
   each counts as stuck), CPU, the server's memory, the machine's free
-  memory (the rooms' browsers use most) and people in the rooms;
+  memory (the rooms' browsers use most), the fullest room's memory against
+  its cap and people in the rooms; a limit line (stuck, the cap, AniList's
+  limit) shows once the values come within half of it;
 - AniList: the busiest minute per bucket against the limit (red where
   calls failed), and the data sent and received;
 - everything kept, under a heading per day, by kind (room helpers' polls

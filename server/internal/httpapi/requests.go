@@ -97,6 +97,12 @@ func (s *Server) Gauges(sample map[string]any) {
 	if people, ok := s.hub.People(); ok {
 		sample["people"] = people
 	}
+	if used, limit, ok := s.hub.RoomMemory(); ok {
+		sample["room_memory_mb"] = used >> 20
+		if limit > 0 {
+			sample["room_limit_mb"] = limit >> 20
+		}
+	}
 }
 
 // statusWriter notes the status of the answer. Unwrap lets

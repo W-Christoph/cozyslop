@@ -37,6 +37,8 @@ for (let t = since; t < now; t += bucketMs) {
     hostFreeMb: Math.max(40, Math.round(2600 - b * 1400 - beforeKill * 2500 + random() * 120)),
     hostTotalMb: 7900,
     people: Math.round(b * 9 + random()),
+    roomMemoryMb: Math.min(6900, Math.round(1200 + b * 2600 + beforeKill * 3000 + random() * 100)),
+    roomLimitMb: 6900,
     lagMs: near ? 2400 : Math.round(random() * 4),
     lockMs: near ? 7400 : Math.round(random() * 3 + b * 4),
     dbMs: near ? 5000 : Math.round(2 + random() * 6),

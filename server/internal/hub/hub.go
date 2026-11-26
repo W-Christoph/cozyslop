@@ -66,6 +66,9 @@ type RoomConfig struct {
 	// TitleURL answers with the title of the window in front on the room's
 	// desktop (worker/window-title.py); "" if the room has no such helper.
 	TitleURL string
+	// MemoryURL answers with what the room's container uses of its memory
+	// (worker/window-title.py); "" if the room has no such helper.
+	MemoryURL string
 	// PlayURL plays a file of the room desktop's Downloads folder on the
 	// desktop (worker/play.py), for requests that carry PlayToken; "" if
 	// the room has no such helper.
@@ -267,7 +270,7 @@ func (h *Hub) makeRoom(rc RoomConfig) *Room {
 	r.restart, r.defaultScreen, r.titleURL = rc.Restart, rc.DefaultScreen, rc.TitleURL
 	r.start, r.stop, r.running = rc.Start, rc.Stop, rc.Running
 	r.playURL, r.playToken, r.statusURL, r.openURL = rc.PlayURL, rc.PlayToken, rc.StatusURL, rc.OpenURL
-	r.hibernateURL = rc.HibernateURL
+	r.hibernateURL, r.memoryURL = rc.HibernateURL, rc.MemoryURL
 	return r
 }
 

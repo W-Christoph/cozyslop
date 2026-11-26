@@ -299,6 +299,8 @@ export interface DiagSample {
   hostFreeMb: number | null
   hostTotalMb: number | null
   people: number | null
+  roomMemoryMb: number | null // the room that used the most
+  roomLimitMb: number | null // its cap
   lagMs: number | null
   lockMs: number | null
   dbMs: number | null

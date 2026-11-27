@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,6 +83,20 @@ func TestAdminDiagnostics(t *testing.T) {
 		t.Errorf("summary: %+v", sum)
 	}
 	a.error(admin, "GET", "/api/admin/diagnostics/summary?hours=200", nil, 400, "Invalid hours.")
+
+	a.h.Locks() // the rooms the snapshot asks
+	snap := string(a.call(admin, "GET", "/api/admin/diagnostics/snapshot", nil, 200, nil))
+	for _, want := range []string{"CozyCast snapshot", "== Machine", "== Server process", "default (configured, 0 people, awake): no helper",
+		"== Last day, counted\nerrors 0, warnings 1,", "WARN anilist search {\"err\":\"timeout\"}"} {
+		if !strings.Contains(snap, want) {
+			t.Errorf("snapshot without %q:\n%s", want, snap)
+		}
+	}
+	if strings.Contains(snap, "username") {
+		t.Errorf("snapshot names someone:\n%s", snap)
+	}
+	a.user("guest", false)
+	a.error(a.login("guest"), "GET", "/api/admin/diagnostics/snapshot", nil, 403, "Admins only.")
 
 	a.call(admin, "DELETE", "/api/admin/diagnostics", nil, 204, nil)
 	d.Sync()

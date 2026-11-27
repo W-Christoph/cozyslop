@@ -1,0 +1,14 @@
+.about { margin: 0 0 var(--space-3); font-size: var(--text-xs); color: var(--text-muted); }
+.text {
+  max-height: 60vh;
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  overflow: auto;
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font: var(--text-2xs)/1.45 var(--font-mono);
+  white-space: pre;
+  tab-size: 4;
+}
+.about + .text { margin-top: 0; }

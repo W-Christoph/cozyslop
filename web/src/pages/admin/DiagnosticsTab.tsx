@@ -6,6 +6,8 @@ import { DiagEntryList } from '../../components/admin/DiagEntryList'
 import { DiagnosticsCharts } from '../../components/admin/DiagnosticsCharts'
 import { DiagnosticsOverview, type Tile } from '../../components/admin/DiagnosticsOverview'
 import { Incidents } from '../../components/admin/Incidents'
+import { SnapshotModal } from '../../components/admin/SnapshotModal'
+import { entryLine, fileTime, saveText } from '../../components/admin/diagFormat'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Select } from '../../components/ui/Field'
 import { Notice } from '../../components/ui/Notice'
@@ -17,6 +19,7 @@ const RANGES = [[6, 'Last 6 hours'], [24, 'Last 24 hours'], [72, 'Last 3 days'],
 // Room helpers poll every few seconds: shown when asked for.
 const USUAL = DIAG_GROUPS.map((g) => g.id).filter((id) => id !== 'helpers')
 const AROUND = 10 * 60_000
+const EXPORT_PAGE = 1000, EXPORT_MAX = 10_000 // entries
 const message = (e: unknown) => e instanceof Error ? e.message : 'Something went wrong.'
 
 type Shown = Omit<DiagFilter, 'since' | 'until'>
@@ -38,7 +41,9 @@ export function DiagnosticsTab({ source = adminDiagnostics }: { source?: Diagnos
     [entriesLoading, setEntriesLoading] = useState(true),
     [entriesError, setEntriesError] = useState(''),
     [more, setMore] = useState(false)
-  const [clearing, setClearing] = useState(false),
+  const [snapshot, setSnapshot] = useState(false),
+    [exporting, setExporting] = useState(false),
+    [clearing, setClearing] = useState(false),
     [busy, setBusy] = useState(false),
     [status, setStatus] = useState('')
   const incidentsRef = useRef<HTMLDivElement>(null), logRef = useRef<HTMLDivElement>(null)
@@ -93,6 +98,30 @@ export function DiagnosticsTab({ source = adminDiagnostics }: { source?: Diagnos
     }
   }
 
+  // Everything the filters select, not only what is loaded, as a file.
+  async function exportLog() {
+    setExporting(true)
+    setEntriesError('')
+    try {
+      const f = { ...shown, text, ...range() }
+      const all: DiagEntry[] = []
+      for (let page: DiagEntry[] = []; all.length < EXPORT_MAX; all.push(...page)) {
+        page = await source.entries(f, all.at(-1)?.id, EXPORT_PAGE)
+        if (page.length < EXPORT_PAGE) { all.push(...page); break }
+      }
+      const groups = DIAG_GROUPS.filter((g) => f.groups.includes(g.id)).map((g) => g.label).join(', ')
+      const head = [`CozyCast diagnostics, exported ${new Date().toString()}`,
+        `${groups}; ${f.level ? `${f.level} and up` : 'any level'}${f.room ? `; room ${f.room}` : ''}${f.text.trim() ? `; text "${f.text.trim()}"` : ''}`,
+        `from ${new Date(f.since).toString()}${f.until ? ` to ${new Date(f.until).toString()}` : ''}`,
+        `${all.length} entries, newest first${all.length >= EXPORT_MAX ? ` (only the newest ${EXPORT_MAX}: narrow the filters for older ones)` : ''}`]
+      saveText([...head, '', ...all.slice(0, EXPORT_MAX).map(entryLine), ''].join('\n'), `cozycast-diagnostics-${fileTime()}.txt`)
+    } catch (e) {
+      setEntriesError(message(e))
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const toLog = () => requestAnimationFrame(() => logRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   function pick(tile: Tile) {
     if (tile === 'stalls') {
@@ -132,11 +161,14 @@ export function DiagnosticsTab({ source = adminDiagnostics }: { source?: Diagnos
   return (
     <Section title="Diagnostics"
       description="What the server kept to find out why it went down, got stuck or was slow. It names no one: no accounts, addresses, pages or shows."
-      actions={!off && <>
-        <Select compact aria-label="Time" value={String(hours)} onChange={(e) => { setAround(null); setHours(Number(e.currentTarget.value)) }}>
-          {RANGES.map(([h, label]) => <option key={h} value={h}>{label}</option>)}
-        </Select>
-        <Button icon="refresh" disabled={loading} onClick={() => { setStatus(''); setRefresh((r) => r + 1) }}>Refresh</Button>
+      actions={<>
+        {!off && <>
+          <Select compact aria-label="Time" value={String(hours)} onChange={(e) => { setAround(null); setHours(Number(e.currentTarget.value)) }}>
+            {RANGES.map(([h, label]) => <option key={h} value={h}>{label}</option>)}
+          </Select>
+          <Button icon="refresh" disabled={loading} onClick={() => { setStatus(''); setRefresh((r) => r + 1) }}>Refresh</Button>
+        </>}
+        <Button icon="copy" onClick={() => setSnapshot(true)}>Snapshot</Button>
       </>}>
       {error && <Notice tone="error">{error}</Notice>}
       {status && <Notice tone="success">{status}</Notice>}
@@ -160,6 +192,7 @@ export function DiagnosticsTab({ source = adminDiagnostics }: { source?: Diagnos
           <div class={styles.below}>
             {entriesError && <Notice tone="error">{entriesError}</Notice>}
             <DiagEntryList entries={entries} rooms={rooms} loading={entriesLoading} more={more} onMore={older}
+              onExport={exportLog} exporting={exporting}
               filter={{ ...shown, ...range(), ...(around ? {} : { until: undefined }) }}
               onFilter={(change) => {
                 if ('until' in change && change.until === undefined) setAround(null)
@@ -169,6 +202,7 @@ export function DiagnosticsTab({ source = adminDiagnostics }: { source?: Diagnos
           </div>
         </div>
       </div>}
+      {snapshot && <SnapshotModal load={source.snapshot} onClose={() => setSnapshot(false)} />}
       {clearing && <Modal title="Delete all diagnostics?" size="sm" onClose={() => { if (!busy) setClearing(false) }} footer={<>
         <Button disabled={busy} onClick={() => setClearing(false)}>Cancel</Button>
         <Button variant="danger" disabled={busy} onClick={clear}>{busy ? 'Deleting…' : 'Delete all'}</Button>

@@ -330,3 +330,41 @@ func TestSummarize(t *testing.T) {
 		t.Errorf("off: %+v %v", sum, err)
 	}
 }
+
+func TestWriteHistory(t *testing.T) {
+	s, err := Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	now := time.UnixMilli(1_800_000_000_000) // 08:00 UTC
+	sample := func(ago time.Duration, attrs map[string]any) Entry {
+		return Entry{Time: now.Add(-ago), Kind: KindSample, Level: slog.LevelDebug, Msg: "sample", Attrs: attrs}
+	}
+	for _, e := range []Entry{
+		{Time: now.Add(-time.Hour), Kind: KindEvent, Level: slog.LevelWarn, Room: "default", Msg: "out of memory: programs ended", Attrs: map[string]any{"ended": 1}},
+		sample(12*time.Minute, map[string]any{"memory_mb": 30}),
+		sample(3*time.Minute, map[string]any{"memory_mb": 60, "host_free_mb": 700, "people": 3}),
+		sample(2*time.Minute, map[string]any{"memory_mb": 40, "host_free_mb": 900, "room_memory_mb": 2100, "room_limit_mb": 3200}),
+	} {
+		s.Add(e)
+	}
+	s.Sync()
+	var b strings.Builder
+	if err := s.WriteHistory(context.Background(), &b, now); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"07:58:00: host_free_mb=900 memory_mb=40 room_limit_mb=3200 room_memory_mb=2100",
+		// The two samples of 07:55 to 08:00 as one row: the most memory, the least free.
+		"time   cpu%  serverMB  freeMB  roomMB/cap  people  lockMs  dbMs  reqMs  lagMs\n",
+		"07:45     -        30       -  -/-              -",
+		"07:55     -        60     700  2100/3200        3",
+		"07:00     -        60     700  2100/3200        3",
+		"01-15 07:00:00 WARN out of memory: programs ended room=default {\"ended\":1}",
+	} {
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("history without %q:\n%s", want, b.String())
+		}
+	}
+}

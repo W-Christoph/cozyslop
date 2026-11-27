@@ -3,6 +3,7 @@ package hub
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -52,5 +53,37 @@ func TestRoomMemory(t *testing.T) {
 	}
 	if _, _, ok := f.h.RoomMemory(); ok {
 		t.Fatal("memory without an answer")
+	}
+}
+
+func TestMemoryDetails(t *testing.T) {
+	desktop := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/memory/detail" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"used": 2147483648, "limit": 3355443200, "oomKills": 1, "peak": 3355443200,
+			"stat": {"anon": 1610612736, "shmem": 268435456}, "events": {"max": 4, "oom_kill": 1},
+			"shm": {"used": 262144000, "size": 2147483648},
+			"programs": [{"name": "firefox-bin", "count": 1, "rss": 1073741824, "anon": 805306368, "shmem": 1048576}]}`))
+	}))
+	defer desktop.Close()
+
+	f := newFixture(t, store.RoomSettings{})
+	f.r.memoryURL = desktop.URL + "/memory"
+	f.h.Locks()
+	rooms := f.h.MemoryDetails(f.ctx)
+	if len(rooms) != 1 || rooms[0].Detail == nil || rooms[0].People != 0 {
+		t.Fatalf("rooms: %+v", rooms)
+	}
+	d := rooms[0].Detail
+	if d.Used != 2<<30 || *d.Limit != 3200<<20 || d.Stat["shmem"] != 256<<20 || d.Events["max"] != 4 ||
+		d.Shm.Used != 250<<20 || len(d.Programs) != 1 || d.Programs[0].Name != "firefox-bin" || d.Programs[0].RSS != 1<<30 {
+		t.Errorf("detail: %+v", d)
+	}
+
+	f.r.memoryURL = desktop.URL + "/old"
+	if rooms := f.h.MemoryDetails(f.ctx); rooms[0].Detail != nil || !strings.Contains(rooms[0].Err, "too old") {
+		t.Errorf("old helper: %+v", rooms[0])
 	}
 }

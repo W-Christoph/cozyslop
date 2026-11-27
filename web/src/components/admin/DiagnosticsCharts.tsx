@@ -62,13 +62,11 @@ export function DiagnosticsCharts({ summary }: { summary: DiagSummary }) {
           {summary.samples.length > 0 && since < samplesFrom && ` Samples are kept ${summary.sampleDays} days.`}
         </p>
         {summary.samples.length > 0 && <div class={styles.grid}>
-          <div class={styles.wide}>
-            <TimeChart {...chart} title="How close to stuck" kind="line"
-              description="the worst of: the longest-held lock, the database write check, the slowest request and how late the watchdog ran, each against where it counts as stuck"
-              format={(v) => `${Math.round(v)} %`} threshold={{ value: 100, label: 'stuck' }}
-              series={[{ name: 'How close to stuck', tone: 'line' }]}
-              points={summary.samples.map((s) => ({ time: s.time, values: [closeness(s)], note: closenessNote(s) }))} />
-          </div>
+          <TimeChart {...chart} title="How close to stuck" kind="line"
+            description="the worst of: the longest-held lock, the database write check, the slowest request and how late the watchdog ran, each against where it counts as stuck"
+            format={(v) => `${Math.round(v)} %`} threshold={{ value: 100, label: 'stuck' }}
+            series={[{ name: 'How close to stuck', tone: 'line' }]}
+            points={summary.samples.map((s) => ({ time: s.time, values: [closeness(s)], note: closenessNote(s) }))} />
           {health.map((h) => (
             <TimeChart key={h.key} {...chart} title={h.title} description={h.about(summary)} kind="line" format={h.format}
               threshold={h.threshold?.(summary)}

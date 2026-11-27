@@ -104,3 +104,25 @@ export function reason(r: string): string {
   if ((m = r.match(/^watchdog (\S+) late$/))) return `The watchdog ran ${duration(goDuration(m[1]))} late`
   return r
 }
+
+// An entry as one line of text, for exports: the time with its offset and
+// the attributes as the server keeps them.
+export function entryLine(e: DiagEntry) {
+  const d = new Date(e.time), offset = -d.getTimezoneOffset()
+  const local = new Date(e.time + offset * 60_000).toISOString().slice(0, 23).replace('T', ' ')
+  const zone = `${offset < 0 ? '-' : '+'}${String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0')}:${String(Math.abs(offset) % 60).padStart(2, '0')}`
+  return [`${local}${zone}`, e.level, e.kind, e.room ? `room=${e.room}` : '', e.msg, e.attrs ? JSON.stringify(e.attrs) : '']
+    .filter(Boolean).join(' ')
+}
+
+// Has the browser save text as a file.
+export function saveText(text: string, name: string) {
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
+  a.download = name
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+// "2026-11-27-1803", for file names.
+export const fileTime = () => new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '')

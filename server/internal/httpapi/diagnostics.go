@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -165,4 +166,93 @@ func (s *Server) adminClearDiagnostics(w http.ResponseWriter, r *http.Request) {
 	}
 	s.log.Info("diagnostics cleared")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// adminDiagnosticsSnapshot answers the server's state now as text, to paste
+// into a message: the machine's memory, the server's, each room's and what
+// uses it there, then what the diagnostics kept of the last hours.
+func (s *Server) adminDiagnosticsSnapshot(w http.ResponseWriter, r *http.Request) {
+	if s.requireAdminReadOnly(w, r) == nil {
+		return
+	}
+	now := time.Now()
+	var b strings.Builder
+	sys := diag.WriteSystem(&b, now)
+
+	fmt.Fprintln(&b, "\n== Rooms")
+	rooms := s.hub.MemoryDetails(r.Context())
+	if len(rooms) == 0 {
+		fmt.Fprintln(&b, "(none seen yet)")
+	}
+	var local int64
+	for _, room := range rooms {
+		people := "people unknown"
+		if room.People == 1 {
+			people = "1 person"
+		} else if room.People >= 0 {
+			people = fmt.Sprintf("%d people", room.People)
+		}
+		state := "awake"
+		if room.Asleep {
+			state = "asleep (programs paused, memory kept)"
+		}
+		fmt.Fprintf(&b, "%s (%s, %s, %s)", room.Name, room.Source, people, state)
+		d := room.Detail
+		if d == nil {
+			fmt.Fprintf(&b, ": %s\n", room.Err)
+			continue
+		}
+		if room.Source == "configured" {
+			local += d.Used
+		}
+		fmt.Fprintf(&b, ": used %s", diag.MB(d.Used))
+		if d.Limit != nil && *d.Limit > 0 {
+			fmt.Fprintf(&b, " of its cap %s (%d %%)", diag.MB(*d.Limit), d.Used*100 / *d.Limit)
+		} else {
+			fmt.Fprint(&b, ", no cap")
+		}
+		if d.Peak > 0 {
+			fmt.Fprintf(&b, ", peak %s (file cache included)", diag.MB(d.Peak))
+		}
+		fmt.Fprintln(&b)
+		var parts []string
+		for _, k := range []string{"anon", "file", "shmem", "kernel", "pagetables", "sock"} {
+			if v, ok := d.Stat[k]; ok {
+				parts = append(parts, k+" "+diag.MB(v))
+			}
+		}
+		if d.Shm != nil {
+			parts = append(parts, fmt.Sprintf("/dev/shm %s of %s", diag.MB(d.Shm.Used), diag.MB(d.Shm.Size)))
+		}
+		if d.Swap > 0 {
+			parts = append(parts, "swap "+diag.MB(d.Swap))
+		}
+		fmt.Fprintf(&b, "  %s\n", strings.Join(parts, ", "))
+		if d.Events["max"] > 0 || d.OOMKills > 0 {
+			fmt.Fprintf(&b, "  at the cap %d times since the room started, programs ended %d\n", d.Events["max"], d.OOMKills)
+		}
+		if len(d.Programs) > 0 {
+			fmt.Fprintln(&b, "  programs by resident memory (a page several share counts in each):")
+		}
+		for _, p := range d.Programs {
+			fmt.Fprintf(&b, "    %-20s x%-3d %8s  anon %s, shared memory %s\n", diag.Scrub(p.Name), p.Count, diag.MB(p.RSS), diag.MB(p.Anon), diag.MB(p.Shmem))
+		}
+	}
+
+	if sys.HostTotal > 0 {
+		used, server := sys.HostTotal-sys.HostAvailable, "unknown"
+		if sys.ServerUsed > 0 {
+			server = diag.MB(sys.ServerUsed)
+		}
+		fmt.Fprintf(&b, "\n== Where the machine's memory goes (roughly)\nused %s = server %s + rooms in compose.yaml %s + the rest %s (Docker, the system, other programs; rooms added or paired in Admin are left out, they may run elsewhere)\n",
+			diag.MB(used), server, diag.MB(local), diag.MB(max(0, used-sys.ServerUsed-local)))
+	}
+
+	if err := s.diagnostics.WriteHistory(r.Context(), &b, now); err != nil {
+		fmt.Fprintf(&b, "\n(history unreadable: %s)\n", diag.Scrub(err.Error()))
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = io.WriteString(w, b.String())
 }

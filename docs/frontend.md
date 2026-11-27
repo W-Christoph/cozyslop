@@ -156,7 +156,8 @@ reads `GET /api/admin/diagnostics/summary` for the time chosen (6 hours to
   plain words, its dump) or down (from when it was last seen until it
   started again, how it ended, Go's crash dump), newest first. "Show what
   happened around then" narrows the list below to ±10 minutes;
-- Health: how close to stuck (the worst of the four checks against where
+- Health, two charts a row, all the same size so their times line up: how
+  close to stuck (the worst of the four checks against where
   each counts as stuck), CPU, the server's memory, the machine's free
   memory (the rooms' browsers use most), the fullest room's memory against
   its cap and people in the rooms; a limit line (stuck, the cap, AniList's
@@ -164,7 +165,14 @@ reads `GET /api/admin/diagnostics/summary` for the time chosen (6 hours to
 - AniList: the busiest minute per bucket against the limit (red where
   calls failed), and the data sent and received;
 - everything kept, under a heading per day, by kind (room helpers' polls
-  only when asked for), level, room and text, 100 at a time.
+  only when asked for), level, room and text, 100 at a time. Export saves
+  every entry the filters select (up to 10,000), one line each with its
+  attributes as kept, as a text file.
+
+Snapshot, beside Refresh (also with diagnostics off), shows the server's
+state now as text (`GET /api/admin/diagnostics/snapshot`: memory above
+all), with Copy and Download, for sending to whoever helps. Without HTTPS
+the browser keeps the clipboard from the page; Copy then selects the text.
 
 The charts (`components/admin/TimeChart.tsx`) are plain SVG: a line in the
 accent, or columns stacked bottom first with a neutral for what went well

@@ -8,7 +8,7 @@ import styles from './DiagEntryList.module.css'
 
 // What the server kept, newest first under a heading per day, with
 // filters above.
-export function DiagEntryList({ entries, filter, rooms, onFilter, loading, more, onMore }: {
+export function DiagEntryList({ entries, filter, rooms, onFilter, loading, more, onMore, onExport, exporting = false }: {
   entries: DiagEntry[]
   filter: DiagFilter
   rooms: string[]
@@ -16,6 +16,8 @@ export function DiagEntryList({ entries, filter, rooms, onFilter, loading, more,
   loading: boolean
   more: boolean // a full page came: older entries may follow
   onMore: () => void
+  onExport?: () => void // saves everything the filters select
+  exporting?: boolean
 }) {
   const toggle = (id: string, on: boolean) =>
     onFilter({ groups: on ? [...filter.groups, id] : filter.groups.filter((g) => g !== id) })
@@ -50,6 +52,8 @@ export function DiagEntryList({ entries, filter, rooms, onFilter, loading, more,
           </Select>}
           <Input compact type="search" placeholder="Search text" aria-label="Search text" value={filter.text}
             onInput={(e) => onFilter({ text: e.currentTarget.value })} />
+          {onExport && <Button size="sm" icon="download" disabled={exporting || !filter.groups.length} onClick={onExport}
+            title="Save every entry these filters select as a text file">{exporting ? 'Exporting…' : 'Export'}</Button>}
         </div>
       </div>
       {filter.until && <div class={styles.around}>

@@ -330,13 +330,13 @@ export const DIAG_PAGE = 100
 
 export const adminDiagnostics = {
   summary: (hours: number) => api.get<DiagSummary>(`/api/admin/diagnostics/summary?hours=${hours}`),
-  entries: (f: DiagFilter, before?: number) => {
+  entries: (f: DiagFilter, before?: number, limit = DIAG_PAGE) => {
     const groups = DIAG_GROUPS.filter((g) => f.groups.includes(g.id))
     if (!groups.length) return Promise.resolve([])
     const q = new URLSearchParams({
       kind: [...new Set(groups.flatMap((g) => g.kinds))].join(','),
       since: String(f.since),
-      limit: String(DIAG_PAGE),
+      limit: String(limit),
     })
     const targets = groups.flatMap((g) => g.target ? [g.target] : [])
     if (targets.length) q.set('target', targets.join(','))
@@ -350,22 +350,26 @@ export const adminDiagnostics = {
   stalls: (since: number) =>
     api.get<{ entries: DiagEntry[] }>(`/api/admin/diagnostics?kind=stall&since=${since}&limit=200`).then((r) => r.entries),
   // A stall's or crash's dump, as text.
-  dump: async (name: string) => {
-    let res: Response
-    try {
-      res = await fetch(dumpUrl(name))
-    } catch {
-      throw new ApiError(0, 'Could not reach the server.')
-    }
-    if (!res.ok) {
-      const data = await res.json().catch(() => null)
-      throw new ApiError(res.status, data?.error ?? `Request failed (${res.status}).`)
-    }
-    return res.text()
-  },
+  dump: (name: string) => text(dumpUrl(name)),
+  // The server's state now (memory above all) as text, to paste somewhere.
+  snapshot: () => text('/api/admin/diagnostics/snapshot'),
   rooms: () => adminRooms.list().then((list) => list.map((r) => r.name)),
   clear: () => api.del<void>('/api/admin/diagnostics'),
 }
 export type DiagnosticsSource = typeof adminDiagnostics
+
+async function text(url: string) {
+  let res: Response
+  try {
+    res = await fetch(url)
+  } catch {
+    throw new ApiError(0, 'Could not reach the server.')
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    throw new ApiError(res.status, data?.error ?? `Request failed (${res.status}).`)
+  }
+  return res.text()
+}
 
 export const dumpUrl = (name: string) => `/api/admin/diagnostics/dumps/${encodeURIComponent(name)}`

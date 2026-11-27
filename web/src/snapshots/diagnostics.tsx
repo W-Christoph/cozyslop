@@ -1,5 +1,6 @@
 import { DIAG_GROUPS, type DiagAniList, type DiagEntry, type DiagnosticsSource, type DiagSample, type DiagSummary } from '../api'
 import { Incidents } from '../components/admin/Incidents'
+import { SnapshotModal } from '../components/admin/SnapshotModal'
 import { DiagnosticsTab } from '../pages/admin/DiagnosticsTab'
 import type { Scene } from './scene'
 
@@ -113,6 +114,43 @@ const entries = ([
   boots[1],
 ] as DiagEntry[]).sort((a, b) => b.time - a.time)
 
+// What GET /api/admin/diagnostics/snapshot answers, shortened.
+const snapshotText = `CozyCast snapshot, ${new Date(now).toISOString().slice(0, 19)}Z (times UTC)
+server up 5h12m4s, go1.26.0, 4 CPUs
+
+== Machine (/proc/meminfo)
+total 3820 MB, available 412 MB (10 %), used 3408 MB
+MemFree 96 MB, Cached 702 MB, Buffers 18 MB, Shmem 388 MB, AnonPages 2510 MB, Slab 141 MB, SReclaimable 62 MB, KernelStack 11 MB, PageTables 38 MB, Committed_AS 5120 MB, SwapTotal 0 MB, SwapFree 0 MB
+load 1.42 1.10 0.96
+
+== Server process
+VmRSS 61 MB, VmHWM 88 MB, RssAnon 38 MB, RssFile 23 MB, VmSwap 0 MB, Threads 11
+Go: total 52 MB, heap/objects 18 MB, heap/unused 6 MB, heap/free 2 MB, heap/released 14 MB, heap/stacks 2 MB, metadata/other 4 MB, other 3 MB, heap/goal 34 MB, cycles/total 812, sched/goroutines 96
+
+== Server container (cgroup)
+used 58 MB (of 71 MB with the file cache), no cap, peak 96 MB
+anon 41 MB, file 27 MB, shmem 0 MB, kernel 3 MB, sock 0 MB
+
+== Rooms
+default (configured, 3 people, awake): used 2894 MB of its cap 3120 MB (92 %), peak 3120 MB (file cache included)
+  anon 2380 MB, file 498 MB, shmem 371 MB, kernel 52 MB, pagetables 24 MB, sock 1 MB, /dev/shm 352 MB of 2048 MB
+  at the cap 14 times since the room started, programs ended 2
+  programs by resident memory (a page several share counts in each):
+    Isolated Web Co      x6    1390 MB  anon 1104 MB, shared memory 96 MB
+    firefox-bin          x1     612 MB  anon 455 MB, shared memory 41 MB
+    neko                 x1     188 MB  anon 151 MB, shared memory 0 MB
+    Xorg                 x1     142 MB  anon 38 MB, shared memory 72 MB
+home (paired, people unknown, awake): no answer: context deadline exceeded
+
+== Where the machine's memory goes (roughly)
+used 3408 MB = server 58 MB + rooms in compose.yaml 2894 MB + the rest 456 MB (Docker, the system, other programs; rooms added or paired in Admin are left out, they may run elsewhere)
+
+== Last hour, per 5 minutes (highest; free memory the lowest)
+time   cpu%  serverMB  freeMB  roomMB/cap  people  lockMs  dbMs  reqMs  lagMs
+13:05     4        49     688  2610/3120        3       0     2      0      0
+13:10     6        52     412  2894/3120        3       1     3      0      0
+`
+
 // The data above, filtered roughly as the server does.
 function fake(data: DiagSummary, list: DiagEntry[], incidents: DiagEntry[], rooms = ['default', 'home']): DiagnosticsSource {
   const levels: Record<string, number> = { DEBUG: -4, INFO: 0, WARN: 4, ERROR: 8 }
@@ -126,6 +164,7 @@ function fake(data: DiagSummary, list: DiagEntry[], incidents: DiagEntry[], room
         e.time >= f.since && (!f.until || e.time < f.until))
     },
     dump: async () => dumpText,
+    snapshot: async () => snapshotText,
     rooms: async () => rooms,
     clear: async () => {},
   }
@@ -152,6 +191,14 @@ export const diagnosticsScenes: Scene[] = [
     surface: 'page',
     render: () => <Incidents stalls={stalls} boots={[]} loadDump={async () => dumpText} onAround={() => {}}
       open={{ [`stall-${stuckAt}.txt.gz`]: { state: 'shown', text: dumpText } }} />,
+  },
+  {
+    name: 'diagnostics-snapshot',
+    about: 'The snapshot to copy: a room near its cap, its programs, and a room that did not answer.',
+    width: 1100,
+    surface: 'page',
+    window: { height: 900 },
+    render: () => <SnapshotModal load={async () => snapshotText} onClose={() => {}} />,
   },
   {
     name: 'diagnostics-empty',

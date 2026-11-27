@@ -15,4 +15,5 @@
 .control > span:has(> select) { width: 220px; }
 @media (max-width: 560px) {
   .head { flex-direction: column; }
+  .actions { flex-wrap: wrap; flex-shrink: 1; max-width: 100%; }
 }

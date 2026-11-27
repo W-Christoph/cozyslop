@@ -9,7 +9,7 @@ import styles from './Incidents.module.css'
 
 type Dump = { state: 'loading' } | { state: 'shown'; text: string } | { state: 'failed'; error: string }
 
-interface Incident {
+export interface Incident {
   time: number
   kind: 'stuck' | 'down' | 'dump'
   entry: DiagEntry
@@ -85,7 +85,7 @@ export function Incidents({ stalls, boots, loadDump, onAround, open = {} }: {
 const list = (e?: DiagEntry) => Array.isArray(e?.attrs?.reasons) ? e.attrs.reasons.map((r) => reason(value(r))) : []
 const text = (e: DiagEntry, key: string) => typeof e.attrs?.[key] === 'string' ? e.attrs[key] as string : ''
 
-function incidents(stalls: DiagEntry[], boots: DiagEntry[]): Incident[] {
+export function incidents(stalls: DiagEntry[], boots: DiagEntry[]): Incident[] {
   const out: Incident[] = []
   // Oldest first, so that "well again" finds its stall.
   const open: Incident[] = []

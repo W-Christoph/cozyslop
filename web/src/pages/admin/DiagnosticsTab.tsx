@@ -7,7 +7,8 @@ import { DiagnosticsCharts } from '../../components/admin/DiagnosticsCharts'
 import { DiagnosticsOverview, type Tile } from '../../components/admin/DiagnosticsOverview'
 import { Incidents } from '../../components/admin/Incidents'
 import { SnapshotModal } from '../../components/admin/SnapshotModal'
-import { entryLine, fileTime, saveText } from '../../components/admin/diagFormat'
+import { diagnosticsText } from '../../components/admin/diagExport'
+import { fileTime, saveText } from '../../components/admin/diagFormat'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Select } from '../../components/ui/Field'
 import { Notice } from '../../components/ui/Notice'
@@ -19,7 +20,7 @@ const RANGES = [[6, 'Last 6 hours'], [24, 'Last 24 hours'], [72, 'Last 3 days'],
 // Room helpers poll every few seconds: shown when asked for.
 const USUAL = DIAG_GROUPS.map((g) => g.id).filter((id) => id !== 'helpers')
 const AROUND = 10 * 60_000
-const EXPORT_PAGE = 1000, EXPORT_MAX = 10_000 // entries
+const EXPORT_PAGE = 1000, EXPORT_MAX = 10_000 // log entries in an export
 const message = (e: unknown) => e instanceof Error ? e.message : 'Something went wrong.'
 
 type Shown = Omit<DiagFilter, 'since' | 'until'>
@@ -98,25 +99,23 @@ export function DiagnosticsTab({ source = adminDiagnostics }: { source?: Diagnos
     }
   }
 
-  // Everything the filters select, not only what is loaded, as a file.
-  async function exportLog() {
+  // The page as text: the counts, what went wrong, every chart's values,
+  // and every log entry the filters select (not only those loaded).
+  async function exportPage() {
+    if (!summary) return
     setExporting(true)
-    setEntriesError('')
+    setError('')
     try {
-      const f = { ...shown, text, ...range() }
-      const all: DiagEntry[] = []
-      for (let page: DiagEntry[] = []; all.length < EXPORT_MAX; all.push(...page)) {
-        page = await source.entries(f, all.at(-1)?.id, EXPORT_PAGE)
-        if (page.length < EXPORT_PAGE) { all.push(...page); break }
+      const filter = { ...shown, text, ...range() }
+      const log: DiagEntry[] = []
+      for (let page: DiagEntry[] = []; log.length < EXPORT_MAX; log.push(...page)) {
+        page = await source.entries(filter, log.at(-1)?.id, EXPORT_PAGE)
+        if (page.length < EXPORT_PAGE) { log.push(...page); break }
       }
-      const groups = DIAG_GROUPS.filter((g) => f.groups.includes(g.id)).map((g) => g.label).join(', ')
-      const head = [`CozyCast diagnostics, exported ${new Date().toString()}`,
-        `${groups}; ${f.level ? `${f.level} and up` : 'any level'}${f.room ? `; room ${f.room}` : ''}${f.text.trim() ? `; text "${f.text.trim()}"` : ''}`,
-        `from ${new Date(f.since).toString()}${f.until ? ` to ${new Date(f.until).toString()}` : ''}`,
-        `${all.length} entries, newest first${all.length >= EXPORT_MAX ? ` (only the newest ${EXPORT_MAX}: narrow the filters for older ones)` : ''}`]
-      saveText([...head, '', ...all.slice(0, EXPORT_MAX).map(entryLine), ''].join('\n'), `cozycast-diagnostics-${fileTime()}.txt`)
+      const more = log.length >= EXPORT_MAX
+      saveText(diagnosticsText({ summary, stalls, log: log.slice(0, EXPORT_MAX), filter, more }), `cozycast-diagnostics-${fileTime()}.txt`)
     } catch (e) {
-      setEntriesError(message(e))
+      setError(message(e))
     } finally {
       setExporting(false)
     }
@@ -167,6 +166,8 @@ export function DiagnosticsTab({ source = adminDiagnostics }: { source?: Diagnos
             {RANGES.map(([h, label]) => <option key={h} value={h}>{label}</option>)}
           </Select>
           <Button icon="refresh" disabled={loading} onClick={() => { setStatus(''); setRefresh((r) => r + 1) }}>Refresh</Button>
+          <Button icon="download" disabled={!summary || loading || exporting} onClick={exportPage}
+            title="Save what this page shows, as numbers, and the log as filtered, as a text file">{exporting ? 'Exporting…' : 'Export'}</Button>
         </>}
         <Button icon="copy" onClick={() => setSnapshot(true)}>Snapshot</Button>
       </>}>
@@ -192,7 +193,6 @@ export function DiagnosticsTab({ source = adminDiagnostics }: { source?: Diagnos
           <div class={styles.below}>
             {entriesError && <Notice tone="error">{entriesError}</Notice>}
             <DiagEntryList entries={entries} rooms={rooms} loading={entriesLoading} more={more} onMore={older}
-              onExport={exportLog} exporting={exporting}
               filter={{ ...shown, ...range(), ...(around ? {} : { until: undefined }) }}
               onFilter={(change) => {
                 if ('until' in change && change.until === undefined) setAround(null)

@@ -165,9 +165,14 @@ reads `GET /api/admin/diagnostics/summary` for the time chosen (6 hours to
 - AniList: the busiest minute per bucket against the limit (red where
   calls failed), and the data sent and received;
 - everything kept, under a heading per day, by kind (room helpers' polls
-  only when asked for), level, room and text, 100 at a time. Export saves
-  every entry the filters select (up to 10,000), one line each with its
-  attributes as kept, as a text file.
+  only when asked for), level, room and text, 100 at a time.
+
+Export, beside Refresh, saves the page as text for sending to whoever
+helps (`components/admin/diagExport.ts`): the counts, what went wrong in
+the page's words, every chart's values per bucket as tables, and every log
+entry the filters select (up to 10,000, not only those loaded), one line
+each with its attributes as kept. Times are the browser's, its offset in
+the first line.
 
 Snapshot, beside Refresh (also with diagnostics off), shows the server's
 state now as text (`GET /api/admin/diagnostics/snapshot`: memory above

@@ -6,11 +6,11 @@ import styles from './DiagnosticsCharts.module.css'
 
 // Where the watchdog calls the server stuck (diag.StuckLock and the rest).
 const STUCK = { lockMs: 5000, dbMs: 3000, lagMs: 2000, requestMs: 15_000 }
-const ANILIST_LIMIT = 90 // calls a minute
+export const ANILIST_LIMIT = 90 // calls a minute
 
 // How close the server came to stuck: the worst of the four checks, as a
 // share of where it counts as stuck.
-function closeness(s: DiagSample) {
+export function closeness(s: DiagSample) {
   const parts = (Object.keys(STUCK) as (keyof typeof STUCK)[]).map((k) => s[k] === null ? null : s[k]! / STUCK[k] * 100)
   return parts.every((p) => p === null) ? null : Math.max(...parts.map((p) => p ?? 0))
 }

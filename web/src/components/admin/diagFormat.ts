@@ -105,13 +105,23 @@ export function reason(r: string): string {
   return r
 }
 
-// An entry as one line of text, for exports: the time with its offset and
-// the attributes as the server keeps them.
+// Local time as "2026-11-27 13:10:05" (seconds) or "2026-11-27 13:10",
+// for exports; zone() says which.
+export function stamp(ms: number, seconds = true) {
+  const local = new Date(ms - new Date(ms).getTimezoneOffset() * 60_000).toISOString().replace('T', ' ')
+  return local.slice(0, seconds ? 19 : 16)
+}
+
+// The browser's offset from UTC now, as "+01:00".
+export function zone() {
+  const offset = -new Date().getTimezoneOffset(), abs = Math.abs(offset)
+  return `${offset < 0 ? '-' : '+'}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`
+}
+
+// An entry as one line of text, for exports: its attributes as the server
+// keeps them.
 export function entryLine(e: DiagEntry) {
-  const d = new Date(e.time), offset = -d.getTimezoneOffset()
-  const local = new Date(e.time + offset * 60_000).toISOString().slice(0, 23).replace('T', ' ')
-  const zone = `${offset < 0 ? '-' : '+'}${String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0')}:${String(Math.abs(offset) % 60).padStart(2, '0')}`
-  return [`${local}${zone}`, e.level, e.kind, e.room ? `room=${e.room}` : '', e.msg, e.attrs ? JSON.stringify(e.attrs) : '']
+  return [stamp(e.time), e.level, e.kind, e.room ? `room=${e.room}` : '', e.msg, e.attrs ? JSON.stringify(e.attrs) : '']
     .filter(Boolean).join(' ')
 }
 

@@ -52,6 +52,7 @@ RUN ln -s /usr/lib/firefox/firefox /usr/bin/firefox && \
 # Explicit modes: Firefox runs as neko and must be able to read these,
 # whatever permissions the files have in the checkout.
 COPY --chmod=0644 firefox/mozilla.cfg /usr/lib/firefox/mozilla.cfg
+COPY --chmod=0644 firefox/autoconfig.js /usr/lib/firefox/defaults/pref/autoconfig.js
 COPY --chmod=0644 firefox/policies.json /usr/lib/firefox/distribution/policies.json
 COPY --chmod=0644 supervisord.conf /etc/neko/supervisord/cozycast.conf
 

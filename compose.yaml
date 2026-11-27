@@ -23,8 +23,12 @@ x-room: &room
   # /dev/shm. Without a cap the browser can take the whole machine, and the
   # server, starved of memory, stops answering. At the cap the kernel ends
   # the room's largest program (usually a browser tab) instead.
-  # ./cozycast.sh start fits it to this machine; 3200m is for a 4 GB one.
-  mem_limit: ${ROOM_MEMORY:-3200m}
+  # ./cozycast.sh start fits it to this machine; 2700m is for a 4 GB one.
+  mem_limit: ${ROOM_MEMORY:-2700m}
+  # No swap (memory and swap together = memory): Docker would otherwise let
+  # the room swap as much again, and a browser swapping at its cap slows
+  # the disk, and with it the server, for minutes instead of losing a tab.
+  memswap_limit: ${ROOM_MEMORY:-2700m}
   # neko's image gives the desktop user passwordless sudo. Whoever holds the
   # remote has a terminal, so this takes sudo (and every other setuid
   # program) away: they stay an ordinary user inside the room.

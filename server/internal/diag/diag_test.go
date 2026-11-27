@@ -161,6 +161,9 @@ func TestBootAndBrokenFile(t *testing.T) {
 	}
 	s.Boot(ctx)
 	s.Shutdown()
+	// Stored after the stop, with an earlier time: the last minute's
+	// summaries of calls.
+	s.Add(Entry{Time: time.Now().Add(-40 * time.Second), Kind: KindOutbound, Level: slog.LevelInfo, Msg: "helper memory (per minute)"})
 	s.Close()
 
 	s, err = Open(ctx, path)

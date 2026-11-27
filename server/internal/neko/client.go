@@ -157,6 +157,16 @@ func (c *Client) Healthy(ctx context.Context) bool {
 }
 
 // do decodes JSON into out, or reads a bounded raw body when out is *[]byte.
+// route is path as errors say it, which end up in the diagnostics: without
+// a member's id or the query (a downloaded file's name).
+func route(path string) string {
+	path, _, _ = strings.Cut(path, "?")
+	if strings.HasPrefix(path, "/api/members/") {
+		return "/api/members/{id}"
+	}
+	return path
+}
+
 func (c *Client) do(ctx context.Context, method, path string, in, out any, admin bool) error {
 	c.mu.Lock()
 	gen := c.gen
@@ -189,7 +199,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any, admin
 
 	res, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("neko: %s %s: %w", method, path, err)
+		return fmt.Errorf("neko: %s %s: %w", method, route(path), err)
 	}
 	defer res.Body.Close()
 
@@ -202,7 +212,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any, admin
 		if c.token != "" {
 			message = strings.ReplaceAll(message, c.token, "[redacted]")
 		}
-		return fmt.Errorf("neko: %s %s: %s: %s", method, path, res.Status, message)
+		return fmt.Errorf("neko: %s %s: %s: %s", method, route(path), res.Status, message)
 	}
 	if out != nil {
 		if raw, ok := out.(*[]byte); ok {

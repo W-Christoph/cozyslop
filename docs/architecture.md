@@ -385,6 +385,28 @@ Enable the commented lines in `compose.yaml` only when this access is wanted;
 the non-root server also needs the socket's group via `DOCKER_GID` (see
 `.env.example`). Leaving the option off keeps container control entirely off.
 
+## The room's memory
+
+A room's container has a memory cap (`ROOM_MEMORY`, `mem_limit` in
+`compose.yaml`): `./cozycast.sh start` gives the rooms all but 1200 MB of
+the machine (an eighth on a big one), split evenly, as the system and
+Docker alone use about 650 MB. The room does not swap (`memswap_limit`
+equals the cap): at the cap the kernel ends its largest program, usually a
+browser tab, instead of swapping it, which would slow the disk and the
+server with it for minutes.
+
+So that tabs left open do not reach the cap, the room's Firefox unloads
+tabs nobody looks at (`worker/firefox/mozilla.cfg`, which may run code in
+Firefox as `worker/firefox/autoconfig.js` turns off AutoConfig's sandbox;
+only root can change either). Every 10 seconds: a tab not looked at for 30
+minutes (`cozycast.tabs.unload_idle_minutes`), and above 75 % of the cap
+(`cozycast.tabs.unload_above_percent`, as the room's helper reports it,
+`GET /memory`) the tab looked at least recently, one at a time. Firefox's
+own unloading goes by the whole machine's memory, which in a container
+says nothing of the cap. An unloaded tab stays in the tab bar and loads
+again when clicked; the tab in front, one playing sound and one that asks
+before it is left are kept, a pinned tab only goes by the cap.
+
 ## Window title
 
 The browser tab is named after the window in front on the room's desktop,

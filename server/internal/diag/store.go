@@ -382,13 +382,13 @@ func (s *Store) Entries(ctx context.Context, f Filter) ([]Entry, error) {
 	return list, rows.Err()
 }
 
-// Last returns the newest entry, if there is one.
-func (s *Store) Last(ctx context.Context) (Entry, bool, error) {
-	list, err := s.Entries(ctx, Filter{Limit: 1})
-	if err != nil || len(list) == 0 {
-		return Entry{}, false, err
+// lastSeen is the time of the newest entry, if there is one.
+func (s *Store) lastSeen(ctx context.Context) (time.Time, bool) {
+	var ts sql.NullInt64
+	if err := s.db.QueryRowContext(ctx, "SELECT MAX(ts) FROM entries").Scan(&ts); err != nil || !ts.Valid {
+		return time.Time{}, false
 	}
-	return list[0], true, nil
+	return time.UnixMilli(ts.Int64), true
 }
 
 // Clear removes every entry.
@@ -429,11 +429,16 @@ func (s *Store) Boot(ctx context.Context) {
 	if s == nil {
 		return
 	}
-	last, ok, err := s.Last(ctx)
 	attrs := map[string]any{}
-	if err == nil && ok && last.Kind != KindShutdown {
+	// The run before stopped cleanly if its stop is newer than its start.
+	// Not the newest entry: some are stored after the stop (the last
+	// minute's summaries of calls, with that minute's time).
+	marks, err := s.Entries(ctx, Filter{Kinds: []string{KindBoot, KindShutdown}, Limit: 1})
+	if err == nil && len(marks) > 0 && marks[0].Kind == KindBoot {
 		attrs["previous"] = "no clean shutdown"
-		attrs["last_seen"] = last.Time.UnixMilli()
+		if seen, ok := s.lastSeen(ctx); ok {
+			attrs["last_seen"] = seen.UnixMilli()
+		}
 	}
 	if s.dumps != "" {
 		if text, err := os.ReadFile(s.crashFile()); err == nil && len(bytes.TrimSpace(text)) > 0 {
@@ -459,6 +464,9 @@ func (s *Store) Boot(ctx context.Context) {
 		}
 	}
 	s.Add(Entry{Kind: KindBoot, Level: slog.LevelInfo, Msg: "server started", Attrs: attrs})
+	// Stored now: a run that ends within the second would otherwise leave
+	// no start, and the next would take the stop before it for its own.
+	s.Sync()
 }
 
 func (s *Store) crashFile() string { return filepath.Join(s.dumps, "crash.txt") }

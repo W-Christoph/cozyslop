@@ -71,9 +71,10 @@ setting() { sed -n "s/^$1=//p" .env | tail -n 1; }
 on_demand() { case "$(setting COMPOSE_FILE)" in *room-on-demand*) return 0 ;; *) return 1 ;; esac; }
 
 # Each room's share of this machine's memory, unless .env sets ROOM_MEMORY:
-# all but 700 MB (or an eighth, if that is more) for the system, Docker and
-# the server, split evenly between the rooms on this server. Without a cap a
-# room's browser can take the whole machine and the server stops answering.
+# all but 1200 MB (or an eighth, if that is more) for the system, Docker,
+# the server and the file cache, split evenly between the rooms on this
+# server. Without a cap a room's browser can take the whole machine and the
+# server stops answering; the system and Docker alone use about 650 MB.
 room_memory() {
   [ -z "$(setting ROOM_MEMORY)" ] && [ -z "${ROOM_MEMORY:-}" ] || return 0
   local rooms total reserve share
@@ -81,7 +82,7 @@ room_memory() {
     grep -c '^room-' || true)
   [ "$rooms" -gt 0 ] || return 0
   total=$(( $(docker info --format '{{.MemTotal}}') >> 20 ))
-  reserve=$(( total / 8 > 700 ? total / 8 : 700 ))
+  reserve=$(( total / 8 > 1200 ? total / 8 : 1200 ))
   share=$(( (total - reserve) / rooms ))
   [ "$share" -ge 512 ] || share=512
   export ROOM_MEMORY=${share}m

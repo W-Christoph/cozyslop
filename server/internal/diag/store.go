@@ -432,13 +432,14 @@ func (s *Store) Boot(ctx context.Context) {
 	attrs := map[string]any{}
 	// The run before stopped cleanly if its stop is newer than its start.
 	// Not the newest entry: some are stored after the stop (the last
-	// minute's summaries of calls, with that minute's time).
+	// minute's summaries of calls, with that minute's time). Without either
+	// but with entries, the start is gone (swept after a week, or cleared)
+	// and the run did not stop either.
 	marks, err := s.Entries(ctx, Filter{Kinds: []string{KindBoot, KindShutdown}, Limit: 1})
-	if err == nil && len(marks) > 0 && marks[0].Kind == KindBoot {
+	seen, found := s.lastSeen(ctx)
+	if err == nil && found && (len(marks) == 0 || marks[0].Kind == KindBoot) {
 		attrs["previous"] = "no clean shutdown"
-		if seen, ok := s.lastSeen(ctx); ok {
-			attrs["last_seen"] = seen.UnixMilli()
-		}
+		attrs["last_seen"] = seen.UnixMilli()
 	}
 	if s.dumps != "" {
 		if text, err := os.ReadFile(s.crashFile()); err == nil && len(bytes.TrimSpace(text)) > 0 {

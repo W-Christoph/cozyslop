@@ -156,7 +156,6 @@ func (c *Client) Healthy(ctx context.Context) bool {
 	return c.do(ctx, http.MethodGet, "/health", nil, nil, false) == nil
 }
 
-// do decodes JSON into out, or reads a bounded raw body when out is *[]byte.
 // route is path as errors say it, which end up in the diagnostics: without
 // a member's id or the query (a downloaded file's name).
 func route(path string) string {
@@ -167,6 +166,7 @@ func route(path string) string {
 	return path
 }
 
+// do decodes JSON into out, or reads a bounded raw body when out is *[]byte.
 func (c *Client) do(ctx context.Context, method, path string, in, out any, admin bool) error {
 	c.mu.Lock()
 	gen := c.gen

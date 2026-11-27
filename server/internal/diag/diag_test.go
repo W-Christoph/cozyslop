@@ -185,6 +185,20 @@ func TestBootAndBrokenFile(t *testing.T) {
 	if b := flush(t, s, Filter{Kinds: []string{KindBoot}}); len(b) != 3 || b[0].Attrs["previous"] != "no clean shutdown" || b[0].Attrs["last_seen"] == nil {
 		t.Errorf("boot after a crash: %+v", b)
 	}
+	// The run's start gone (cleared, or swept after a week), then a crash.
+	if err := s.Clear(ctx); err != nil {
+		t.Fatal(err)
+	}
+	s.Add(Entry{Kind: KindEvent, Level: slog.LevelWarn, Msg: "later"})
+	s.Close()
+	s, err = Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Boot(ctx)
+	if b := flush(t, s, Filter{Kinds: []string{KindBoot}}); len(b) != 1 || b[0].Attrs["previous"] != "no clean shutdown" {
+		t.Errorf("boot after a crash, its start gone: %+v", b)
+	}
 	s.Close()
 
 	// What Go wrote when it ended the server.
